@@ -95,7 +95,10 @@ function pontuar(nomeFipe, palavrasAnuncio, anuncioBlindado) {
   let p = 0;
   // Versão blindada da FIPE só quando o anúncio fala em blindagem (e vice-versa)
   if (BLINDADO.test(nomeFipe)) p += anuncioBlindado ? 6 : -20;
-  for (const w of palavrasAnuncio) if (f.includes(w)) p += /^\d/.test(w) ? 2 : 3;
+  for (const w of palavrasAnuncio) {
+    if (f.includes(w)) p += /^\d/.test(w) ? 2 : 3;
+    else if (w.length >= 3 && f.some((t) => t.length >= 3 && (t.startsWith(w) || w.startsWith(t)))) p += 1.5;
+  }
   if (palavrasAnuncio[0] && f[0] === palavrasAnuncio[0]) p += 5; // nome do modelo bate
   return p - f.length * 0.1; // desempata a favor da versão mais "simples"
 }
@@ -107,16 +110,16 @@ async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
   const alvo = normalizar(nomeMarca).replace(/[^a-z]/g, '');
   const limpa = (n) => normalizar(n).replace(/[^a-z]/g, '');
   const marca = marcas.find((m) => limpa(m.nome) === alvo) || marcas.find((m) => limpa(m.nome).includes(alvo) || alvo.includes(limpa(m.nome)));
-  if (!marca) return null;
+  if (!marca) return { motivo: `marca "${nomeMarca}" não está na tabela` };
 
   const modelos = await fonte.modelos(marca.codigo);
   const palavras = tokens(carro.modelo).filter((w) => !PALAVRAS_MARCA.has(w));
   const anuncioBlindado = /blindad/i.test(carro.textoOriginal || '');
-  const candidatos = modelos
-    .map((m) => ({ ...m, pontos: pontuar(m.nome, palavras, anuncioBlindado) }))
-    .filter((m) => m.pontos > 3)
-    .sort((a, b) => b.pontos - a.pontos)
-    .slice(0, 5);
+  const pontuados = modelos.map((m) => ({ ...m, pontos: pontuar(m.nome, palavras, anuncioBlindado) })).sort((a, b) => b.pontos - a.pontos);
+  // Normal: só modelos bem parecidos; se nenhum, aceita os mais próximos que tenham alguma palavra em comum
+  let candidatos = pontuados.filter((m) => m.pontos > 3).slice(0, 5);
+  if (!candidatos.length) candidatos = pontuados.filter((m) => m.pontos > 1).slice(0, 5);
+  if (!candidatos.length) return { motivo: `nenhum modelo ${marca.nome} parecido com "${palavras.join(' ')}" na tabela` };
 
   for (const mod of candidatos) {
     const anos = await fonte.anos(marca.codigo, mod.codigo);
@@ -126,15 +129,15 @@ async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
     const valor = Math.round(parseInt(String(r.valor).replace(/\D/g, ''), 10) / 100);
     if (valor > 0) return { ...r, valor };
   }
-  return null;
+  return { motivo: `modelos parecidos sem o ano ${anoNum} na tabela: ${candidatos.slice(0, 3).map((m) => m.nome).join(' | ')}` };
 }
 
 async function consultarFipe(carro) {
   const anoModelo = carro.ano ? carro.ano.split('/').pop() : null;
-  if (!carro.modelo || !anoModelo) return null;
+  if (!carro.modelo || !anoModelo) return { motivo: !anoModelo ? 'anúncio sem ano' : 'modelo não identificado' };
   const anoNum = anoModelo.length === 2 ? '20' + anoModelo : anoModelo;
   const nomeMarca = acharMarca(`${carro.modelo} ${carro.textoOriginal || ''}`);
-  if (!nomeMarca) return null;
+  if (!nomeMarca) return { motivo: `marca não reconhecida em "${carro.modelo}"` };
 
   let ultimoErro;
   for (const fonte of FONTES) {
@@ -156,7 +159,8 @@ async function completarFipe(carro, config, avisar = () => {}) {
   if (config.fipe.consultarOnline) {
     try {
       const r = await consultarFipe(carro);
-      if (r) Object.assign(carro, { fipe: r.valor, fipeVersao: r.versao, fipeMes: r.mes, fipeOrigem: 'tabela FIPE' });
+      if (r?.valor) Object.assign(carro, { fipe: r.valor, fipeVersao: r.versao, fipeMes: r.mes, fipeOrigem: 'tabela FIPE' });
+      else if (r?.motivo) carro.fipeMotivo = r.motivo;
     } catch (e) {
       carro.fipeErro = e.message;
       avisar(e.message);

@@ -211,7 +211,7 @@ async function processar({ grupo, vendedor, fotos, textos }) {
   const motivoFipe = filtrarFipe(carro, cfg);
   if (motivoFipe) return evento('ignorado', `${nome} — ${motivoFipe}`);
   // No automático, sem FIPE não dá para garantir que está abaixo: não posta
-  if (cfg.modo === 'auto' && !carro.fipe) return evento('ignorado', `${nome} — FIPE não encontrada`);
+  if (cfg.modo === 'auto' && !carro.fipe) return evento('ignorado', `${nome} — FIPE não encontrada${carro.fipeMotivo ? ` (${carro.fipeMotivo})` : ''}`);
 
   const id = Date.now().toString(36);
   const dir = path.join(DIR_PEND, id);

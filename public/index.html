@@ -304,7 +304,7 @@ $('#btnTestar').onclick = async () => {
   $('#resTeste').innerHTML = `<p class="${r.aprovado ? 'bom' : 'ruim'}"><b>${r.aprovado ? '✓ Seria capturado' : '✕ Seria ignorado: ' + esc(r.motivo)}</b></p>
     <div class="num"><div><span class="sub">Modelo</span><b>${esc(c.modelo || '?')}</b></div><div><span class="sub">Ano</span><b>${esc(c.ano || '?')}</b></div><div><span class="sub">KM</span><b>${esc(c.km || '?')}</b></div>
     <div><span class="sub">Custo</span><b>${reais(c.preco)}</b></div><div><span class="sub">FIPE</span><b>${reais(c.fipe)}</b></div><div><span class="sub">Abaixo FIPE</span><b>${r.desconto ?? '?'}%</b></div><div><span class="sub">Venda</span><b>${reais(r.precoVenda)}</b></div></div>
-    ${c.fipeVersao ? `<p class="sub">FIPE usada: ${esc(c.fipeVersao)}</p>` : ''}${c.fipeErro ? `<p class="ruim">Erro FIPE: ${esc(c.fipeErro)}</p>` : ''}
+    ${c.fipeVersao ? `<p class="sub">FIPE usada: ${esc(c.fipeVersao)}</p>` : ''}${c.fipeErro ? `<p class="ruim">Erro FIPE: ${esc(c.fipeErro)}</p>` : ''}${c.fipeMotivo ? `<p class="ruim">FIPE não encontrada: ${esc(c.fipeMotivo)}</p>` : ''}
     <pre>${esc(r.texto)}</pre>`;
 };
 
