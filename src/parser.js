@@ -46,6 +46,9 @@ function extrairPrecos(linhas) {
     const v = paraNumero(num, !!mil);
     return v < 1000 ? v * 1000 : v;
   };
+  // "FIPE" sozinho numa linha e o valor na linha de baixo: junta as duas
+  linhas = linhas.map((l, i) => (/\bfipe\b|tabela/i.test(l) && !/\d/.test(l) && /^\W*(r\$\s*)?\d[\d.,]*\s*(mil|k)?\W*$/i.test(linhas[i + 1] || '') ? `${l} ${linhas[i + 1]}` : l))
+    .filter((l, i, arr) => !(i > 0 && arr[i - 1].endsWith(` ${l}`) && /\bfipe\b|tabela/i.test(arr[i - 1])));
   for (const linha of linhas) {
     const dp = linha.replace(ANO, ' ').match(DE_POR);
     if (dp) {
