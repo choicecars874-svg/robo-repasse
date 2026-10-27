@@ -140,7 +140,15 @@ function parseAnuncio(textoOriginal) {
     .filter((l) => semEmoji(l).length > 2)
     .join('\n');
 
-  return { modelo, ano, km, cor: cor ? cor[0].toUpperCase() + cor.slice(1) : null, cambio, preco, fipe, precoWeb, detalhes, textoOriginal: texto };
+  // Motor/versão em linhas próprias logo abaixo do nome (ex.: "5.0 V8") ajudam a achar a versão certa na FIPE
+  const iModelo = linhas.indexOf(linhaModelo);
+  const motor = linhas
+    .slice(iModelo + 1, iModelo + 5)
+    .map((l) => semEmoji(l))
+    .filter((l) => l.length <= 40 && /\b\d\.\d\b|\bv\s?[68]\b|\b(turbo|tsi|tfsi|tdi|hse|flex|diesel|hybrid|h[ií]brido|el[eé]trico|xdrive\d*|sdrive\d*|\d{3}i)\b/i.test(l) && !LINHA_DE_PRECO.test(l))
+    .join(' ');
+
+  return { modelo, motor, ano, km, cor: cor ? cor[0].toUpperCase() + cor.slice(1) : null, cambio, preco, fipe, precoWeb, detalhes, textoOriginal: texto };
 }
 
 module.exports = { parseAnuncio };

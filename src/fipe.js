@@ -119,11 +119,13 @@ async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
   if (!marca) return { motivo: `marca "${nomeMarca}" não está na tabela` };
 
   const modelos = await fonte.modelos(marca.codigo);
-  const palavras = tokens(carro.modelo).filter((w) => !PALAVRAS_MARCA.has(w));
+  const palavras = tokens(`${carro.modelo} ${carro.motor || ''}`).filter((w) => !PALAVRAS_MARCA.has(w));
   const anuncioBlindado = /blindad/i.test(carro.textoOriginal || '');
   const pontuados = modelos.map((m) => ({ ...m, pontos: pontuar(m.nome, palavras, anuncioBlindado) })).sort((a, b) => b.pontos - a.pontos);
   // Normal: só modelos bem parecidos; se nenhum, aceita os mais próximos que tenham alguma palavra em comum
-  let candidatos = pontuados.filter((m) => m.pontos > 3).slice(0, 5);
+  // Com a FIPE escrita no anúncio dá para conferir mais versões e escolher a que bate com ela
+  const conferir = carro.fipeAnuncio ? 10 : 5;
+  let candidatos = pontuados.filter((m) => m.pontos > 3).slice(0, conferir);
   if (!candidatos.length) candidatos = pontuados.filter((m) => m.pontos > 1).slice(0, 5);
   if (!candidatos.length) return { motivo: `nenhum modelo ${marca.nome} parecido com "${palavras.join(' ')}" na tabela` };
 
@@ -131,6 +133,7 @@ async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
   // (anúncio "2024" costuma ser fabricação 2024 / modelo 2025, e a FIPE usa o ano-modelo)
   const anosTentar = [anoNum, String(Number(anoNum) + 1)];
   for (const anoBusca of anosTentar) {
+    const achados = [];
     for (const mod of candidatos) {
       let anos, r;
       try {
@@ -146,7 +149,17 @@ async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
         continue;
       }
       const valor = Math.round(parseInt(String(r.valor).replace(/\D/g, ''), 10) / 100);
-      if (valor > 0) return { ...r, valor, versao: anoBusca === anoNum ? r.versao : `${r.versao} (ano-modelo ${anoBusca}; anúncio dizia ${anoNum})` };
+      if (!(valor > 0)) continue;
+      const achado = { ...r, valor, versao: anoBusca === anoNum ? r.versao : `${r.versao} (ano-modelo ${anoBusca}; anúncio dizia ${anoNum})` };
+      if (!carro.fipeAnuncio) return achado; // sem FIPE no anúncio: fica com a versão mais parecida pelo nome
+      achados.push(achado);
+    }
+    if (achados.length) {
+      // Versão cujo valor mais se aproxima da FIPE escrita no anúncio (até 8% de diferença);
+      // se nenhuma bate, fica com a mais parecida pelo nome
+      const dif = (a) => Math.abs(a.valor - carro.fipeAnuncio) / carro.fipeAnuncio;
+      const maisPerto = achados.reduce((a, b) => (dif(b) < dif(a) ? b : a));
+      return dif(maisPerto) <= 0.08 ? maisPerto : achados[0];
     }
   }
   return { motivo: `modelos parecidos sem o ano ${anoNum} na tabela: ${candidatos.slice(0, 3).map((m) => m.nome).join(' | ')}` };
@@ -187,6 +200,8 @@ async function completarFipe(carro, config, avisar = () => {}) {
     }
   }
   if (!carro.fipe && carro.fipeAnuncio) Object.assign(carro, { fipe: carro.fipeAnuncio, fipeOrigem: 'anúncio' });
+  // Blindado: a FIPE não inclui a blindagem, então a conta dos 15% usa o preço Web do anúncio
+  if (/blindad/i.test(carro.textoOriginal || '') && carro.precoWeb) carro.referencia = { valor: carro.precoWeb, nome: 'do preço Web (blindado)' };
   return carro;
 }
 

@@ -28,7 +28,8 @@ function linkWhatsApp(carro, config) {
 function montarTexto(carro, config, precoVenda) {
   const venda = precoVenda ?? aplicarMargem(carro.preco, config.margem);
   const fipeReal = carro.fipe;
-  const abaixo = fipeReal && venda && venda < fipeReal ? Math.floor(((fipeReal - venda) / fipeReal) * 100) : null;
+  const base = carro.referencia?.valor || fipeReal;
+  const abaixo = base && venda && venda < base ? Math.floor(((base - venda) / base) * 100) : null;
   const campos = {
     modelo: carro.modelo || 'Consulte',
     ano: carro.ano,
@@ -38,7 +39,7 @@ function montarTexto(carro, config, precoVenda) {
     detalhes: carro.detalhes,
     preco: formatarReais(venda) || 'Consulte',
     fipe: formatarReais(fipeReal),
-    abaixoFipe: abaixo >= 3 ? `${abaixo}% abaixo da FIPE` : null,
+    abaixoFipe: abaixo >= 3 ? `${abaixo}% abaixo ${carro.referencia ? 'do valor de mercado (blindado)' : 'da FIPE'}` : null,
     loja: config.loja.nome,
     cidade: config.loja.cidade,
     link: linkWhatsApp(carro, config),

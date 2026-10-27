@@ -27,15 +27,16 @@ function filtrarAntesDaFipe(carro, config) {
 
 // % abaixo da FIPE calculado sobre o preço de VENDA (repasse + margem)
 function descontoFipe(carro, config) {
-  if (!carro.fipe || !carro.preco) return null;
+  const base = carro.referencia?.valor || carro.fipe;
+  if (!base || !carro.preco) return null;
   const venda = aplicarMargem(carro.preco, config.margem);
-  return Math.round(((carro.fipe - venda) / carro.fipe) * 1000) / 10;
+  return Math.round(((base - venda) / base) * 1000) / 10;
 }
 
 function filtrarFipe(carro, config) {
   const d = descontoFipe(carro, config);
   if (d == null) return null; // sem FIPE: não rejeita, vai para aprovação manual
-  if (d < config.fipe.descontoMinimo) return `só ${d}% abaixo da FIPE (mínimo ${config.fipe.descontoMinimo}%)`;
+  if (d < config.fipe.descontoMinimo) return `só ${d}% abaixo ${carro.referencia?.nome || 'da FIPE'} (mínimo ${config.fipe.descontoMinimo}%)`;
   return null;
 }
 
