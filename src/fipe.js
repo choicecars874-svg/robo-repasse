@@ -121,13 +121,18 @@ async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
   if (!candidatos.length) candidatos = pontuados.filter((m) => m.pontos > 1).slice(0, 5);
   if (!candidatos.length) return { motivo: `nenhum modelo ${marca.nome} parecido com "${palavras.join(' ')}" na tabela` };
 
-  for (const mod of candidatos) {
-    const anos = await fonte.anos(marca.codigo, mod.codigo);
-    const ano = anos.find((a) => String(a.codigo).startsWith(anoNum) && !String(a.codigo).startsWith('32000'));
-    if (!ano) continue;
-    const r = await fonte.preco(marca.codigo, mod.codigo, ano.codigo);
-    const valor = Math.round(parseInt(String(r.valor).replace(/\D/g, ''), 10) / 100);
-    if (valor > 0) return { ...r, valor };
+  // Primeiro o ano escrito; se a FIPE não tiver, tenta o ano seguinte
+  // (anúncio "2024" costuma ser fabricação 2024 / modelo 2025, e a FIPE usa o ano-modelo)
+  const anosTentar = [anoNum, String(Number(anoNum) + 1)];
+  for (const anoBusca of anosTentar) {
+    for (const mod of candidatos) {
+      const anos = await fonte.anos(marca.codigo, mod.codigo);
+      const ano = anos.find((a) => String(a.codigo).startsWith(anoBusca) && !String(a.codigo).startsWith('32000'));
+      if (!ano) continue;
+      const r = await fonte.preco(marca.codigo, mod.codigo, ano.codigo);
+      const valor = Math.round(parseInt(String(r.valor).replace(/\D/g, ''), 10) / 100);
+      if (valor > 0) return { ...r, valor, versao: anoBusca === anoNum ? r.versao : `${r.versao} (ano-modelo ${anoBusca}; anúncio dizia ${anoNum})` };
+    }
   }
   return { motivo: `modelos parecidos sem o ano ${anoNum} na tabela: ${candidatos.slice(0, 3).map((m) => m.nome).join(' | ')}` };
 }
