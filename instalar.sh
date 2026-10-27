@@ -13,7 +13,13 @@ SENHA="${PAINEL_SENHA:-}"
 [ -z "$SENHA" ] && { read -rsp "Crie a senha do painel: " SENHA; echo; }
 [ -z "$SENHA" ] && { echo "Senha não pode ser vazia"; exit 1; }
 
-# 1) Node.js 22 + pm2 (mantém o robô ligado e reinicia sozinho)
+# 1) Memória extra (swap) para máquinas de 1 GB — antes de instalar qualquer coisa
+if [ "$(free -m | awk '/Mem:/{print $2}')" -lt 1500 ] && ! swapon --show | grep -q .; then
+  sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+fi
+
+# 2) Node.js 22 + pm2 (mantém o robô ligado e reinicia sozinho)
 if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
   sudo -E apt-get install -y nodejs
@@ -21,11 +27,6 @@ fi
 sudo npm install -g pm2
 npm install --omit=dev
 
-# 2) Memória extra (swap) para máquinas de 1 GB
-if [ "$(free -m | awk '/Mem:/{print $2}')" -lt 1500 ] && ! swapon --show | grep -q .; then
-  sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
-  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
-fi
 
 # 3) Inicia o robô e configura para voltar sozinho se o servidor reiniciar
 SENHA="$SENHA" node -e "
