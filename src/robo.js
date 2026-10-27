@@ -10,6 +10,7 @@ const {
   downloadMediaMessage,
   fetchLatestBaileysVersion,
   normalizeMessageContent,
+  makeCacheableSignalKeyStore,
 } = require('@whiskeysockets/baileys');
 
 const config = require('./config');
@@ -76,11 +77,43 @@ const jidAprovador = () => {
   return n ? `${n}@s.whatsapp.net` : null;
 };
 
+// Guarda as últimas mensagens (enviadas e recebidas): quando um celular não consegue abrir uma
+// mensagem ele pede reenvio, e o WhatsApp precisa do conteúdo original (getMessage).
+// Sem isso a mensagem fica "Aguardando mensagem" para quem recebe.
+const guardadas = new Map();
+function guardar(m) {
+  if (!m?.key?.id || !m.message) return;
+  guardadas.set(m.key.id, m.message);
+  if (guardadas.size > 2000) guardadas.delete(guardadas.keys().next().value);
+}
+
+// Cache dos dados dos grupos (recomendado pela biblioteca para quem envia em grupos)
+const cacheGrupos = new Map();
+async function dadosGrupo(jid) {
+  const c = cacheGrupos.get(jid);
+  if (c && Date.now() - c.t < 5 * 60 * 1000) return c.d;
+  return undefined;
+}
+
 async function iniciar() {
   const { state, saveCreds } = await useMultiFileAuthState(DIR_AUTH);
   const { version } = await fetchLatestBaileysVersion();
-  sock = makeWASocket({ version, auth: state, logger, markOnlineOnConnect: false });
+  sock = makeWASocket({
+    version,
+    auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
+    logger,
+    markOnlineOnConnect: false,
+    getMessage: async (key) => guardadas.get(key.id),
+    cachedGroupMetadata: dadosGrupo,
+  });
   sock.ev.on('creds.update', saveCreds);
+  const renovarGrupo = async (id) => {
+    try {
+      cacheGrupos.set(id, { t: Date.now(), d: await sock.groupMetadata(id) });
+    } catch {}
+  };
+  sock.ev.on('groups.update', (lista) => lista.forEach((g) => renovarGrupo(g.id)));
+  sock.ev.on('group-participants.update', (ev) => renovarGrupo(ev.id));
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
@@ -110,6 +143,7 @@ async function iniciar() {
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     for (const m of messages) {
       try {
+        guardar(m);
         const jid = m.key.remoteJid;
         // 'append' = histórico/sincronização: só aceita se for mensagem dos últimos 2 minutos
         if (type !== 'notify' && Date.now() / 1000 - Number(m.messageTimestamp || 0) > 120) continue;
@@ -130,6 +164,7 @@ async function iniciar() {
 
 async function atualizarGrupos() {
   const g = await sock.groupFetchAllParticipating();
+  for (const x of Object.values(g)) cacheGrupos.set(x.id, { t: Date.now(), d: x });
   estado.grupos = Object.values(g)
     .map((x) => ({
       id: x.id,
@@ -146,7 +181,7 @@ async function atualizarGrupos() {
 async function receber(m) {
   const cfg = config.get();
   const chave = `${m.key.remoteJid}|${m.key.participant || ''}`;
-  const b = buffers.get(chave) || { grupo: m.key.remoteJid, vendedor: m.key.participant, fotos: [], textos: [], timer: null };
+  const b = buffers.get(chave) || { grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], timer: null };
   buffers.set(chave, b);
 
   if (conteudo(m).imageMessage && b.fotos.length < cfg.maxFotos) {
@@ -250,9 +285,9 @@ function descartar(id) {
 
 async function enviar(jid, caminhosFotos, texto) {
   if (estado.status !== 'conectado') throw new Error('WhatsApp não está conectado');
-  if (!caminhosFotos.length) return sock.sendMessage(jid, { text: texto });
+  if (!caminhosFotos.length) return guardar(await sock.sendMessage(jid, { text: texto }));
   for (let i = 0; i < caminhosFotos.length; i++) {
-    await sock.sendMessage(jid, { image: fs.readFileSync(caminhosFotos[i]), ...(i === 0 ? { caption: texto } : {}) });
+    guardar(await sock.sendMessage(jid, { image: fs.readFileSync(caminhosFotos[i]), ...(i === 0 ? { caption: texto } : {}) }));
     await esperar(800);
   }
 }
