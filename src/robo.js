@@ -9,6 +9,7 @@ const {
   DisconnectReason,
   downloadMediaMessage,
   fetchLatestBaileysVersion,
+  normalizeMessageContent,
 } = require('@whiskeysockets/baileys');
 
 const config = require('./config');
@@ -48,8 +49,10 @@ function evento(tipo, texto) {
   estado.eventos = estado.eventos.slice(0, 200);
 }
 
+// Tira "embrulhos" (mensagem temporária, visualização única, etc.) para chegar no conteúdo real
+const conteudo = (m) => normalizeMessageContent(m.message) || {};
 const textoDe = (m) => {
-  const msg = m.message || {};
+  const msg = conteudo(m);
   return msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption || '';
 };
 const chaveCarro = (c) => [c.modelo, c.ano, c.km, c.preco].map((x) => String(x || '').toLowerCase()).join('|');
@@ -91,11 +94,18 @@ async function iniciar() {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
     for (const m of messages) {
       try {
         const jid = m.key.remoteJid;
-        if (config.get().gruposOrigem.includes(jid) && jid !== config.get().grupoDestino) await receber(m);
+        // 'append' = histórico/sincronização: só aceita se for mensagem dos últimos 2 minutos
+        if (type !== 'notify' && Date.now() / 1000 - Number(m.messageTimestamp || 0) > 120) continue;
+        if (config.get().gruposOrigem.includes(jid) && jid !== config.get().grupoDestino) {
+          if (!m.message) {
+            if (m.messageStubType === 2) evento('aviso', `Não consegui ler uma mensagem de ${nomeGrupo(jid)}: a criptografia do aparelho conectado ainda está sincronizando. Reenvie em alguns minutos.`);
+            continue;
+          }
+          await receber(m);
+        }
         else if (jid && jid === jidAprovador()) await comandoWhatsApp(textoDe(m));
       } catch (e) {
         evento('erro', 'Falha ao ler mensagem: ' + e.message);
@@ -125,7 +135,7 @@ async function receber(m) {
   const b = buffers.get(chave) || { grupo: m.key.remoteJid, vendedor: m.key.participant, fotos: [], textos: [], timer: null };
   buffers.set(chave, b);
 
-  if (m.message?.imageMessage && b.fotos.length < cfg.maxFotos) {
+  if (conteudo(m).imageMessage && b.fotos.length < cfg.maxFotos) {
     b.fotos.push(await downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage }));
   }
   const t = textoDe(m);
@@ -140,7 +150,8 @@ async function receber(m) {
 
 async function processar({ grupo, vendedor, fotos, textos }) {
   const cfg = config.get();
-  if (!textos.length) return;
+  evento('lendo', `${fotos.length} foto(s) e ${textos.length} texto(s) de ${nomeGrupo(grupo)}`);
+  if (!textos.length) return evento('ignorado', `${nomeGrupo(grupo)} — só fotos, sem texto do anúncio`);
   const carro = parseAnuncio(textos.join('\n'));
   const nome = `${carro.modelo || textos[0].slice(0, 40)} ${carro.ano || ''}`.trim();
 
