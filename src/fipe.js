@@ -88,9 +88,13 @@ function acharMarca(texto) {
   return null;
 }
 
-function pontuar(nomeFipe, palavrasAnuncio) {
+const BLINDADO = /blind|security/i;
+
+function pontuar(nomeFipe, palavrasAnuncio, anuncioBlindado) {
   const f = tokens(nomeFipe);
   let p = 0;
+  // Versão blindada da FIPE só quando o anúncio fala em blindagem (e vice-versa)
+  if (BLINDADO.test(nomeFipe)) p += anuncioBlindado ? 6 : -20;
   for (const w of palavrasAnuncio) if (f.includes(w)) p += /^\d/.test(w) ? 2 : 3;
   if (palavrasAnuncio[0] && f[0] === palavrasAnuncio[0]) p += 5; // nome do modelo bate
   return p - f.length * 0.1; // desempata a favor da versão mais "simples"
@@ -107,8 +111,9 @@ async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
 
   const modelos = await fonte.modelos(marca.codigo);
   const palavras = tokens(carro.modelo).filter((w) => !PALAVRAS_MARCA.has(w));
+  const anuncioBlindado = /blindad/i.test(carro.textoOriginal || '');
   const candidatos = modelos
-    .map((m) => ({ ...m, pontos: pontuar(m.nome, palavras) }))
+    .map((m) => ({ ...m, pontos: pontuar(m.nome, palavras, anuncioBlindado) }))
     .filter((m) => m.pontos > 3)
     .sort((a, b) => b.pontos - a.pontos)
     .slice(0, 5);
