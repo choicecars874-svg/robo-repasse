@@ -70,6 +70,7 @@
     <button class="btn verm" id="btnDesconectar">Desconectar WhatsApp</button>
   </div>
   <div class="card"><h2>O que está acontecendo</h2><div class="eventos" id="eventos"></div></div>
+  <div class="card"><details id="detDiag"><summary class="sub">Diagnóstico técnico (para o suporte)</summary><pre id="diag" style="max-height:320px;overflow:auto;margin-top:10px"></pre></details></div>
 </section>
 
 <section id="aprovar"><div id="listaPend"></div></section>
@@ -202,6 +203,7 @@ async function atualizarEstado() {
   $('#nPend').hidden = !e.pendentes; $('#nPend').textContent = e.pendentes;
   $('#eventos').innerHTML = e.eventos.map((v) => `<div><time>${hora(v.quando)}</time><span class="tag ${esc(v.tipo)}">${esc(v.tipo)}</span><span>${esc(v.texto)}</span></div>`).join('') || '<span class="sub">Nada ainda.</span>';
 }
+$('#detDiag').ontoggle = async () => { if ($('#detDiag').open) $('#diag').textContent = await (await fetch('/api/diagnostico')).text(); };
 setInterval(atualizarEstado, 4000); atualizarEstado();
 $('#btnAtualizar').onclick = async () => { await api('/api/atualizar', { method:'POST' }); alert('Buscando atualização. Se houver versão nova, o robô reinicia em 1 a 3 minutos — depois recarregue a página.'); };
 $('#btnDesconectar').onclick = async () => { if (confirm('Desconectar este WhatsApp do robô?')) { await api('/api/desconectar', { method:'POST' }); atualizarEstado(); } };

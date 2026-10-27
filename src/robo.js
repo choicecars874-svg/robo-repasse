@@ -25,7 +25,21 @@ const DIR_PEND = path.join(DATA_DIR, 'pendentes');
 const ARQ_HIST = path.join(DATA_DIR, 'historico.json');
 fs.mkdirSync(DIR_PEND, { recursive: true });
 
-const logger = pino({ level: 'silent' });
+// Avisos/erros internos do WhatsApp ficam guardados (últimos 150) para o diagnóstico no painel
+const diagnostico = [];
+const logger = pino(
+  { level: 'warn' },
+  {
+    write(linha) {
+      try {
+        const j = JSON.parse(linha);
+        const extra = j.err?.message || j.error?.message || j.error || j.key?.remoteJid || j.jid || '';
+        diagnostico.unshift(`${new Date(j.time).toLocaleTimeString('pt-BR')} ${j.level >= 50 ? 'ERRO' : 'aviso'}: ${j.msg || ''} ${typeof extra === 'string' ? extra : JSON.stringify(extra)}`.trim());
+        diagnostico.length = Math.min(diagnostico.length, 150);
+      } catch {}
+    },
+  }
+);
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const aleatorio = ([min, max]) => (min + Math.random() * (max - min)) * 1000;
 
@@ -254,6 +268,7 @@ async function enviarTeste(jid) {
 }
 
 module.exports = {
+  diagnostico,
   iniciar,
   enviarTeste,
   estado,

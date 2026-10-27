@@ -72,6 +72,8 @@ function iniciarPainel() {
 
   app.get('/', (_, res) => res.sendFile(path.join(PUBLICO, 'index.html')));
 
+  app.get('/api/diagnostico', (_, res) => res.type('text').send(robo.diagnostico.join('\n') || 'Nenhum aviso interno.'));
+
   app.get('/api/estado', (_, res) => {
     const { status, qr, numero, eventos } = robo.estado;
     res.json({ versao: VERSAO, status, qr, numero, eventos: eventos.slice(0, 60), pendentes: robo.pendentes.size, postados: robo.historico.postados.length });
