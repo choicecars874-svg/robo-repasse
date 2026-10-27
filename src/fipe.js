@@ -92,14 +92,20 @@ const BLINDADO = /blind|security/i;
 
 function pontuar(nomeFipe, palavrasAnuncio, anuncioBlindado) {
   const f = tokens(nomeFipe);
+  // A FIPE às vezes separa o que o anúncio escreve junto ("IX 1 XDRIVE 30" x "iX1 xDrive30"):
+  // considera também cada par de palavras vizinhas grudado
+  const fJuntos = f.concat(f.slice(0, -1).map((t, i) => t + f[i + 1]));
   let p = 0;
   // Versão blindada da FIPE só quando o anúncio fala em blindagem (e vice-versa)
   if (BLINDADO.test(nomeFipe)) p += anuncioBlindado ? 6 : -20;
-  for (const w of palavrasAnuncio) {
-    if (f.includes(w)) p += /^\d/.test(w) ? 2 : 3;
-    else if (w.length >= 3 && f.some((t) => t.length >= 3 && (t.startsWith(w) || w.startsWith(t)))) p += 1.5;
-  }
-  if (palavrasAnuncio[0] && f[0] === palavrasAnuncio[0]) p += 5; // nome do modelo bate
+  palavrasAnuncio.forEach((w, i) => {
+    const par = w + (palavrasAnuncio[i + 1] || '');
+    if (fJuntos.includes(w)) p += /^\d/.test(w) ? 2 : 3;
+    else if (palavrasAnuncio[i + 1] && f.includes(par)) p += 3; // anúncio separado, FIPE junto
+    else if (w.length >= 3 && fJuntos.some((t) => t.length >= 3 && (t.startsWith(w) || w.startsWith(t)))) p += 1.5;
+  });
+  const primeiro = palavrasAnuncio[0];
+  if (primeiro && (f[0] === primeiro || f[0] + (f[1] || '') === primeiro)) p += 5; // nome do modelo bate
   return p - f.length * 0.1; // desempata a favor da versão mais "simples"
 }
 
@@ -126,10 +132,19 @@ async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
   const anosTentar = [anoNum, String(Number(anoNum) + 1)];
   for (const anoBusca of anosTentar) {
     for (const mod of candidatos) {
-      const anos = await fonte.anos(marca.codigo, mod.codigo);
+      let anos, r;
+      try {
+        anos = await fonte.anos(marca.codigo, mod.codigo);
+      } catch {
+        continue; // um modelo com erro não derruba a busca: tenta o próximo
+      }
       const ano = anos.find((a) => String(a.codigo).startsWith(anoBusca) && !String(a.codigo).startsWith('32000'));
       if (!ano) continue;
-      const r = await fonte.preco(marca.codigo, mod.codigo, ano.codigo);
+      try {
+        r = await fonte.preco(marca.codigo, mod.codigo, ano.codigo);
+      } catch {
+        continue;
+      }
       const valor = Math.round(parseInt(String(r.valor).replace(/\D/g, ''), 10) / 100);
       if (valor > 0) return { ...r, valor, versao: anoBusca === anoNum ? r.versao : `${r.versao} (ano-modelo ${anoBusca}; anúncio dizia ${anoNum})` };
     }
