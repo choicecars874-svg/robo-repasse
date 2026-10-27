@@ -41,6 +41,7 @@ function iniciarPainel() {
   );
 
   app.get('/login', (_, res) => res.sendFile(path.join(PUBLICO, 'login.html')));
+  app.get('/marca.png', (_, res) => res.sendFile(path.join(__dirname, '..', 'logo.png')));
   app.post('/login', (req, res) => {
     const ok = req.body.senha && crypto.timingSafeEqual(
       crypto.createHash('sha256').update(req.body.senha).digest(),
