@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robô de Repasse – Entrar</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f1115; font-family: system-ui, sans-serif; color: #e8eaed; }
+  form { background: #181b21; padding: 32px; border-radius: 14px; width: min(340px, 90vw); display: grid; gap: 14px; border: 1px solid #2a2f38; }
+  h1 { margin: 0; font-size: 20px; }
+  input, button { font: inherit; padding: 12px; border-radius: 8px; border: 1px solid #2a2f38; background: #0f1115; color: inherit; }
+  button { background: #22c55e; color: #052e14; font-weight: 700; border: 0; cursor: pointer; }
+  .erro { color: #f87171; font-size: 14px; display: none; }
+</style>
+</head>
+<body>
+<form method="post" action="/login">
+  <h1>🚗 Robô de Repasse</h1>
+  <input type="password" name="senha" placeholder="Senha" autofocus required>
+  <div class="erro" id="erro">Senha incorreta</div>
+  <button>Entrar</button>
+</form>
+<script>if (location.search.includes('erro')) document.getElementById('erro').style.display = 'block';</script>
+</body>
+</html>

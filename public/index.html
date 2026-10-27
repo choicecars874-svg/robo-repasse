@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robô de Repasse</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b21; --borda:#2a2f38; --txt:#e8eaed; --sub:#9aa0a6; --verde:#22c55e; --verm:#ef4444; --amar:#f59e0b; --azul:#3b82f6; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.45 system-ui, sans-serif; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--borda); position:sticky; top:0; background:var(--bg); z-index:2; }
+  header b { font-size:17px; }
+  nav { display:flex; gap:4px; overflow-x:auto; padding:8px 12px; border-bottom:1px solid var(--borda); }
+  nav button { flex:none; background:none; border:0; color:var(--sub); padding:8px 12px; border-radius:8px; font:inherit; cursor:pointer; }
+  nav button.ativo { background:var(--card); color:var(--txt); }
+  main { max-width:960px; margin:0 auto; padding:16px; }
+  section { display:none; } section.ativo { display:block; }
+  .card { background:var(--card); border:1px solid var(--borda); border-radius:12px; padding:16px; margin-bottom:14px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  label { display:block; font-size:13px; color:var(--sub); margin:10px 0 4px; }
+  input, select, textarea { width:100%; font:inherit; color:inherit; background:var(--bg); border:1px solid var(--borda); border-radius:8px; padding:9px 10px; }
+  textarea { min-height:120px; resize:vertical; font-family:ui-monospace, monospace; font-size:13px; }
+  .linha { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .btn { font:inherit; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600; background:var(--borda); color:var(--txt); }
+  .btn.verde { background:var(--verde); color:#052e14; } .btn.verm { background:var(--verm); color:#fff; }
+  .badge { background:var(--verm); color:#fff; border-radius:99px; padding:0 7px; font-size:12px; margin-left:4px; }
+  .status { display:inline-flex; align-items:center; gap:8px; font-size:14px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--amar); } .dot.on { background:var(--verde); } .dot.off { background:var(--verm); }
+  .qr { background:#fff; padding:12px; border-radius:12px; width:280px; max-width:100%; }
+  .eventos div { padding:6px 0; border-bottom:1px solid var(--borda); font-size:13px; display:flex; gap:8px; }
+  .eventos time { color:var(--sub); flex:none; }
+  .tag { font-size:11px; padding:1px 7px; border-radius:99px; background:var(--borda); flex:none; height:fit-content; }
+  .tag.postado,.tag.ok { background:#14532d; } .tag.capturado { background:#1e3a8a; } .tag.erro { background:#7f1d1d; } .tag.aviso { background:#78350f; }
+  .anuncio { display:grid; grid-template-columns:minmax(0, 260px) 1fr; gap:16px; }
+  @media (max-width:640px) { .anuncio { grid-template-columns:1fr; } }
+  .fotos { display:flex; gap:6px; overflow-x:auto; } .fotos img { height:180px; border-radius:8px; }
+  pre { white-space:pre-wrap; background:var(--bg); border-radius:8px; padding:10px; font-size:13px; margin:0; }
+  .num { display:flex; gap:14px; flex-wrap:wrap; margin:8px 0; font-size:14px; } .num b { display:block; font-size:17px; }
+  .bom { color:var(--verde); } .ruim { color:var(--verm); } .sub { color:var(--sub); font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; } td, th { padding:8px 6px; border-bottom:1px solid var(--borda); text-align:left; }
+  .grupos { max-height:260px; overflow:auto; border:1px solid var(--borda); border-radius:8px; padding:6px 10px; }
+  .grupos label { display:flex; gap:8px; color:var(--txt); margin:6px 0; } .grupos input { width:auto; }
+  .tbBuscas input { min-width:80px; } .tbBuscas td:first-child input { min-width:130px; }
+  .salvar { position:sticky; bottom:12px; text-align:right; }
+</style>
+</head>
+<body>
+<header><b>🚗 Robô de Repasse</b><span class="status"><span class="dot" id="dot"></span><span id="statusTxt">…</span> · <a href="/sair" style="color:var(--sub)">sair</a></span></header>
+<nav>
+  <button data-aba="inicio" class="ativo">Início</button>
+  <button data-aba="aprovar">Aprovar <span class="badge" id="nPend" hidden></span></button>
+  <button data-aba="buscas">O que buscamos</button>
+  <button data-aba="config">Configurar</button>
+  <button data-aba="testar">Testar anúncio</button>
+  <button data-aba="historico">Histórico</button>
+</nav>
+<main>
+
+<section id="inicio" class="ativo">
+  <div class="card" id="cardQr" hidden>
+    <h2>Conectar o WhatsApp</h2>
+    <p class="sub">No celular que participa dos grupos: WhatsApp → Aparelhos conectados → Conectar aparelho → aponte para o código.</p>
+    <img class="qr" id="qr" alt="QR Code">
+  </div>
+  <div class="card">
+    <h2>Resumo</h2>
+    <div class="num"><div><span class="sub">Número</span><b id="numero">—</b></div><div><span class="sub">Aguardando aprovação</span><b id="resPend">0</b></div><div><span class="sub">Postados</span><b id="resPost">0</b></div></div>
+    <button class="btn verm" id="btnDesconectar">Desconectar WhatsApp</button>
+  </div>
+  <div class="card"><h2>O que está acontecendo</h2><div class="eventos" id="eventos"></div></div>
+</section>
+
+<section id="aprovar"><div id="listaPend"></div></section>
+
+<section id="buscas">
+  <div class="card">
+    <h2>Carros que o comprador procura</h2>
+    <p class="sub">O robô só pega carros que batem com alguma linha. Deixe a lista vazia para pegar todos. Use 0 para "sem limite".</p>
+    <div style="overflow-x:auto"><table class="tbBuscas"><thead><tr><th>Modelo (palavras)</th><th>Ano mín.</th><th>Ano máx.</th><th>Preço máx.</th><th>KM máx.</th><th></th></tr></thead><tbody id="tbBuscas"></tbody></table></div>
+    <p><button class="btn" id="addBusca">+ Adicionar modelo</button></p>
+  </div>
+  <div class="card">
+    <h2>Abaixo da FIPE</h2>
+    <div class="linha">
+      <div><label>Desconto mínimo na FIPE (%)</label><input type="number" data-c="fipe.descontoMinimo"></div>
+      <div><label>Consultar FIPE na internet quando o anúncio não traz</label><select data-c="fipe.consultarOnline" data-t="bool"><option value="true">Sim</option><option value="false">Não</option></select></div>
+    </div>
+    <p class="sub">O desconto é calculado sobre o preço do repasse. No modo automático, carro sem FIPE encontrada é ignorado.</p>
+  </div>
+  <div class="card">
+    <h2>Palavras que descartam o anúncio</h2>
+    <input data-c="filtros.palavrasBloqueadas" data-t="lista">
+    <p class="sub">Separe por vírgula.</p>
+  </div>
+  <div class="salvar"><button class="btn verde salvarCfg">Salvar</button></div>
+</section>
+
+<section id="config">
+  <div class="card">
+    <h2>Grupos</h2>
+    <p><button class="btn" id="btnGrupos">Atualizar lista de grupos</button></p>
+    <label>Grupos de repasse (de onde pegar os carros)</label><div class="grupos" id="gOrigem"><span class="sub">Conecte o WhatsApp para ver os grupos.</span></div>
+    <label>Seu grupo (onde postar)</label><select id="gDestino"></select>
+  </div>
+  <div class="card">
+    <h2>Loja</h2>
+    <div class="linha">
+      <div><label>Nome</label><input data-c="loja.nome"></div>
+      <div><label>WhatsApp do link (com 55 + DDD)</label><input data-c="loja.whatsapp" placeholder="5511999998888"></div>
+      <div><label>Cidade</label><input data-c="loja.cidade"></div>
+    </div>
+    <label>Mensagem que o cliente manda ao clicar no link</label><input data-c="loja.mensagemLink">
+  </div>
+  <div class="card">
+    <h2>Margem e postagem</h2>
+    <div class="linha">
+      <div><label>Tipo de margem</label><select data-c="margem.tipo"><option value="fixo">Valor fixo (R$)</option><option value="percentual">Percentual (%)</option></select></div>
+      <div><label>Valor da margem</label><input type="number" data-c="margem.valor"></div>
+      <div><label>Arredondar para (R$, 0 = não)</label><input type="number" data-c="margem.arredondarPara"></div>
+    </div>
+    <div class="linha">
+      <div><label>Modo</label><select data-c="modo"><option value="auto">Postar automático</option><option value="aprovacao">Aprovar antes de postar</option></select></div>
+      <div><label>Também avisar no WhatsApp (opcional)</label><input data-c="numeroAprovador" placeholder="5511999998888"></div>
+      <div><label>Segundos para juntar fotos</label><input type="number" data-c="segundosParaJuntarFotos"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Logo nas fotos</h2>
+    <div class="linha">
+      <div><label>Arquivo (PNG com fundo transparente é o ideal)</label><input type="file" id="arqLogo" accept="image/*"></div>
+      <div><label>Usar logo</label><select data-c="logo.ativo" data-t="bool"><option value="true">Sim</option><option value="false">Não</option></select></div>
+      <div><label>Posição</label><select data-c="logo.posicao"><option value="inferior-direito">Inferior direito</option><option value="inferior-esquerdo">Inferior esquerdo</option><option value="superior-direito">Superior direito</option><option value="superior-esquerdo">Superior esquerdo</option><option value="centro">Centro</option></select></div>
+      <div><label>Tamanho (% da largura)</label><input type="number" data-c="logo.tamanho"></div>
+      <div><label>Opacidade (%)</label><input type="number" data-c="logo.opacidade"></div>
+    </div>
+    <p><img id="previaLogo" style="max-width:100%;width:420px;border-radius:8px" alt=""></p>
+  </div>
+  <div class="card">
+    <h2>Modelo do anúncio</h2>
+    <p class="sub">Campos: {modelo} {ano} {km} {cor} {cambio} {detalhes} {preco} {fipe} {abaixoFipe} {loja} {cidade} {link}. Linha com campo vazio some sozinha.</p>
+    <textarea data-c="modelo" style="min-height:280px"></textarea>
+  </div>
+  <div class="salvar"><button class="btn verde salvarCfg">Salvar</button></div>
+</section>
+
+<section id="testar">
+  <div class="card">
+    <h2>Cole um anúncio do grupo de repasse</h2>
+    <textarea id="txtTeste" placeholder="ONIX LT 1.0 2020&#10;Branco, 68 mil km&#10;Repasse R$ 55.000"></textarea>
+    <p><button class="btn verde" id="btnTestar">Testar</button></p>
+    <div id="resTeste"></div>
+  </div>
+</section>
+
+<section id="historico"><div class="card"><h2>Postados</h2><table><thead><tr><th>Quando</th><th>Carro</th><th>Custo</th><th>Venda</th><th>FIPE</th><th>Origem</th></tr></thead><tbody id="tbHist"></tbody></table></div></section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const reais = (v) => v == null ? '—' : 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+const hora = (t) => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+async function api(url, opts = {}) {
+  const r = await fetch(url, { ...opts, headers: opts.body && !(opts.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {} });
+  if (r.status === 401) location.href = '/login';
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || 'Erro');
+  return j;
+}
+
+let cfg = null;
+
+// Abas
+document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('nav button, section').forEach((e) => e.classList.remove('ativo'));
+  b.classList.add('ativo'); $('#' + b.dataset.aba).classList.add('ativo');
+  ({ aprovar: carregarPendentes, historico: carregarHistorico })[b.dataset.aba]?.();
+});
+
+// Estado
+async function atualizarEstado() {
+  const e = await api('/api/estado');
+  const nomes = { conectado: 'Conectado', 'aguardando-qr': 'Escaneie o QR', desconectado: 'Reconectando…', iniciando: 'Iniciando…' };
+  $('#statusTxt').textContent = nomes[e.status] || e.status;
+  $('#dot').className = 'dot ' + (e.status === 'conectado' ? 'on' : e.status === 'desconectado' ? 'off' : '');
+  $('#cardQr').hidden = !e.qr; if (e.qr) $('#qr').src = e.qr;
+  $('#numero').textContent = e.numero || '—';
+  $('#resPend').textContent = e.pendentes; $('#resPost').textContent = e.postados;
+  $('#nPend').hidden = !e.pendentes; $('#nPend').textContent = e.pendentes;
+  $('#eventos').innerHTML = e.eventos.map((v) => `<div><time>${hora(v.quando)}</time><span class="tag ${esc(v.tipo)}">${esc(v.tipo)}</span><span>${esc(v.texto)}</span></div>`).join('') || '<span class="sub">Nada ainda.</span>';
+}
+setInterval(atualizarEstado, 4000); atualizarEstado();
+$('#btnDesconectar').onclick = async () => { if (confirm('Desconectar este WhatsApp do robô?')) { await api('/api/desconectar', { method:'POST' }); atualizarEstado(); } };
+
+// Aprovação
+async function carregarPendentes() {
+  const lista = await api('/api/pendentes');
+  $('#listaPend').innerHTML = lista.map((p) => {
+    const c = p.carro;
+    return `<div class="card anuncio" data-id="${esc(p.id)}">
+      <div><div class="fotos">${p.fotos.map((f) => `<img src="/fotos/${esc(p.id)}/${esc(f)}" loading="lazy">`).join('') || '<span class="sub">Sem fotos</span>'}</div>
+        <div class="num"><div><span class="sub">Custo</span><b>${reais(c.preco)}</b></div><div><span class="sub">FIPE</span><b>${reais(c.fipe)}</b></div>
+        <div><span class="sub">Abaixo FIPE</span><b class="${p.desconto >= 10 ? 'bom' : ''}">${p.desconto == null ? '?' : p.desconto + '%'}</b></div></div>
+        <div class="sub">${c.fipeVersao ? 'FIPE usada: ' + esc(c.fipeVersao) + '<br>' : c.fipe ? 'FIPE informada no anúncio<br>' : '<span class="ruim">FIPE não encontrada — confira</span><br>'}
+        Origem: ${esc(p.origem.grupo)} · vendedor ${esc(p.origem.vendedor || '?')} · ${hora(p.criadoEm)}</div>
+        <details><summary class="sub">Anúncio original</summary><pre>${esc(c.textoOriginal)}</pre></details>
+      </div>
+      <div><pre>${esc(p.texto)}</pre>
+        <label>Preço de venda</label><input type="number" class="pv" value="${p.precoVenda ?? ''}">
+        <p style="display:flex;gap:8px"><button class="btn verde aprov">Postar no grupo</button><button class="btn verm desc">Descartar</button></p>
+      </div></div>`;
+  }).join('') || '<div class="card sub">Nenhum carro esperando aprovação.</div>';
+  document.querySelectorAll('.anuncio').forEach((el) => {
+    const id = el.dataset.id;
+    el.querySelector('.aprov').onclick = async () => { await api(`/api/pendentes/${id}/aprovar`, { method:'POST', body: JSON.stringify({ precoVenda: el.querySelector('.pv').value }) }); el.remove(); atualizarEstado(); };
+    el.querySelector('.desc').onclick = async () => { await api(`/api/pendentes/${id}/descartar`, { method:'POST' }); el.remove(); atualizarEstado(); };
+  });
+}
+
+// Configuração: campos com data-c="caminho.do.campo"
+const pegar = (o, c) => c.split('.').reduce((a, k) => a?.[k], o);
+const por = (o, c, v) => { const ks = c.split('.'); const u = ks.pop(); ks.reduce((a, k) => a[k] ??= {}, o)[u] = v; };
+async function carregarConfig() {
+  cfg = await api('/api/config');
+  document.querySelectorAll('[data-c]').forEach((el) => {
+    const v = pegar(cfg, el.dataset.c);
+    el.value = el.dataset.t === 'lista' ? (v || []).join(', ') : String(v ?? '');
+  });
+  desenharBuscas(); desenharGrupos(await api('/api/grupos').catch(() => []));
+  $('#previaLogo').src = '/api/logo/previa?' + Date.now();
+}
+function lerConfig() {
+  document.querySelectorAll('[data-c]').forEach((el) => {
+    let v = el.value;
+    if (el.dataset.t === 'lista') v = v.split(',').map((s) => s.trim()).filter(Boolean);
+    else if (el.dataset.t === 'bool') v = v === 'true';
+    else if (el.type === 'number') v = Number(v) || 0;
+    por(cfg, el.dataset.c, v);
+  });
+  cfg.buscas = [...document.querySelectorAll('#tbBuscas tr')].map((tr) => {
+    const [m, a1, a2, p, k] = [...tr.querySelectorAll('input')].map((i) => i.value);
+    return { modelo: m.trim(), anoMin: +a1 || 0, anoMax: +a2 || 0, precoMax: +p || 0, kmMax: +k || 0 };
+  }).filter((b) => b.modelo);
+  const origem = [...document.querySelectorAll('#gOrigem input:checked')].map((i) => i.value);
+  if ($('#gOrigem input')) { cfg.gruposOrigem = origem; cfg.grupoDestino = $('#gDestino').value; }
+}
+document.querySelectorAll('.salvarCfg').forEach((b) => b.onclick = async () => {
+  lerConfig(); cfg = await api('/api/config', { method:'POST', body: JSON.stringify(cfg) });
+  b.textContent = 'Salvo ✓'; setTimeout(() => b.textContent = 'Salvar', 1500);
+  $('#previaLogo').src = '/api/logo/previa?' + Date.now();
+});
+
+function desenharBuscas() {
+  $('#tbBuscas').innerHTML = cfg.buscas.map((b) => linhaBusca(b)).join('');
+  ligarRemover();
+}
+const linhaBusca = (b = {}) => `<tr><td><input value="${esc(b.modelo || '')}" placeholder="ex: onix"></td><td><input type="number" value="${b.anoMin || ''}"></td><td><input type="number" value="${b.anoMax || ''}"></td><td><input type="number" value="${b.precoMax || ''}"></td><td><input type="number" value="${b.kmMax || ''}"></td><td><button class="btn rm">✕</button></td></tr>`;
+const ligarRemover = () => document.querySelectorAll('#tbBuscas .rm').forEach((b) => b.onclick = () => b.closest('tr').remove());
+$('#addBusca').onclick = () => { $('#tbBuscas').insertAdjacentHTML('beforeend', linhaBusca()); ligarRemover(); };
+
+function desenharGrupos(grupos) {
+  if (!grupos.length) return;
+  $('#gOrigem').innerHTML = grupos.map((g) => `<label><input type="checkbox" value="${esc(g.id)}" ${cfg.gruposOrigem.includes(g.id) ? 'checked' : ''}>${esc(g.nome)}</label>`).join('');
+  $('#gDestino').innerHTML = '<option value="">— escolha —</option>' + grupos.map((g) => `<option value="${esc(g.id)}" ${cfg.grupoDestino === g.id ? 'selected' : ''}>${esc(g.nome)}</option>`).join('');
+}
+$('#btnGrupos').onclick = async () => { try { desenharGrupos(await api('/api/grupos?atualizar=1')); } catch (e) { alert(e.message); } };
+
+$('#arqLogo').onchange = async (ev) => {
+  const fd = new FormData(); fd.append('logo', ev.target.files[0]);
+  try { await api('/api/logo', { method:'POST', body: fd }); $('#previaLogo').src = '/api/logo/previa?' + Date.now(); } catch (e) { alert(e.message); }
+};
+
+// Teste
+$('#btnTestar').onclick = async () => {
+  const r = await api('/api/testar', { method:'POST', body: JSON.stringify({ texto: $('#txtTeste').value }) });
+  const c = r.carro;
+  $('#resTeste').innerHTML = `<p class="${r.aprovado ? 'bom' : 'ruim'}"><b>${r.aprovado ? '✓ Seria capturado' : '✕ Seria ignorado: ' + esc(r.motivo)}</b></p>
+    <div class="num"><div><span class="sub">Modelo</span><b>${esc(c.modelo || '?')}</b></div><div><span class="sub">Ano</span><b>${esc(c.ano || '?')}</b></div><div><span class="sub">KM</span><b>${esc(c.km || '?')}</b></div>
+    <div><span class="sub">Custo</span><b>${reais(c.preco)}</b></div><div><span class="sub">FIPE</span><b>${reais(c.fipe)}</b></div><div><span class="sub">Abaixo FIPE</span><b>${r.desconto ?? '?'}%</b></div><div><span class="sub">Venda</span><b>${reais(r.precoVenda)}</b></div></div>
+    ${c.fipeVersao ? `<p class="sub">FIPE usada: ${esc(c.fipeVersao)}</p>` : ''}${c.fipeErro ? `<p class="ruim">Erro FIPE: ${esc(c.fipeErro)}</p>` : ''}
+    <pre>${esc(r.texto)}</pre>`;
+};
+
+async function carregarHistorico() {
+  const h = await api('/api/historico');
+  $('#tbHist').innerHTML = h.map((p) => `<tr><td>${hora(p.quando)}</td><td>${esc(p.modelo)} ${esc(p.ano || '')}</td><td>${reais(p.custo)}</td><td>${reais(p.venda)}</td><td>${reais(p.fipe)}</td><td class="sub">${esc(p.origem?.grupo)}<br>${esc(p.origem?.vendedor || '')}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Nada postado ainda.</td></tr>';
+}
+
+carregarConfig();
+</script>
+</body>
+</html>
