@@ -10,7 +10,9 @@ const CORES = ['branco', 'branca', 'preto', 'preta', 'prata', 'cinza', 'vermelho
 
 // Linhas que falam do vendedor original e não devem ir para o nosso anúncio
 const LINHA_DE_CONTATO = /(chama|chamar|contato|zap|whats|interessad|tratar com|falar com|pv|privado|ligar|fone|tel[:.]|endere[cç]o|loja\b|agência|agencia)/i;
-const LINHA_DE_PRECO = /(r\$|valor|pre[cç]o|repasse|por\s+\d|fipe|\d+\s*mil\b|\d+\s*k\b)/i;
+const LINHA_DE_PRECO = /(r\$|valor|pre[cç]o|repasse|por\s+(r\$\s*)?\d|fipe|tabela|\d+\s*mil\b|\d+\s*k\b)/i;
+// "160 por 114", "fipe 160 mil por 114 mil": o primeiro valor é a tabela, o segundo é o preço
+const DE_POR = /(\d[\d.,]*)\s*(mil|k)?\s*(?:reais)?\s*[,-]?\s*por\s*(?:apenas\s*)?(?:r\$\s*)?(\d[\d.,]*)\s*(mil|k)?/i;
 
 function paraNumero(texto, multiplicadorMil) {
   let s = texto.replace(/\s/g, '');
@@ -35,14 +37,39 @@ function acharValor(linha) {
 function extrairPrecos(linhas) {
   let preco = null;
   let fipe = null;
+  const soltos = [];
+  const emMil = (num, mil) => {
+    const v = paraNumero(num, !!mil);
+    return v < 1000 ? v * 1000 : v;
+  };
   for (const linha of linhas) {
-    if (!LINHA_DE_PRECO.test(linha)) continue;
-    if (ANO.test(linha) && !/r\$|valor|pre[cç]o|fipe/i.test(linha)) continue;
+    const dp = linha.replace(ANO, ' ').match(DE_POR);
+    if (dp) {
+      const tabela = emMil(dp[1], dp[2] || dp[4]);
+      const valor = emMil(dp[3], dp[4] || dp[2]);
+      if (valor >= 3000 && tabela > valor) {
+        preco = preco ?? valor;
+        fipe = fipe ?? tabela;
+        continue;
+      }
+    }
+    const soNumero = /^\W*(r\$\s*)?\d[\d.,]*\s*(mil|k)?\W*$/i.test(linha);
+    if (!LINHA_DE_PRECO.test(linha) && !soNumero) continue;
+    if (ANO.test(linha) && !/r\$|valor|pre[cç]o|fipe|tabela/i.test(linha)) continue;
     if (KM.test(linha)) continue;
-    const v = acharValor(linha.replace(ANO, ' '));
+    let v = acharValor(linha.replace(ANO, ' '));
+    if (v && v < 1000 && soNumero) v *= 1000; // "160" sozinho na linha = 160 mil
     if (!v || v < 3000 || v > 5000000) continue;
-    if (/fipe/i.test(linha)) fipe = fipe ?? v;
-    else preco = preco ?? v;
+    if (/fipe|tabela/i.test(linha)) fipe = fipe ?? v;
+    else if (/valor|pre[cç]o|repasse|\bpor\b/i.test(linha)) preco = preco ?? v; // "R$" sozinho não diz se é FIPE ou preço
+    else soltos.push(v);
+  }
+  // Valores sem rótulo em linhas separadas ("160 mil" / "114 mil"): o maior é a FIPE, o menor é o preço
+  if (soltos.length) {
+    const menor = Math.min(...soltos);
+    const maior = Math.max(...soltos);
+    if (!preco) preco = menor;
+    if (!fipe && soltos.length >= 2 && maior > preco) fipe = maior;
   }
   return { preco, fipe };
 }

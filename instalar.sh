@@ -60,7 +60,8 @@ if sudo iptables -L INPUT -n | grep -q REJECT; then
 fi
 
 # 5) Atualização automática: a cada 30 min busca versão nova no GitHub
-( crontab -l 2>/dev/null | grep -v atualizar.sh; echo "*/30 * * * * cd $(pwd) && bash atualizar.sh >> /var/log/robo-atualizacao.log 2>&1" ) | crontab -
+sudo -E apt-get install -y cron >/dev/null && sudo systemctl enable --now cron
+( crontab -l 2>/dev/null | grep -v atualizar.sh; echo "*/30 * * * * cd $(pwd) && bash atualizar.sh >> /var/log/robo-atualizacao.log 2>&1" ) | crontab - || echo "AVISO: não consegui agendar a atualização automática"
 
 echo
 echo "✅ Pronto! Abra no celular:  https://$DOMINIO"

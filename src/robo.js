@@ -95,7 +95,7 @@ async function iniciar() {
     for (const m of messages) {
       try {
         const jid = m.key.remoteJid;
-        if (config.get().gruposOrigem.includes(jid) && !m.key.fromMe) await receber(m);
+        if (config.get().gruposOrigem.includes(jid) && jid !== config.get().grupoDestino) await receber(m);
         else if (jid && jid === jidAprovador()) await comandoWhatsApp(textoDe(m));
       } catch (e) {
         evento('erro', 'Falha ao ler mensagem: ' + e.message);

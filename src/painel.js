@@ -109,6 +109,14 @@ function iniciarPainel() {
     }
   });
 
+  // Busca a versão nova no GitHub na hora (o robô reinicia sozinho em ~1 min se houver)
+  app.post('/api/atualizar', (_, res) => {
+    const raiz = path.join(__dirname, '..');
+    const log = fs.openSync('/tmp/robo-atualizacao-manual.log', 'a');
+    require('child_process').spawn('bash', ['atualizar.sh'], { cwd: raiz, detached: true, stdio: ['ignore', log, log] }).unref();
+    res.json({ ok: true });
+  });
+
   app.get('/api/historico', (_, res) => res.json(robo.historico.postados));
 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });

@@ -65,6 +65,7 @@
   <div class="card">
     <h2>Resumo</h2>
     <div class="num"><div><span class="sub">Número</span><b id="numero">—</b></div><div><span class="sub">Aguardando aprovação</span><b id="resPend">0</b></div><div><span class="sub">Postados</span><b id="resPost">0</b></div></div>
+    <button class="btn" id="btnAtualizar">Buscar atualização agora</button>
     <button class="btn verm" id="btnDesconectar">Desconectar WhatsApp</button>
   </div>
   <div class="card"><h2>O que está acontecendo</h2><div class="eventos" id="eventos"></div></div>
@@ -192,6 +193,7 @@ async function atualizarEstado() {
   $('#eventos').innerHTML = e.eventos.map((v) => `<div><time>${hora(v.quando)}</time><span class="tag ${esc(v.tipo)}">${esc(v.tipo)}</span><span>${esc(v.texto)}</span></div>`).join('') || '<span class="sub">Nada ainda.</span>';
 }
 setInterval(atualizarEstado, 4000); atualizarEstado();
+$('#btnAtualizar').onclick = async () => { await api('/api/atualizar', { method:'POST' }); alert('Buscando atualização. Se houver versão nova, o robô reinicia em 1 a 3 minutos — depois recarregue a página.'); };
 $('#btnDesconectar').onclick = async () => { if (confirm('Desconectar este WhatsApp do robô?')) { await api('/api/desconectar', { method:'POST' }); atualizarEstado(); } };
 
 // Aprovação
