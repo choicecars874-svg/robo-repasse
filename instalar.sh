@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # Instala o Robô de Repasse num servidor Ubuntu (Oracle Cloud Free, Google Cloud e2-micro, VPS...).
 # Uso: dentro da pasta do projeto, rode:  bash instalar.sh
+# Também roda sozinho na criação da máquina (cloud-init) com PAINEL_SENHA definida.
 set -e
 cd "$(dirname "$0")"
+export DEBIAN_FRONTEND=noninteractive
+export HOME="${HOME:-/root}"
+USUARIO="${SUDO_USER:-$(whoami)}"
 
 echo "== Robô de Repasse: instalação =="
-read -rsp "Crie a senha do painel: " SENHA; echo
+SENHA="${PAINEL_SENHA:-}"
+[ -z "$SENHA" ] && { read -rsp "Crie a senha do painel: " SENHA; echo; }
 [ -z "$SENHA" ] && { echo "Senha não pode ser vazia"; exit 1; }
 
 # 1) Node.js 22 + pm2 (mantém o robô ligado e reinicia sozinho)
 if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-  sudo apt-get install -y nodejs
+  sudo -E apt-get install -y nodejs
 fi
 sudo npm install -g pm2
 npm install --omit=dev
@@ -30,16 +35,16 @@ chmod 600 ecosystem.config.js
 pm2 delete repasse >/dev/null 2>&1 || true
 pm2 start ecosystem.config.js
 pm2 save
-sudo env PATH="$PATH" pm2 startup systemd -u "$USER" --hp "$HOME" >/dev/null
+sudo env PATH="$PATH" pm2 startup systemd -u "$USUARIO" --hp "$HOME" >/dev/null
 
 # 4) HTTPS grátis com Caddy + endereço sslip.io (ex.: https://129-146-10-20.sslip.io)
 IP=$(curl -fsS https://api.ipify.org)
 DOMINIO="$(echo "$IP" | tr . -).sslip.io"
 if ! command -v caddy >/dev/null; then
-  sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+  sudo -E apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
-  sudo apt-get update && sudo apt-get install -y caddy
+  sudo apt-get update && sudo -E apt-get install -y caddy
 fi
 echo "$DOMINIO {
   reverse_proxy localhost:3000
@@ -50,10 +55,11 @@ sudo systemctl reload caddy || sudo systemctl restart caddy
 if sudo iptables -L INPUT -n | grep -q REJECT; then
   sudo iptables -I INPUT 5 -p tcp --dport 80 -j ACCEPT
   sudo iptables -I INPUT 5 -p tcp --dport 443 -j ACCEPT
-  sudo apt-get install -y iptables-persistent && sudo netfilter-persistent save
+  sudo -E apt-get install -y iptables-persistent && sudo netfilter-persistent save
 fi
 
 echo
 echo "✅ Pronto! Abra no celular:  https://$DOMINIO"
+echo "https://$DOMINIO" > endereco-do-painel.txt
 echo "   (se não abrir, libere as portas 80 e 443 no painel da nuvem — veja o LEIA-ME)"
 echo "   Ver o que o robô está fazendo:  pm2 logs repasse"
