@@ -16,6 +16,10 @@ const { consultarFipe } = require('./fipe');
 const { aplicarLogo, ARQ_LOGO } = require('./logo');
 
 const SENHA = process.env.PAINEL_SENHA;
+let VERSAO = '?';
+try {
+  VERSAO = require('child_process').execSync('git log -1 --format="%h %cd" --date=format:"%d/%m %H:%M"', { cwd: path.join(__dirname, '..') }).toString().trim();
+} catch {}
 const PUBLICO = path.join(__dirname, '..', 'public');
 
 function iniciarPainel() {
@@ -58,7 +62,7 @@ function iniciarPainel() {
 
   app.get('/api/estado', (_, res) => {
     const { status, qr, numero, eventos } = robo.estado;
-    res.json({ status, qr, numero, eventos: eventos.slice(0, 60), pendentes: robo.pendentes.size, postados: robo.historico.postados.length });
+    res.json({ versao: VERSAO, status, qr, numero, eventos: eventos.slice(0, 60), pendentes: robo.pendentes.size, postados: robo.historico.postados.length });
   });
 
   app.get('/api/grupos', async (req, res) => {
@@ -94,6 +98,15 @@ function iniciarPainel() {
   app.post('/api/pendentes/:id/descartar', (req, res) => {
     robo.descartar(req.params.id);
     res.json({ ok: true });
+  });
+
+  app.post('/api/testar-envio', async (req, res) => {
+    try {
+      await robo.enviarTeste(req.body.grupo);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
   });
 
   app.get('/api/historico', (_, res) => res.json(robo.historico.postados));

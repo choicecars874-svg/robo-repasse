@@ -45,7 +45,7 @@
 </style>
 </head>
 <body>
-<header><b>🚗 Robô de Repasse</b><span class="status"><span class="dot" id="dot"></span><span id="statusTxt">…</span> · <a href="/sair" style="color:var(--sub)">sair</a></span></header>
+<header><b>🚗 Robô de Repasse</b><span class="status"><span class="dot" id="dot"></span><span id="statusTxt">…</span> · <span class="sub" id="versao"></span> · <a href="/sair" style="color:var(--sub)">sair</a></span></header>
 <nav>
   <button data-aba="inicio" class="ativo">Início</button>
   <button data-aba="aprovar">Aprovar <span class="badge" id="nPend" hidden></span></button>
@@ -101,6 +101,7 @@
     <p><button class="btn" id="btnGrupos">Atualizar lista de grupos</button></p>
     <label>Grupos de repasse (de onde pegar os carros)</label><div class="grupos" id="gOrigem"><span class="sub">Conecte o WhatsApp para ver os grupos.</span></div>
     <label>Seu grupo (onde postar)</label><select id="gDestino"></select>
+    <p><button class="btn" id="btnTesteEnvio">Enviar mensagem de teste para este grupo</button> <span class="sub">Confira no WhatsApp se a mensagem chegou no grupo certo.</span></p>
   </div>
   <div class="card">
     <h2>Loja</h2>
@@ -182,6 +183,7 @@ async function atualizarEstado() {
   const e = await api('/api/estado');
   const nomes = { conectado: 'Conectado', 'aguardando-qr': 'Escaneie o QR', desconectado: 'Reconectando…', iniciando: 'Iniciando…' };
   $('#statusTxt').textContent = nomes[e.status] || e.status;
+  $('#versao').textContent = 'versão ' + (e.versao || '?');
   $('#dot').className = 'dot ' + (e.status === 'conectado' ? 'on' : e.status === 'desconectado' ? 'off' : '');
   $('#cardQr').hidden = !e.qr; if (e.qr) $('#qr').src = e.qr;
   $('#numero').textContent = e.numero || '—';
@@ -263,6 +265,12 @@ function desenharGrupos(grupos) {
   $('#gOrigem').innerHTML = grupos.map((g) => `<label><input type="checkbox" value="${esc(g.id)}" ${cfg.gruposOrigem.includes(g.id) ? 'checked' : ''}>${esc(g.nome)} <span class="sub">· ${g.membros} membros${g.tipo ? ' · ' + esc(g.tipo) : ''}</span></label>`).join('');
   $('#gDestino').innerHTML = '<option value="">— escolha —</option>' + grupos.map((g) => `<option value="${esc(g.id)}" ${cfg.grupoDestino === g.id ? 'selected' : ''}>${esc(g.nome)} · ${g.membros} membros${g.tipo ? ' · ' + esc(g.tipo) : ''}</option>`).join('');
 }
+$('#btnTesteEnvio').onclick = async () => {
+  const grupo = $('#gDestino').value;
+  if (!grupo) return alert('Escolha o grupo primeiro');
+  try { await api('/api/testar-envio', { method:'POST', body: JSON.stringify({ grupo }) }); alert('Enviado! Confira no WhatsApp se chegou no grupo certo.'); }
+  catch (e) { alert('Não foi possível enviar: ' + e.message); }
+};
 $('#btnGrupos').onclick = async () => { try { desenharGrupos(await api('/api/grupos?atualizar=1')); } catch (e) { alert(e.message); } };
 
 $('#arqLogo').onchange = async (ev) => {

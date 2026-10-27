@@ -245,8 +245,14 @@ async function desconectar() {
   fs.rmSync(DIR_AUTH, { recursive: true, force: true });
 }
 
+async function enviarTeste(jid) {
+  await enviar(jid, [], '✅ Teste do Robô de Repasse da Choice Cars. Pode apagar esta mensagem.');
+  evento('ok', `Mensagem de teste enviada para ${nomeGrupo(jid)}`);
+}
+
 module.exports = {
   iniciar,
+  enviarTeste,
   estado,
   historico,
   pendentes,
