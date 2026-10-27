@@ -27,8 +27,10 @@ function linkWhatsApp(carro, config) {
 // precoVenda permite sobrescrever o preço (ex.: ajustado no painel)
 function montarTexto(carro, config, precoVenda) {
   const venda = precoVenda ?? aplicarMargem(carro.preco, config.margem);
-  const fipeReal = carro.fipe;
-  const base = carro.referencia?.valor || fipeReal;
+  // Blindado com preço Web: o anúncio mostra o Web e o % abaixo dele (a FIPE não inclui a blindagem)
+  const usaWeb = !!carro.referencia;
+  const fipeReal = usaWeb ? null : carro.fipe;
+  const base = carro.referencia?.valor || carro.fipe;
   const abaixo = base && venda && venda < base ? Math.floor(((base - venda) / base) * 100) : null;
   const campos = {
     modelo: carro.modelo || 'Consulte',
@@ -39,7 +41,9 @@ function montarTexto(carro, config, precoVenda) {
     detalhes: carro.detalhes,
     preco: formatarReais(venda) || 'Consulte',
     fipe: formatarReais(fipeReal),
-    abaixoFipe: abaixo >= 3 ? `${abaixo}% abaixo ${carro.referencia ? 'do valor de mercado (blindado)' : 'da FIPE'}` : null,
+    web: usaWeb ? formatarReais(carro.referencia.valor) : null,
+    blindado: carro.blindagem ? `🛡️ *${carro.blindagem}*` : null,
+    abaixoFipe: abaixo >= 3 ? `${abaixo}% abaixo ${usaWeb ? 'do preço Web' : 'da FIPE'}` : null,
     loja: config.loja.nome,
     cidade: config.loja.cidade,
     link: linkWhatsApp(carro, config),

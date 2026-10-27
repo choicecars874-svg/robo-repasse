@@ -10,7 +10,7 @@ const CAMBIO = /\b(autom[aá]tico|automatizado|manual|cvt|aut\.?)\b/i;
 const CORES = ['branco', 'branca', 'preto', 'preta', 'prata', 'cinza', 'vermelho', 'vermelha', 'azul', 'verde', 'amarelo', 'amarela', 'marrom', 'bege', 'vinho', 'dourado', 'dourada', 'laranja', 'grafite'];
 
 // Linhas que falam do vendedor original e não devem ir para o nosso anúncio
-const LINHA_DE_CONTATO = /(chama|chamar|contato|zap|whats|interessad|tratar com|falar com|pv|privado|ligar|fone|tel[:.]|endere[cç]o|loja\b|agência|agencia)/i;
+const LINHA_DE_CONTATO = /(chama|chamar|contato|zap|whats|interessad|tratar com|falar com|\bpv\b|privado|ligar|fone|tel[:.]|endere[cç]o|loja\b|agência|agencia)/i;
 // Palavras que indicam o preço pedido pelo vendedor
 const ROTULO_PRECO = /valor|pre[cç]o|repasse|\bpor\b|preciso|pe[cç]o|aceito|quero|\bvend[ao]\b|[àa]\s*vista|\bsai\s+(por|a)\b|custa|oferta|investimento/i;
 const LINHA_DE_PRECO = new RegExp(`(r\\$|${ROTULO_PRECO.source}|por\\s+(r\\$\\s*)?\\d|fipe|tabela|\\d+\\s*mil\\b|\\d+\\s*k\\b)`, 'i');
@@ -134,6 +134,7 @@ function parseAnuncio(textoOriginal) {
     .filter((l) => l !== linhaModelo)
     .filter((l) => !LINHA_DE_PRECO.test(l) && !LINHA_DE_CONTATO.test(l))
     .filter((l) => !KM.test(l) || l.length > 40)
+    .filter((l) => !/blindad/i.test(l)) // a blindagem aparece em destaque no topo
     // tira o que já aparece nos campos do modelo (ano, câmbio)
     .filter((l) => !/^\W*(19|20)\d{2}(\s*\/\s*\d{2,4})?\W*$/.test(l) && !/^\W*c[aâ]mbio\s+\S+\W*$/i.test(l))
     .map(limparLinha)
@@ -148,7 +149,10 @@ function parseAnuncio(textoOriginal) {
     .filter((l) => l.length <= 40 && /\b\d\.\d\b|\bv\s?[68]\b|\b(turbo|tsi|tfsi|tdi|hse|flex|diesel|hybrid|h[ií]brido|el[eé]trico|xdrive\d*|sdrive\d*|\d{3}i)\b/i.test(l) && !LINHA_DE_PRECO.test(l))
     .join(' ');
 
-  return { modelo, motor, ano, km, cor: cor ? cor[0].toUpperCase() + cor.slice(1) : null, cambio, preco, fipe, precoWeb, detalhes, textoOriginal: texto };
+  const mBlind = texto.match(/blindad[oa]s?\s*(?:n[ií]vel\s*)?(iii\s*-?\s*a|iii|ii\s*-?\s*a|ii|3\s*-?\s*a)?/i);
+  const blindagem = mBlind ? `BLINDADO${mBlind[1] ? ' ' + mBlind[1].toUpperCase().replace(/\s+/g, '') : ''}` : null;
+
+  return { modelo, motor, blindagem, ano, km, cor: cor ? cor[0].toUpperCase() + cor.slice(1) : null, cambio, preco, fipe, precoWeb, detalhes, textoOriginal: texto };
 }
 
 module.exports = { parseAnuncio };

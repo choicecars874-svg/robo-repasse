@@ -186,27 +186,48 @@ async function atualizarGrupos() {
 }
 
 // Fotos e texto do mesmo carro chegam em mensagens separadas: junta por remetente durante alguns segundos.
+// Separa os anúncios que a mesma pessoa manda em sequência:
+// - fotos e depois o texto: o texto fecha o anúncio, que é processado na hora;
+// - foto com legenda depois de um anúncio que já tem texto: começa outro anúncio;
+// - texto primeiro e fotos depois: espera as fotos por alguns segundos.
 async function receber(m) {
   const cfg = config.get();
   const chave = `${m.key.remoteJid}|${m.key.participant || ''}`;
-  const b = buffers.get(chave) || { grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], timer: null };
-  buffers.set(chave, b);
+  const novo = () => ({ grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], timer: null });
+  const fechar = (b) => {
+    clearTimeout(b.timer);
+    if (buffers.get(chave) === b) buffers.delete(chave);
+    processar(b).catch((e) => evento('erro', 'Falha no anúncio: ' + e.message));
+  };
 
-  if (conteudo(m).imageMessage && b.fotos.length < cfg.maxFotos) {
-    b.fotos.push(await downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage }));
-  }
+  const ehFoto = !!conteudo(m).imageMessage;
   const t = textoDe(m);
+  let b = buffers.get(chave);
+  // um anúncio que já tem texto não recebe outro texto/legenda: é anúncio novo
+  if (b && b.textos.length && t) {
+    fechar(b);
+    b = null;
+  }
+  if (!b) {
+    b = novo();
+    buffers.set(chave, b);
+  }
+
+  if (ehFoto && b.fotos.length < cfg.maxFotos) {
+    b.fotos.push(downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock?.updateMediaMessage }).catch(() => null));
+  }
   if (t) b.textos.push(t);
 
+  // texto solto depois das fotos = anúncio completo
+  if (!ehFoto && t && b.fotos.length) return fechar(b);
+
   clearTimeout(b.timer);
-  b.timer = setTimeout(() => {
-    buffers.delete(chave);
-    processar(b).catch((e) => evento('erro', 'Falha no anúncio: ' + e.message));
-  }, cfg.segundosParaJuntarFotos * 1000);
+  b.timer = setTimeout(() => fechar(b), cfg.segundosParaJuntarFotos * 1000);
 }
 
-async function processar({ grupo, vendedor, fotos, textos }) {
+async function processar({ grupo, vendedor, fotos: downloads, textos }) {
   const cfg = config.get();
+  const fotos = (await Promise.all(downloads)).filter(Boolean);
   evento('lendo', `${fotos.length} foto(s) e ${textos.length} texto(s) de ${nomeGrupo(grupo)}`);
   if (!textos.length) return evento('ignorado', `${nomeGrupo(grupo)} — só fotos, sem texto do anúncio`);
   const carro = parseAnuncio(textos.join('\n'));
@@ -311,6 +332,7 @@ async function enviarTeste(jid) {
 }
 
 module.exports = {
+  receber, // usado nos testes
   diagnostico,
   iniciar,
   enviarTeste,
