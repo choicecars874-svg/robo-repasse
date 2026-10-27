@@ -26,6 +26,18 @@ const MARCAS = {
   Mitsubishi: ['lancer', 'asx', 'outlander', 'pajero', 'l200', 'eclipse'],
   'Kia Motors': ['sportage', 'cerato', 'picanto', 'soul', 'sorento', 'stonic'],
   'Caoa Chery': ['tiggo', 'arrizo', 'qq', 'celer'],
+  Audi: ['a1', 'a3', 'a4', 'a5', 'a6', 'q2', 'q3', 'q5', 'q7', 'q8', 'tt', 'rs3', 'rs4', 'rs5', 'rs6'],
+  BMW: ['118i', '120i', '320i', '328i', '330i', '330e', 'x1', 'x2', 'x3', 'x4', 'x5', 'x6', 'm3', 'm4'],
+  'Mercedes-Benz': ['c180', 'c200', 'c250', 'c300', 'a200', 'a250', 'cla', 'gla', 'glb', 'glc', 'gle', 'sprinter', 'mercedes'],
+  Volvo: ['xc40', 'xc60', 'xc90', 'ex30'],
+  'Land Rover': ['evoque', 'velar', 'discovery', 'defender', 'range rover', 'freelander'],
+  Porsche: ['cayenne', 'macan', 'panamera', '911'],
+  BYD: ['dolphin', 'song', 'seal', 'yuan', 'king', 'tan'],
+  GWM: ['haval', 'h6', 'ora'],
+  RAM: ['rampage', '1500', '2500'],
+  Suzuki: ['jimny', 'vitara', 'swift', 's-cross'],
+  Subaru: ['forester', 'impreza', 'xv'],
+  Mini: ['cooper', 'countryman'],
 };
 
 const normalizar = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -66,7 +78,8 @@ async function consultarFipe(carro) {
   const nomeMarca = acharMarca(`${carro.modelo} ${carro.textoOriginal || ''}`);
   if (!nomeMarca) return null;
   const marcas = await get(`${API}/marcas`);
-  const marca = marcas.find((m) => normalizar(m.nome) === normalizar(nomeMarca));
+  const alvo = normalizar(nomeMarca).replace(/[^a-z]/g, '');
+  const marca = marcas.find((m) => normalizar(m.nome).replace(/[^a-z]/g, '') === alvo) || marcas.find((m) => normalizar(m.nome).replace(/[^a-z]/g, '').includes(alvo));
   if (!marca) return null;
 
   const { modelos } = await get(`${API}/marcas/${marca.codigo}/modelos`);
@@ -88,4 +101,20 @@ async function consultarFipe(carro) {
   return null;
 }
 
-module.exports = { consultarFipe, normalizar };
+// Define carro.fipe: FIPE do anúncio > tabela FIPE online > preço "Web" do anúncio (só como referência)
+async function completarFipe(carro, config, avisar = () => {}) {
+  carro.fipeOrigem = carro.fipe ? 'anúncio' : null;
+  if (!carro.fipe && config.fipe.consultarOnline) {
+    try {
+      const r = await consultarFipe(carro);
+      if (r) Object.assign(carro, { fipe: r.valor, fipeVersao: r.versao, fipeOrigem: 'tabela FIPE' });
+    } catch (e) {
+      carro.fipeErro = e.message;
+      avisar(e.message);
+    }
+  }
+  if (!carro.fipe && carro.precoWeb) Object.assign(carro, { fipe: carro.precoWeb, fipeOrigem: 'preço web' });
+  return carro;
+}
+
+module.exports = { consultarFipe, completarFipe, acharMarca, normalizar };

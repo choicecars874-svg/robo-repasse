@@ -1,4 +1,5 @@
 // Lê o texto livre de um anúncio de repasse e extrai os dados do carro.
+const { acharMarca } = require('./fipe');
 
 const TELEFONE = /(\+?55[\s-]?)?\(?\b\d{2}\)?[\s-]?9?\s?\d{4}[\s.-]?\d{4}\b/g;
 const LINK = /(https?:\/\/\S+|www\.\S+|wa\.me\/\S+|chat\.whatsapp\.com\/\S+)/gi;
@@ -12,6 +13,8 @@ const CORES = ['branco', 'branca', 'preto', 'preta', 'prata', 'cinza', 'vermelho
 const LINHA_DE_CONTATO = /(chama|chamar|contato|zap|whats|interessad|tratar com|falar com|pv|privado|ligar|fone|tel[:.]|endere[cç]o|loja\b|agência|agencia)/i;
 const LINHA_DE_PRECO = /(r\$|valor|pre[cç]o|repasse|por\s+(r\$\s*)?\d|fipe|tabela|\d+\s*mil\b|\d+\s*k\b)/i;
 // "160 por 114", "fipe 160 mil por 114 mil": o primeiro valor é a tabela, o segundo é o preço
+// Preço anunciado na internet: não é FIPE, serve só de referência se a FIPE não for encontrada
+const PRECO_WEB = /\b(web|site|internet|webmotors|olx|mercado\s*livre|anunciad[oa]|loja|revenda)\b/i;
 const DE_POR = /(\d[\d.,]*)\s*(mil|k)?\s*(?:reais)?\s*[,-]?\s*por\s*(?:apenas\s*)?(?:r\$\s*)?(\d[\d.,]*)\s*(mil|k)?/i;
 
 function paraNumero(texto, multiplicadorMil) {
@@ -38,6 +41,7 @@ function extrairPrecos(linhas) {
   let preco = null;
   let fipe = null;
   const soltos = [];
+  let precoWeb = null;
   const emMil = (num, mil) => {
     const v = paraNumero(num, !!mil);
     return v < 1000 ? v * 1000 : v;
@@ -61,7 +65,8 @@ function extrairPrecos(linhas) {
     if (v && v < 1000 && soNumero) v *= 1000; // "160" sozinho na linha = 160 mil
     if (!v || v < 3000 || v > 5000000) continue;
     if (/fipe|tabela/i.test(linha)) fipe = fipe ?? v;
-    else if (/valor|pre[cç]o|repasse|\bpor\b/i.test(linha)) preco = preco ?? v; // "R$" sozinho não diz se é FIPE ou preço
+    else if (PRECO_WEB.test(linha)) precoWeb = precoWeb ?? v;
+    else if (/valor|pre[cç]o|repasse|\bpor\b|preciso|pe[cç]o|aceito|quero/i.test(linha)) preco = preco ?? v; // "R$" sozinho não diz se é FIPE ou preço
     else soltos.push(v);
   }
   // Valores sem rótulo em linhas separadas ("160 mil" / "114 mil"): o maior é a FIPE, o menor é o preço
@@ -71,7 +76,7 @@ function extrairPrecos(linhas) {
     if (!preco) preco = menor;
     if (!fipe && soltos.length >= 2 && maior > preco) fipe = maior;
   }
-  return { preco, fipe };
+  return { preco, fipe, precoWeb };
 }
 
 function limparLinha(linha) {
@@ -86,7 +91,7 @@ function parseAnuncio(textoOriginal) {
   const texto = (textoOriginal || '').trim();
   const linhas = texto.split('\n').map((l) => l.trim()).filter(Boolean);
 
-  const { preco, fipe } = extrairPrecos(linhas);
+  const { preco, fipe, precoWeb } = extrairPrecos(linhas);
 
   const mAno = texto.match(ANO);
   const ano = mAno ? (mAno[2] ? `${mAno[1]}/${mAno[2]}` : mAno[1]) : null;
@@ -104,10 +109,18 @@ function parseAnuncio(textoOriginal) {
   const cor = CORES.find((c) => new RegExp(`\\b${c}\\b`, 'i').test(texto)) || null;
 
   // Modelo = primeira linha "de verdade" que não é preço/contato
-  const linhaModelo = linhas.find((l) => {
-    const t = semEmoji(l);
-    return t.length >= 3 && !LINHA_DE_PRECO.test(t) && !LINHA_DE_CONTATO.test(t) && !/^(repasse|oportunidade|vendo|aten[cç][aã]o)\b/i.test(t);
+  const candidatas = linhas.filter((l) => {
+    const t = semEmoji(l).replace(/^[•\-–·]\s*/, '');
+    return (
+      t.length >= 3 &&
+      !LINHA_DE_PRECO.test(t) &&
+      !LINHA_DE_CONTATO.test(t) &&
+      !/^(repasse|oportunidade|vendo|aten[cç][aã]o|pronta entrega|urgente|baixou|imperd[ií]vel|abaixo da fipe|ipva|blindad|[uú]nico dono|revisad)/i.test(t) &&
+      !/^\d{4}$/.test(t)
+    );
   });
+  // Prefere a linha que cita marca/modelo conhecido (ex.: "AUDI Q5 2.0 TFSI")
+  const linhaModelo = candidatas.find((l) => acharMarca(l)) || candidatas[0];
   const modelo = linhaModelo ? semEmoji(limparLinha(linhaModelo)).replace(ANO, '').trim() : null;
 
   // Detalhes = demais linhas úteis (opcionais, observações), sem preço e sem contato
@@ -115,11 +128,13 @@ function parseAnuncio(textoOriginal) {
     .filter((l) => l !== linhaModelo)
     .filter((l) => !LINHA_DE_PRECO.test(l) && !LINHA_DE_CONTATO.test(l))
     .filter((l) => !KM.test(l) || l.length > 40)
+    // tira o que já aparece nos campos do modelo (ano, câmbio)
+    .filter((l) => !/^\W*(19|20)\d{2}(\s*\/\s*\d{2,4})?\W*$/.test(l) && !/^\W*c[aâ]mbio\s+\S+\W*$/i.test(l))
     .map(limparLinha)
     .filter((l) => semEmoji(l).length > 2)
     .join('\n');
 
-  return { modelo, ano, km, cor: cor ? cor[0].toUpperCase() + cor.slice(1) : null, cambio, preco, fipe, detalhes, textoOriginal: texto };
+  return { modelo, ano, km, cor: cor ? cor[0].toUpperCase() + cor.slice(1) : null, cambio, preco, fipe, precoWeb, detalhes, textoOriginal: texto };
 }
 
 module.exports = { parseAnuncio };

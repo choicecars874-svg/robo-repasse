@@ -12,7 +12,7 @@ const robo = require('./robo');
 const { parseAnuncio } = require('./parser');
 const { montarTexto, aplicarMargem } = require('./modelo');
 const { filtrarAntesDaFipe, filtrarFipe, descontoFipe } = require('./filtros');
-const { consultarFipe } = require('./fipe');
+const { completarFipe } = require('./fipe');
 const { aplicarLogo, ARQ_LOGO } = require('./logo');
 
 const SENHA = process.env.PAINEL_SENHA;
@@ -139,14 +139,7 @@ function iniciarPainel() {
     const cfg = config.get();
     const carro = parseAnuncio(req.body.texto || '');
     let motivo = filtrarAntesDaFipe(carro, cfg);
-    if (!motivo && !carro.fipe && cfg.fipe.consultarOnline) {
-      try {
-        const r = await consultarFipe(carro);
-        if (r) Object.assign(carro, { fipe: r.valor, fipeVersao: r.versao });
-      } catch (e) {
-        carro.fipeErro = e.message;
-      }
-    }
+    if (!motivo) await completarFipe(carro, cfg);
     motivo = motivo || filtrarFipe(carro, cfg);
     const venda = aplicarMargem(carro.preco, cfg.margem);
     res.json({ carro, desconto: descontoFipe(carro, cfg), precoVenda: venda, aprovado: !motivo, motivo, texto: montarTexto(carro, cfg, venda) });

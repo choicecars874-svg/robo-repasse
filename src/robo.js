@@ -14,7 +14,7 @@ const {
 const config = require('./config');
 const { parseAnuncio } = require('./parser');
 const { montarTexto, aplicarMargem, formatarReais } = require('./modelo');
-const { consultarFipe } = require('./fipe');
+const { completarFipe } = require('./fipe');
 const { aplicarLogo } = require('./logo');
 const { filtrarAntesDaFipe, filtrarFipe, descontoFipe } = require('./filtros');
 
@@ -147,15 +147,7 @@ async function processar({ grupo, vendedor, fotos, textos }) {
   const motivo = filtrarAntesDaFipe(carro, cfg) || (historico.chaves.includes(chaveCarro(carro)) && 'já postado');
   if (motivo) return evento('ignorado', `${nome} — ${motivo}`);
 
-  carro.fipeOrigem = carro.fipe ? 'anúncio' : null;
-  if (!carro.fipe && cfg.fipe.consultarOnline) {
-    try {
-      const r = await consultarFipe(carro);
-      if (r) Object.assign(carro, { fipe: r.valor, fipeVersao: r.versao, fipeOrigem: 'tabela FIPE' });
-    } catch (e) {
-      evento('aviso', `FIPE indisponível para ${nome}: ${e.message}`);
-    }
-  }
+  await completarFipe(carro, cfg, (erro) => evento('aviso', `FIPE indisponível para ${nome}: ${erro}`));
   const motivoFipe = filtrarFipe(carro, cfg);
   if (motivoFipe) return evento('ignorado', `${nome} — ${motivoFipe}`);
   // No automático, sem FIPE não dá para garantir que está abaixo: não posta
