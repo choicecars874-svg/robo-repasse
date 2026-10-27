@@ -30,7 +30,7 @@ const PADRAO = {
 
   fipe: {
     consultarOnline: true,
-    descontoMinimo: 10, // % mínimo abaixo da FIPE (calculado sobre o preço do repasse)
+    descontoMinimo: 15, // % mínimo abaixo da FIPE, calculado sobre o preço de venda (já com a margem)
   },
 
   filtros: {

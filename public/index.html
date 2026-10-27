@@ -85,7 +85,7 @@
       <div><label>Desconto mínimo na FIPE (%)</label><input type="number" data-c="fipe.descontoMinimo"></div>
       <div><label>Consultar FIPE na internet quando o anúncio não traz</label><select data-c="fipe.consultarOnline" data-t="bool"><option value="true">Sim</option><option value="false">Não</option></select></div>
     </div>
-    <p class="sub">O desconto é calculado sobre o preço do repasse. No modo automático, carro sem FIPE encontrada é ignorado.</p>
+    <p class="sub">O desconto é calculado sobre o preço de venda, já com a margem. Ex.: FIPE 100 mil, repasse 82 mil + 3 mil = 85 mil → 15% abaixo. No modo automático, carro sem FIPE encontrada é ignorado.</p>
   </div>
   <div class="card">
     <h2>Palavras que descartam o anúncio</h2>
@@ -200,7 +200,7 @@ async function carregarPendentes() {
     return `<div class="card anuncio" data-id="${esc(p.id)}">
       <div><div class="fotos">${p.fotos.map((f) => `<img src="/fotos/${esc(p.id)}/${esc(f)}" loading="lazy">`).join('') || '<span class="sub">Sem fotos</span>'}</div>
         <div class="num"><div><span class="sub">Custo</span><b>${reais(c.preco)}</b></div><div><span class="sub">FIPE</span><b>${reais(c.fipe)}</b></div>
-        <div><span class="sub">Abaixo FIPE</span><b class="${p.desconto >= 10 ? 'bom' : ''}">${p.desconto == null ? '?' : p.desconto + '%'}</b></div></div>
+        <div><span class="sub">Abaixo FIPE</span><b class="${p.desconto >= 15 ? 'bom' : ''}">${p.desconto == null ? '?' : p.desconto + '%'}</b></div></div>
         <div class="sub">${c.fipeVersao ? 'FIPE usada: ' + esc(c.fipeVersao) + '<br>' : c.fipe ? 'FIPE informada no anúncio<br>' : '<span class="ruim">FIPE não encontrada — confira</span><br>'}
         Origem: ${esc(p.origem.grupo)} · vendedor ${esc(p.origem.vendedor || '?')} · ${hora(p.criadoEm)}</div>
         <details><summary class="sub">Anúncio original</summary><pre>${esc(c.textoOriginal)}</pre></details>

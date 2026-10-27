@@ -58,6 +58,9 @@ if sudo iptables -L INPUT -n | grep -q REJECT; then
   sudo -E apt-get install -y iptables-persistent && sudo netfilter-persistent save
 fi
 
+# 5) Atualização automática: a cada 30 min busca versão nova no GitHub
+( crontab -l 2>/dev/null | grep -v atualizar.sh; echo "*/30 * * * * cd $(pwd) && bash atualizar.sh >> /var/log/robo-atualizacao.log 2>&1" ) | crontab -
+
 echo
 echo "✅ Pronto! Abra no celular:  https://$DOMINIO"
 echo "https://$DOMINIO" > endereco-do-painel.txt

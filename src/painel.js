@@ -128,7 +128,7 @@ function iniciarPainel() {
     }
     motivo = motivo || filtrarFipe(carro, cfg);
     const venda = aplicarMargem(carro.preco, cfg.margem);
-    res.json({ carro, desconto: descontoFipe(carro), precoVenda: venda, aprovado: !motivo, motivo, texto: montarTexto(carro, cfg, venda) });
+    res.json({ carro, desconto: descontoFipe(carro, cfg), precoVenda: venda, aprovado: !motivo, motivo, texto: montarTexto(carro, cfg, venda) });
   });
 
   app.post('/api/desconectar', async (_, res) => {

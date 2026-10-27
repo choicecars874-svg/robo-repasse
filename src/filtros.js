@@ -1,5 +1,6 @@
 // Decide se o carro interessa: palavras bloqueadas, "o que o comprador busca" e desconto na FIPE.
 const { normalizar } = require('./fipe');
+const { aplicarMargem } = require('./modelo');
 
 function bateBusca(carro, b) {
   const texto = normalizar(`${carro.modelo} ${carro.textoOriginal}`);
@@ -24,13 +25,15 @@ function filtrarAntesDaFipe(carro, config) {
   return null;
 }
 
-function descontoFipe(carro) {
+// % abaixo da FIPE calculado sobre o preço de VENDA (repasse + margem)
+function descontoFipe(carro, config) {
   if (!carro.fipe || !carro.preco) return null;
-  return Math.round(((carro.fipe - carro.preco) / carro.fipe) * 1000) / 10;
+  const venda = aplicarMargem(carro.preco, config.margem);
+  return Math.round(((carro.fipe - venda) / carro.fipe) * 1000) / 10;
 }
 
 function filtrarFipe(carro, config) {
-  const d = descontoFipe(carro);
+  const d = descontoFipe(carro, config);
   if (d == null) return null; // sem FIPE: não rejeita, vai para aprovação manual
   if (d < config.fipe.descontoMinimo) return `só ${d}% abaixo da FIPE (mínimo ${config.fipe.descontoMinimo}%)`;
   return null;

@@ -167,7 +167,7 @@ async function processar({ grupo, vendedor, fotos, textos }) {
     id,
     criadoEm: Date.now(),
     carro,
-    desconto: descontoFipe(carro),
+    desconto: descontoFipe(carro, cfg),
     precoVenda: aplicarMargem(carro.preco, cfg.margem),
     fotos: arquivos,
     origem: { grupo: nomeGrupo(grupo), vendedor: vendedor?.split('@')[0] || null },
