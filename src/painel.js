@@ -22,6 +22,21 @@ try {
 } catch {}
 const PUBLICO = path.join(__dirname, '..', 'public');
 
+// Senha trocada pelo painel fica em DATA_DIR/senha.json (hash); senão vale a da instalação
+const ARQ_SENHA = path.join(config.DATA_DIR, 'senha.json');
+function senhaConfere(tentativa) {
+  if (!tentativa) return false;
+  if (fs.existsSync(ARQ_SENHA)) {
+    const { sal, hash } = JSON.parse(fs.readFileSync(ARQ_SENHA, 'utf8'));
+    return crypto.timingSafeEqual(crypto.scryptSync(tentativa, sal, 64), Buffer.from(hash, 'hex'));
+  }
+  return crypto.timingSafeEqual(crypto.createHash('sha256').update(tentativa).digest(), crypto.createHash('sha256').update(SENHA).digest());
+}
+function gravarSenha(nova) {
+  const sal = crypto.randomBytes(16).toString('hex');
+  fs.writeFileSync(ARQ_SENHA, JSON.stringify({ sal, hash: crypto.scryptSync(nova, sal, 64).toString('hex') }), { mode: 0o600 });
+}
+
 function iniciarPainel() {
   if (!SENHA) {
     console.error('Defina a variável de ambiente PAINEL_SENHA antes de iniciar.');
@@ -43,11 +58,7 @@ function iniciarPainel() {
   app.get('/login', (_, res) => res.sendFile(path.join(PUBLICO, 'login.html')));
   app.get('/marca.png', (_, res) => res.sendFile(path.join(__dirname, '..', 'logo.png')));
   app.post('/login', (req, res) => {
-    const ok = req.body.senha && crypto.timingSafeEqual(
-      crypto.createHash('sha256').update(req.body.senha).digest(),
-      crypto.createHash('sha256').update(SENHA).digest()
-    );
-    if (!ok) return res.redirect('/login?erro=1');
+    if (!senhaConfere(req.body.senha)) return res.redirect('/login?erro=1');
     req.session.logado = true;
     res.redirect('/');
   });
@@ -115,6 +126,14 @@ function iniciarPainel() {
     const raiz = path.join(__dirname, '..');
     const log = fs.openSync('/tmp/robo-atualizacao-manual.log', 'a');
     require('child_process').spawn('bash', ['atualizar.sh'], { cwd: raiz, detached: true, stdio: ['ignore', log, log] }).unref();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/senha', (req, res) => {
+    const { atual, nova } = req.body;
+    if (!senhaConfere(atual)) return res.status(400).json({ erro: 'Senha atual incorreta' });
+    if (!nova || nova.length < 8) return res.status(400).json({ erro: 'A nova senha precisa ter pelo menos 8 caracteres' });
+    gravarSenha(nova);
     res.json({ ok: true });
   });
 

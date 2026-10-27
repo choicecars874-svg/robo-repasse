@@ -143,6 +143,15 @@
     <p class="sub">Campos: {modelo} {ano} {km} {cor} {cambio} {detalhes} {preco} {fipe} {abaixoFipe} {loja} {cidade} {link}. Linha com campo vazio some sozinha.</p>
     <textarea data-c="modelo" style="min-height:280px"></textarea>
   </div>
+  <div class="card">
+    <h2>Senha do painel</h2>
+    <div class="linha">
+      <div><label>Senha atual</label><input type="password" id="senhaAtual" autocomplete="current-password"></div>
+      <div><label>Nova senha (mín. 8)</label><input type="password" id="senhaNova" autocomplete="new-password"></div>
+      <div><label>Repita a nova senha</label><input type="password" id="senhaNova2" autocomplete="new-password"></div>
+    </div>
+    <p><button class="btn" id="btnSenha">Trocar senha</button></p>
+  </div>
   <div class="salvar"><button class="btn verde salvarCfg">Salvar</button></div>
 </section>
 
@@ -273,6 +282,11 @@ $('#btnTesteEnvio').onclick = async () => {
   if (!grupo) return alert('Escolha o grupo primeiro');
   try { await api('/api/testar-envio', { method:'POST', body: JSON.stringify({ grupo }) }); alert('Enviado! Confira no WhatsApp se chegou no grupo certo.'); }
   catch (e) { alert('Não foi possível enviar: ' + e.message); }
+};
+$('#btnSenha').onclick = async () => {
+  if ($('#senhaNova').value !== $('#senhaNova2').value) return alert('As duas senhas novas não são iguais');
+  try { await api('/api/senha', { method:'POST', body: JSON.stringify({ atual: $('#senhaAtual').value, nova: $('#senhaNova').value }) }); alert('Senha trocada!'); ['#senhaAtual','#senhaNova','#senhaNova2'].forEach((x) => $(x).value = ''); }
+  catch (e) { alert(e.message); }
 };
 $('#btnGrupos').onclick = async () => { try { desenharGrupos(await api('/api/grupos?atualizar=1')); } catch (e) { alert(e.message); } };
 
