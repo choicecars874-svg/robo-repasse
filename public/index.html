@@ -260,8 +260,8 @@ $('#addBusca').onclick = () => { $('#tbBuscas').insertAdjacentHTML('beforeend', 
 
 function desenharGrupos(grupos) {
   if (!grupos.length) return;
-  $('#gOrigem').innerHTML = grupos.map((g) => `<label><input type="checkbox" value="${esc(g.id)}" ${cfg.gruposOrigem.includes(g.id) ? 'checked' : ''}>${esc(g.nome)}</label>`).join('');
-  $('#gDestino').innerHTML = '<option value="">— escolha —</option>' + grupos.map((g) => `<option value="${esc(g.id)}" ${cfg.grupoDestino === g.id ? 'selected' : ''}>${esc(g.nome)}</option>`).join('');
+  $('#gOrigem').innerHTML = grupos.map((g) => `<label><input type="checkbox" value="${esc(g.id)}" ${cfg.gruposOrigem.includes(g.id) ? 'checked' : ''}>${esc(g.nome)} <span class="sub">· ${g.membros} membros${g.tipo ? ' · ' + esc(g.tipo) : ''}</span></label>`).join('');
+  $('#gDestino').innerHTML = '<option value="">— escolha —</option>' + grupos.map((g) => `<option value="${esc(g.id)}" ${cfg.grupoDestino === g.id ? 'selected' : ''}>${esc(g.nome)} · ${g.membros} membros${g.tipo ? ' · ' + esc(g.tipo) : ''}</option>`).join('');
 }
 $('#btnGrupos').onclick = async () => { try { desenharGrupos(await api('/api/grupos?atualizar=1')); } catch (e) { alert(e.message); } };
 

@@ -106,7 +106,15 @@ async function iniciar() {
 
 async function atualizarGrupos() {
   const g = await sock.groupFetchAllParticipating();
-  estado.grupos = Object.values(g).map((x) => ({ id: x.id, nome: x.subject })).sort((a, b) => a.nome.localeCompare(b.nome));
+  estado.grupos = Object.values(g)
+    .map((x) => ({
+      id: x.id,
+      nome: x.subject,
+      membros: x.size || x.participants?.length || 0,
+      // grupos de Comunidade aparecem com o mesmo nome: diferencia para não confundir
+      tipo: x.isCommunity ? 'comunidade (não recebe posts)' : x.isCommunityAnnounce ? 'avisos da comunidade' : x.announce ? 'só admins enviam' : '',
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
   return estado.grupos;
 }
 
