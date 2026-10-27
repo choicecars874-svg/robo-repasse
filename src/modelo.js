@@ -27,8 +27,8 @@ function linkWhatsApp(carro, config) {
 // precoVenda permite sobrescrever o preço (ex.: ajustado no painel)
 function montarTexto(carro, config, precoVenda) {
   const venda = precoVenda ?? aplicarMargem(carro.preco, config.margem);
-  const fipeReal = carro.fipeOrigem === 'preço web' ? null : carro.fipe;
-  const abaixo = fipeReal && venda && venda < carro.fipe ? Math.floor(((fipeReal - venda) / fipeReal) * 100) : null;
+  const fipeReal = carro.fipe;
+  const abaixo = fipeReal && venda && venda < fipeReal ? Math.floor(((fipeReal - venda) / fipeReal) * 100) : null;
   const campos = {
     modelo: carro.modelo || 'Consulte',
     ano: carro.ano,

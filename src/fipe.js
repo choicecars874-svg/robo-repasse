@@ -5,6 +5,7 @@ const path = require('path');
 const { DATA_DIR } = require('./config');
 
 const API = 'https://parallelum.com.br/fipe/api/v1/carros';
+const API2 = 'https://fipe.parallelum.com.br/api/v2/cars';
 const ARQ_CACHE = path.join(DATA_DIR, 'fipe-cache.json');
 const cache = fs.existsSync(ARQ_CACHE) ? JSON.parse(fs.readFileSync(ARQ_CACHE, 'utf8')) : {};
 const salvarCache = () => fs.writeFileSync(ARQ_CACHE, JSON.stringify(cache));
@@ -43,15 +44,40 @@ const MARCAS = {
 const normalizar = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const tokens = (s) => normalizar(s).replace(/[^a-z0-9.]+/g, ' ').split(' ').filter((t) => t.length > 1 || /\d/.test(t));
 
-async function get(url) {
-  if (cache[url]) return cache[url];
+const DIA = 24 * 3600 * 1000;
+// Listas (marcas/modelos/anos) mudam pouco; o preço muda todo mês
+async function get(url, validade = 30 * DIA) {
+  const c = cache[url];
+  if (c && c.t && Date.now() - c.t < validade) return c.d;
   const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`FIPE respondeu ${r.status}`);
-  const json = await r.json();
-  cache[url] = json;
+  const d = await r.json();
+  cache[url] = { t: Date.now(), d };
   salvarCache();
-  return json;
+  return d;
 }
+
+// Duas fontes da mesma API pública: se a v1 falhar (limite/fora do ar), tenta a v2
+const FONTES = [
+  {
+    marcas: () => get(`${API}/marcas`),
+    modelos: async (m) => (await get(`${API}/marcas/${m}/modelos`)).modelos,
+    anos: (m, mod) => get(`${API}/marcas/${m}/modelos/${mod}/anos`),
+    preco: async (m, mod, ano) => {
+      const d = await get(`${API}/marcas/${m}/modelos/${mod}/anos/${ano}`, 7 * DIA);
+      return { valor: d.Valor, versao: `${d.Marca} ${d.Modelo} ${d.AnoModelo}`, codigo: d.CodigoFipe, mes: d.MesReferencia };
+    },
+  },
+  {
+    marcas: async () => (await get(`${API2}/brands`)).map((x) => ({ nome: x.name, codigo: x.code })),
+    modelos: async (m) => (await get(`${API2}/brands/${m}/models`)).map((x) => ({ nome: x.name, codigo: x.code })),
+    anos: async (m, mod) => (await get(`${API2}/brands/${m}/models/${mod}/years`)).map((x) => ({ nome: x.name, codigo: x.code })),
+    preco: async (m, mod, ano) => {
+      const d = await get(`${API2}/brands/${m}/models/${mod}/years/${ano}`, 7 * DIA);
+      return { valor: d.price, versao: `${d.brand} ${d.model} ${d.modelYear}`, codigo: d.codeFipe, mes: d.referenceMonth };
+    },
+  },
+];
 
 function acharMarca(texto) {
   const t = ' ' + tokens(texto).join(' ') + ' ';
@@ -70,20 +96,17 @@ function pontuar(nomeFipe, palavrasAnuncio) {
   return p - f.length * 0.1; // desempata a favor da versão mais "simples"
 }
 
-async function consultarFipe(carro) {
-  const anoModelo = carro.ano ? carro.ano.split('/').pop() : null;
-  if (!carro.modelo || !anoModelo) return null;
-  const anoNum = anoModelo.length === 2 ? '20' + anoModelo : anoModelo;
+const PALAVRAS_MARCA = new Set(Object.keys(MARCAS).flatMap((m) => tokens(m)).concat(['chevrolet', 'volkswagen', 'vw', 'gm', 'mercedes', 'benz']));
 
-  const nomeMarca = acharMarca(`${carro.modelo} ${carro.textoOriginal || ''}`);
-  if (!nomeMarca) return null;
-  const marcas = await get(`${API}/marcas`);
+async function consultarNaFonte(fonte, carro, nomeMarca, anoNum) {
+  const marcas = await fonte.marcas();
   const alvo = normalizar(nomeMarca).replace(/[^a-z]/g, '');
-  const marca = marcas.find((m) => normalizar(m.nome).replace(/[^a-z]/g, '') === alvo) || marcas.find((m) => normalizar(m.nome).replace(/[^a-z]/g, '').includes(alvo));
+  const limpa = (n) => normalizar(n).replace(/[^a-z]/g, '');
+  const marca = marcas.find((m) => limpa(m.nome) === alvo) || marcas.find((m) => limpa(m.nome).includes(alvo) || alvo.includes(limpa(m.nome)));
   if (!marca) return null;
 
-  const { modelos } = await get(`${API}/marcas/${marca.codigo}/modelos`);
-  const palavras = tokens(carro.modelo).filter((w) => !Object.keys(MARCAS).some((m) => normalizar(m).includes(w)));
+  const modelos = await fonte.modelos(marca.codigo);
+  const palavras = tokens(carro.modelo).filter((w) => !PALAVRAS_MARCA.has(w));
   const candidatos = modelos
     .map((m) => ({ ...m, pontos: pontuar(m.nome, palavras) }))
     .filter((m) => m.pontos > 3)
@@ -91,29 +114,50 @@ async function consultarFipe(carro) {
     .slice(0, 5);
 
   for (const mod of candidatos) {
-    const anos = await get(`${API}/marcas/${marca.codigo}/modelos/${mod.codigo}/anos`);
-    const ano = anos.find((a) => a.codigo.startsWith(anoNum));
+    const anos = await fonte.anos(marca.codigo, mod.codigo);
+    const ano = anos.find((a) => String(a.codigo).startsWith(anoNum) && !String(a.codigo).startsWith('32000'));
     if (!ano) continue;
-    const det = await get(`${API}/marcas/${marca.codigo}/modelos/${mod.codigo}/anos/${ano.codigo}`);
-    const valor = parseInt(String(det.Valor).replace(/\D/g, ''), 10) / 100;
-    return { valor: Math.round(valor), versao: `${det.Marca} ${det.Modelo} ${det.AnoModelo}`, codigo: det.CodigoFipe };
+    const r = await fonte.preco(marca.codigo, mod.codigo, ano.codigo);
+    const valor = Math.round(parseInt(String(r.valor).replace(/\D/g, ''), 10) / 100);
+    if (valor > 0) return { ...r, valor };
   }
   return null;
 }
 
-// Define carro.fipe: FIPE do anúncio > tabela FIPE online > preço "Web" do anúncio (só como referência)
+async function consultarFipe(carro) {
+  const anoModelo = carro.ano ? carro.ano.split('/').pop() : null;
+  if (!carro.modelo || !anoModelo) return null;
+  const anoNum = anoModelo.length === 2 ? '20' + anoModelo : anoModelo;
+  const nomeMarca = acharMarca(`${carro.modelo} ${carro.textoOriginal || ''}`);
+  if (!nomeMarca) return null;
+
+  let ultimoErro;
+  for (const fonte of FONTES) {
+    try {
+      return await consultarNaFonte(fonte, carro, nomeMarca, anoNum);
+    } catch (e) {
+      ultimoErro = e;
+    }
+  }
+  throw ultimoErro;
+}
+
+// Define carro.fipe: tabela FIPE oficial primeiro; a FIPE escrita no anúncio só se a tabela não achar.
+// O preço "Web" do anúncio nunca é usado como FIPE.
 async function completarFipe(carro, config, avisar = () => {}) {
-  carro.fipeOrigem = carro.fipe ? 'anúncio' : null;
-  if (!carro.fipe && config.fipe.consultarOnline) {
+  carro.fipeAnuncio = carro.fipe;
+  carro.fipe = null;
+  carro.fipeOrigem = null;
+  if (config.fipe.consultarOnline) {
     try {
       const r = await consultarFipe(carro);
-      if (r) Object.assign(carro, { fipe: r.valor, fipeVersao: r.versao, fipeOrigem: 'tabela FIPE' });
+      if (r) Object.assign(carro, { fipe: r.valor, fipeVersao: r.versao, fipeMes: r.mes, fipeOrigem: 'tabela FIPE' });
     } catch (e) {
       carro.fipeErro = e.message;
       avisar(e.message);
     }
   }
-  if (!carro.fipe && carro.precoWeb) Object.assign(carro, { fipe: carro.precoWeb, fipeOrigem: 'preço web' });
+  if (!carro.fipe && carro.fipeAnuncio) Object.assign(carro, { fipe: carro.fipeAnuncio, fipeOrigem: 'anúncio' });
   return carro;
 }
 

@@ -45,7 +45,7 @@ const PADRAO = {
   intervaloEntrePostagens: [8, 20],
 
   modelo:
-    '🚗 *{modelo}*\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n🎨 Cor: {cor}\n⚙️ Câmbio: {cambio}\n\n{detalhes}\n\n💰 *{preco}*\n📊 FIPE: {fipe}\n🔥 {abaixoFipe}\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📍 {cidade}\n📲 Chame agora: {link}',
+    '🚗 *{modelo}*\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n🎨 Cor: {cor}\n⚙️ Câmbio: {cambio}\n\n{detalhes}\n\n📊 FIPE: {fipe}\n💰 *Nosso preço: {preco}*\n🔥 *{abaixoFipe}*\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📍 {cidade}\n📲 Chame agora: {link}',
 };
 
 function mesclar(base, extra) {
@@ -56,6 +56,11 @@ function mesclar(base, extra) {
 }
 
 let atual = mesclar(PADRAO, fs.existsSync(ARQ) ? JSON.parse(fs.readFileSync(ARQ, 'utf8')) : {});
+// Modelos padrão antigos (não editados pelo usuário) passam para o padrão atual
+const MODELOS_ANTIGOS = [
+  '🚗 *{modelo}*\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n🎨 Cor: {cor}\n⚙️ Câmbio: {cambio}\n\n{detalhes}\n\n💰 *{preco}*\n📊 FIPE: {fipe}\n🔥 {abaixoFipe}\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📍 {cidade}\n📲 Chame agora: {link}',
+];
+if (MODELOS_ANTIGOS.includes(atual.modelo)) atual.modelo = PADRAO.modelo;
 
 module.exports = {
   DATA_DIR,
