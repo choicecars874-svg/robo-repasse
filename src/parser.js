@@ -5,13 +5,15 @@ const TELEFONE = /(\+?55[\s-]?)?\(?\b\d{2}\)?[\s-]?9?\s?\d{4}[\s.-]?\d{4}\b/g;
 const LINK = /(https?:\/\/\S+|www\.\S+|wa\.me\/\S+|chat\.whatsapp\.com\/\S+)/gi;
 const MENCAO = /@\d{6,}/g;
 const ANO = /\b(19[89]\d|20[0-3]\d)\s*(?:\/\s*(\d{4}|\d{2}))?\b/;
-const KM = /([\d.,]+)\s*(mil)?\s*(?:km|kms|quil[oô]metros)\b/i;
+const KM = /([\d.,]+)\s*(mil|m)?\s*(?:km|kms|quil[oô]metros)\b/i; // "90 Mkm" = 90 mil km
 const CAMBIO = /\b(autom[aá]tico|automatizado|manual|cvt|aut\.?)\b/i;
 const CORES = ['branco', 'branca', 'preto', 'preta', 'prata', 'cinza', 'vermelho', 'vermelha', 'azul', 'verde', 'amarelo', 'amarela', 'marrom', 'bege', 'vinho', 'dourado', 'dourada', 'laranja', 'grafite'];
 
 // Linhas que falam do vendedor original e não devem ir para o nosso anúncio
 const LINHA_DE_CONTATO = /(chama|chamar|contato|zap|whats|interessad|tratar com|falar com|pv|privado|ligar|fone|tel[:.]|endere[cç]o|loja\b|agência|agencia)/i;
-const LINHA_DE_PRECO = /(r\$|valor|pre[cç]o|repasse|por\s+(r\$\s*)?\d|fipe|tabela|\d+\s*mil\b|\d+\s*k\b)/i;
+// Palavras que indicam o preço pedido pelo vendedor
+const ROTULO_PRECO = /valor|pre[cç]o|repasse|\bpor\b|preciso|pe[cç]o|aceito|quero|\bvend[ao]\b|[àa]\s*vista|\bsai\s+(por|a)\b|custa|oferta|investimento/i;
+const LINHA_DE_PRECO = new RegExp(`(r\\$|${ROTULO_PRECO.source}|por\\s+(r\\$\\s*)?\\d|fipe|tabela|\\d+\\s*mil\\b|\\d+\\s*k\\b)`, 'i');
 // "160 por 114", "fipe 160 mil por 114 mil": o primeiro valor é a tabela, o segundo é o preço
 // Preço anunciado na internet: não é FIPE, serve só de referência se a FIPE não for encontrada
 const PRECO_WEB = /\b(web|site|internet|webmotors|olx|mercado\s*livre|anunciad[oa]|loja|revenda)\b/i;
@@ -69,7 +71,7 @@ function extrairPrecos(linhas) {
     if (!v || v < 3000 || v > 5000000) continue;
     if (/fipe|tabela/i.test(linha)) fipe = fipe ?? v;
     else if (PRECO_WEB.test(linha)) precoWeb = precoWeb ?? v;
-    else if (/valor|pre[cç]o|repasse|\bpor\b|preciso|pe[cç]o|aceito|quero/i.test(linha)) preco = preco ?? v; // "R$" sozinho não diz se é FIPE ou preço
+    else if (ROTULO_PRECO.test(linha)) preco = preco ?? v; // "R$" sozinho não diz se é FIPE ou preço
     else soltos.push(v);
   }
   // Valores sem rótulo em linhas separadas ("160 mil" / "114 mil"): o maior é a FIPE, o menor é o preço
@@ -99,7 +101,7 @@ function parseAnuncio(textoOriginal) {
   const mAno = texto.match(ANO);
   const ano = mAno ? (mAno[2] ? `${mAno[1]}/${mAno[2]}` : mAno[1]) : null;
 
-  const mKm = texto.match(KM);
+  const mKm = texto.match(KM) || texto.match(/\bkm\s*[:.-]?\s*(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(mil)?/i);
   let km = null;
   if (mKm) {
     const n = paraNumero(mKm[1], !!mKm[2]);
@@ -116,15 +118,16 @@ function parseAnuncio(textoOriginal) {
     const t = semEmoji(l).replace(/^[•\-–·]\s*/, '');
     return (
       t.length >= 3 &&
-      !LINHA_DE_PRECO.test(t) &&
+      // linha de preço só se tiver um valor de verdade ("Vendo Onix 2019" é modelo, "venda 140.000" é preço)
+      !(LINHA_DE_PRECO.test(t) && /\d[\d.,]{2,}|\d+\s*(mil|k)\b/i.test(t.replace(ANO, ' '))) &&
       !LINHA_DE_CONTATO.test(t) &&
-      !/^(repasse|oportunidade|vendo|aten[cç][aã]o|pronta entrega|urgente|baixou|imperd[ií]vel|abaixo da fipe|ipva|blindad|[uú]nico dono|revisad)/i.test(t) &&
+      !/^(repasse|oportunidade|aten[cç][aã]o|pronta entrega|urgente|baixou|imperd[ií]vel|abaixo da fipe|ipva|blindad|[uú]nico dono|revisad)/i.test(t) &&
       !/^\d{4}$/.test(t)
     );
   });
   // Prefere a linha que cita marca/modelo conhecido (ex.: "AUDI Q5 2.0 TFSI")
   const linhaModelo = candidatas.find((l) => acharMarca(l)) || candidatas[0];
-  const modelo = linhaModelo ? semEmoji(limparLinha(linhaModelo)).replace(ANO, '').trim() : null;
+  const modelo = linhaModelo ? semEmoji(limparLinha(linhaModelo)).replace(ANO, '').replace(/\b(vendo|vende-se|fipe|tabela|repasse)\b/gi, '').replace(/\s{2,}/g, ' ').trim() || null : null;
 
   // Detalhes = demais linhas úteis (opcionais, observações), sem preço e sem contato
   const detalhes = linhas

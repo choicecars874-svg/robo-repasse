@@ -58,10 +58,18 @@ let sock = null;
 const buffers = new Map();
 let fila = Promise.resolve();
 
+const ARQ_EVENTOS = path.join(DATA_DIR, 'eventos.json');
+try {
+  estado.eventos = JSON.parse(fs.readFileSync(ARQ_EVENTOS, 'utf8'));
+} catch {}
+
 function evento(tipo, texto) {
   console.log(new Date().toLocaleTimeString('pt-BR'), tipo, texto);
   estado.eventos.unshift({ quando: Date.now(), tipo, texto });
   estado.eventos = estado.eventos.slice(0, 200);
+  try {
+    fs.writeFileSync(ARQ_EVENTOS, JSON.stringify(estado.eventos));
+  } catch {}
 }
 
 // Tira "embrulhos" (mensagem temporária, visualização única, etc.) para chegar no conteúdo real

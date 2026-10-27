@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
-const session = require('express-session');
 const multer = require('multer');
 const sharp = require('sharp');
 
@@ -46,26 +45,36 @@ function iniciarPainel() {
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false }));
-  app.use(
-    session({
-      secret: process.env.SESSAO_SEGREDO || crypto.createHash('sha256').update(SENHA).digest('hex'),
-      resave: false,
-      saveUninitialized: false,
-      cookie: { maxAge: 30 * 24 * 3600 * 1000, httpOnly: true, sameSite: 'lax' },
-    })
-  );
+
+  // Login fica num cookie assinado (não na memória): continua valendo depois que o robô reinicia.
+  // Trocar a senha invalida os logins antigos.
+  const ARQ_SEGREDO = path.join(config.DATA_DIR, 'segredo-sessao.txt');
+  if (!fs.existsSync(ARQ_SEGREDO)) fs.writeFileSync(ARQ_SEGREDO, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
+  const SEGREDO = fs.readFileSync(ARQ_SEGREDO, 'utf8').trim();
+  const versaoSenha = () => (fs.existsSync(ARQ_SENHA) ? fs.readFileSync(ARQ_SENHA, 'utf8') : SENHA);
+  const assinar = (validade) => crypto.createHmac('sha256', SEGREDO).update(`${validade}|${versaoSenha()}`).digest('hex');
+  const TRINTA_DIAS = 30 * 24 * 3600 * 1000;
+  const logado = (req) => {
+    const c = (req.headers.cookie || '').split(';').map((x) => x.trim()).find((x) => x.startsWith('painel='));
+    if (!c) return false;
+    const [validade, assinatura] = decodeURIComponent(c.slice(7)).split('.');
+    if (!validade || !assinatura || Number(validade) < Date.now()) return false;
+    const esperado = assinar(validade);
+    return assinatura.length === esperado.length && crypto.timingSafeEqual(Buffer.from(assinatura), Buffer.from(esperado));
+  };
 
   app.get('/login', (_, res) => res.sendFile(path.join(PUBLICO, 'login.html')));
   app.get('/marca.png', (_, res) => res.sendFile(path.join(__dirname, '..', 'logo.png')));
   app.post('/login', (req, res) => {
     if (!senhaConfere(req.body.senha)) return res.redirect('/login?erro=1');
-    req.session.logado = true;
+    const validade = Date.now() + TRINTA_DIAS;
+    res.cookie('painel', `${validade}.${assinar(validade)}`, { maxAge: TRINTA_DIAS, httpOnly: true, sameSite: 'lax', secure: req.secure });
     res.redirect('/');
   });
-  app.get('/sair', (req, res) => req.session.destroy(() => res.redirect('/login')));
+  app.get('/sair', (_, res) => res.clearCookie('painel').redirect('/login'));
 
   app.use((req, res, next) => {
-    if (req.session.logado) return next();
+    if (logado(req)) return next();
     if (req.path.startsWith('/api')) return res.status(401).json({ erro: 'não autenticado' });
     res.redirect('/login');
   });
