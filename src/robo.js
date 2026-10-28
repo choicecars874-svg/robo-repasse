@@ -16,7 +16,7 @@ const {
 const config = require('./config');
 const { parseAnuncio } = require('./parser');
 const { montarTexto, aplicarMargem, formatarReais } = require('./modelo');
-const { completarFipe } = require('./fipe');
+const { completarFipe, normalizar } = require('./fipe');
 const { aplicarLogo } = require('./logo');
 const { filtrarAntesDaFipe, filtrarFipe, descontoFipe } = require('./filtros');
 
@@ -160,6 +160,7 @@ async function iniciar() {
             if (m.messageStubType === 2) evento('aviso', `Não consegui ler uma mensagem de ${nomeGrupo(jid)}: a criptografia do aparelho conectado ainda está sincronizando. Reenvie em alguns minutos.`);
             continue;
           }
+          if (await tratarVendido(m)) continue;
           await receber(m);
         }
         else if (jid && jid === jidAprovador()) await comandoWhatsApp(textoDe(m));
@@ -193,7 +194,7 @@ async function atualizarGrupos() {
 async function receber(m) {
   const cfg = config.get();
   const chave = `${m.key.remoteJid}|${m.key.participant || ''}`;
-  const novo = () => ({ grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], timer: null });
+  const novo = () => ({ grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], ids: [], timer: null });
   const fechar = (b) => {
     clearTimeout(b.timer);
     if (buffers.get(chave) === b) buffers.delete(chave);
@@ -222,6 +223,7 @@ async function receber(m) {
     );
   }
   if (t) b.textos.push(t);
+  b.ids.push(m.key.id);
 
   // texto solto depois das fotos = anúncio completo
   if (!ehFoto && t && b.fotos.length) return fechar(b);
@@ -232,7 +234,7 @@ async function receber(m) {
   b.timer = setTimeout(() => fechar(b), espera * 1000);
 }
 
-async function processar({ grupo, vendedor, fotos: downloads, textos }) {
+async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [] }) {
   const cfg = config.get();
   const fotos = (await Promise.all(downloads)).filter(Boolean);
   const falharam = downloads.length - fotos.length;
@@ -271,7 +273,7 @@ async function processar({ grupo, vendedor, fotos: downloads, textos }) {
     desconto: descontoFipe(carro, cfg),
     precoVenda: aplicarMargem(carro.preco, cfg.margem),
     fotos: arquivos,
-    origem: { grupo: nomeGrupo(grupo), vendedor: vendedor?.split('@')[0] || null },
+    origem: { grupo: nomeGrupo(grupo), vendedor: vendedor?.split('@')[0] || null, grupoJid: grupo, vendedorJid: vendedor, ids },
   };
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(item));
   pendentes.set(id, item);
@@ -305,9 +307,23 @@ function aprovar(id, precoVenda) {
   fila = fila.then(async () => {
     const cfg = config.get();
     if (!cfg.grupoDestino) throw new Error('Grupo de destino não configurado');
-    await enviar(cfg.grupoDestino, item.fotos.map((f) => path.join(dir, f)), montarTexto(item.carro, cfg, item.precoVenda));
+    const texto = montarTexto(item.carro, cfg, item.precoVenda);
+    const msg = await enviar(cfg.grupoDestino, item.fotos.map((f) => path.join(dir, f)), texto);
     historico.chaves = [...historico.chaves, chaveCarro(item.carro)].slice(-3000);
-    historico.postados = [{ quando: Date.now(), modelo: item.carro.modelo, ano: item.carro.ano, custo: item.carro.preco, venda: item.precoVenda, fipe: item.carro.fipe, origem: item.origem }, ...historico.postados].slice(0, 500);
+    historico.postados = [
+      {
+        quando: Date.now(),
+        modelo: item.carro.modelo,
+        ano: item.carro.ano,
+        custo: item.carro.preco,
+        venda: item.precoVenda,
+        fipe: item.carro.fipe,
+        origem: item.origem,
+        // para responder "VENDIDO" em cima do nosso post quando o vendedor avisar
+        nosso: msg?.key ? { key: msg.key, texto: texto.slice(0, 300), grupo: cfg.grupoDestino } : null,
+      },
+      ...historico.postados,
+    ].slice(0, 500);
     salvarHist();
     fs.rmSync(dir, { recursive: true, force: true });
     evento('postado', `${item.carro.modelo} ${item.carro.ano || ''} por ${formatarReais(item.precoVenda)}`);
@@ -326,16 +342,94 @@ function descartar(id) {
 
 async function enviar(jid, caminhosFotos, texto) {
   if (estado.status !== 'conectado') throw new Error('WhatsApp não está conectado');
-  if (!caminhosFotos.length) return guardar(await sock.sendMessage(jid, { text: texto }));
+  if (!caminhosFotos.length) {
+    const msg = await sock.sendMessage(jid, { text: texto });
+    guardar(msg);
+    return msg;
+  }
+  let principal;
   for (let i = 0; i < caminhosFotos.length; i++) {
-    guardar(await sock.sendMessage(jid, { image: fs.readFileSync(caminhosFotos[i]), ...(i === 0 ? { caption: texto } : {}) }));
+    const msg = await sock.sendMessage(jid, { image: fs.readFileSync(caminhosFotos[i]), ...(i === 0 ? { caption: texto } : {}) });
+    guardar(msg);
+    if (i === 0) principal = msg;
     await esperar(800);
   }
+  return principal;
 }
 
 async function desconectar() {
   try { await sock?.logout(); } catch {}
   fs.rmSync(DIR_AUTH, { recursive: true, force: true });
+}
+
+// ---------- Carro vendido ----------
+// O vendedor avisa no grupo de origem: respondendo ao próprio anúncio, editando o anúncio,
+// ou escrevendo "vendido" com o nome do carro. O robô responde em cima do nosso post.
+const VENDIDO = /\bvendid[oa]s?\b|\bvendeu\b|\bsold\b/i;
+const PALAVRAS_GENERICAS = new Set(['carro', 'vendido', 'vendida', 'vendeu', 'flex', 'manual', 'completo', 'automatico', 'aut', 'modelo', 'ano']);
+
+function acharPostVendido(m, texto, refId) {
+  const grupo = m.key.remoteJid;
+  const vendedor = m.key.participantAlt || m.key.participant;
+  const ativos = historico.postados.filter((p) => p.nosso && !p.vendido && p.origem?.grupoJid === grupo);
+  // 1) resposta/edição do próprio anúncio: vínculo exato
+  if (refId) {
+    const exato = ativos.find((p) => p.origem.ids?.includes(refId));
+    if (exato) return exato;
+  }
+  if (texto.length > 200) return null; // texto longo é anúncio, não aviso de venda
+  const recentes = ativos.filter((p) => Date.now() - p.quando < 20 * 24 * 3600 * 1000);
+  // 2) nome do carro no aviso: o post com mais palavras do modelo em comum
+  const palavrasAviso = new Set(normalizar(texto).split(/[^a-z0-9.]+/).filter((w) => w.length >= 2 && !PALAVRAS_GENERICAS.has(w)));
+  const pontos = (p) => normalizar(`${p.modelo} ${p.ano || ''}`).split(/[^a-z0-9.]+/).filter((w) => w.length >= 2 && palavrasAviso.has(w)).length;
+  const comNome = recentes.map((p) => ({ p, n: pontos(p) + (p.origem.vendedorJid === vendedor ? 0.5 : 0) })).filter((x) => x.n >= 1).sort((a, b) => b.n - a.n);
+  if (comNome.length && (comNome.length === 1 || comNome[0].n > comNome[1].n)) return comNome[0].p;
+  // 3) só "vendido", sem nome: se o vendedor tem um único post nosso nas últimas 48h, é esse
+  const doVendedor = recentes.filter((p) => p.origem.vendedorJid === vendedor && Date.now() - p.quando < 48 * 3600 * 1000);
+  return doVendedor.length === 1 ? doVendedor[0] : null;
+}
+
+// Devolve true quando a mensagem não é anúncio (aviso de venda, edição, reação) e já foi tratada
+async function tratarVendido(m) {
+  const bruto = m.message || {};
+  const protocolo = bruto.protocolMessage || bruto.editedMessage?.message?.protocolMessage;
+  if (bruto.reactionMessage) return true;
+  let texto;
+  let refId;
+  if (protocolo) {
+    if (!protocolo.editedMessage) return true; // apagou mensagem etc.: nada a fazer
+    texto = textoDe({ message: protocolo.editedMessage });
+    refId = protocolo.key?.id;
+  } else {
+    const c = conteudo(m);
+    texto = textoDe(m);
+    const ctx = Object.values(c).find((v) => v && typeof v === 'object' && v.contextInfo)?.contextInfo;
+    refId = ctx?.stanzaId;
+  }
+  if (!texto || !VENDIDO.test(normalizar(texto))) return !!protocolo; // edição sem "vendido" é ignorada
+  // anúncio ainda em montagem: descarta
+  for (const [chave, b] of buffers) {
+    if (refId && b.ids.includes(refId)) {
+      clearTimeout(b.timer);
+      buffers.delete(chave);
+      evento('ignorado', `anúncio de ${nomeGrupo(b.grupo)} foi vendido antes de postar`);
+      return true;
+    }
+  }
+  const post = acharPostVendido(m, texto, refId);
+  if (!post) {
+    if (refId || texto.length <= 200) evento('aviso', `"Vendido" em ${nomeGrupo(m.key.remoteJid)}, mas não achei qual post nosso é: "${texto.slice(0, 60)}"`);
+    return refId || texto.length <= 200; // aviso curto não vira anúncio
+  }
+  const cfg = config.get();
+  if (cfg.avisarVendido === false) return true;
+  const aviso = cfg.textoVendido.replace('{modelo}', post.modelo || '').replace('{ano}', post.ano || '').trim();
+  const msg = await sock.sendMessage(post.nosso.grupo, { text: aviso }, { quoted: { key: post.nosso.key, message: { conversation: post.nosso.texto } } });
+  guardar(msg);
+  post.vendido = Date.now();
+  salvarHist();
+  evento('vendido', `${post.modelo} ${post.ano || ''} — avisado no ${nomeGrupo(post.nosso.grupo)}`);
+  return true;
 }
 
 async function enviarTeste(jid) {
@@ -345,6 +439,7 @@ async function enviarTeste(jid) {
 
 module.exports = {
   receber, // usado nos testes
+  _teste: { usarSocket: (s) => (sock = s), tratarVendido },
   diagnostico,
   iniciar,
   enviarTeste,

@@ -31,7 +31,7 @@
   .eventos div { padding:6px 0; border-bottom:1px solid var(--borda); font-size:13px; display:flex; gap:8px; }
   .eventos time { color:var(--sub); flex:none; }
   .tag { font-size:11px; padding:1px 7px; border-radius:99px; background:var(--borda); flex:none; height:fit-content; }
-  .tag.postado,.tag.ok { background:#14532d; } .tag.capturado { background:#1e3a8a; } .tag.erro { background:#7f1d1d; } .tag.aviso { background:#78350f; }
+  .tag.postado,.tag.ok { background:#14532d; } .tag.capturado { background:#1e3a8a; } .tag.vendido { background:#7c2d12; } .tag.erro { background:#7f1d1d; } .tag.aviso { background:#78350f; }
   .anuncio { display:grid; grid-template-columns:minmax(0, 260px) 1fr; gap:16px; }
   @media (max-width:640px) { .anuncio { grid-template-columns:1fr; } }
   .fotos { display:flex; gap:6px; overflow-x:auto; } .fotos img { height:180px; border-radius:8px; }
@@ -149,6 +149,14 @@
     <h2>Modelo do anúncio</h2>
     <p class="sub">Campos: {modelo} {blindado} {ano} {km} {cor} {cambio} {detalhes} {preco} {fipe} {web} {abaixoFipe} {loja} {cidade} {link}. Linha com campo vazio some sozinha.</p>
     <textarea data-c="modelo" style="min-height:280px"></textarea>
+  </div>
+  <div class="card">
+    <h2>Carro vendido</h2>
+    <p class="sub">Quando o vendedor avisa no grupo de origem que vendeu (respondendo ao anúncio, editando o anúncio ou escrevendo "vendido" com o nome do carro), o robô responde em cima do nosso post.</p>
+    <div class="linha">
+      <div><label>Avisar no nosso grupo</label><select data-c="avisarVendido" data-t="bool"><option value="true">Sim</option><option value="false">Não</option></select></div>
+      <div><label>Texto do aviso ({modelo} {ano})</label><input data-c="textoVendido"></div>
+    </div>
   </div>
   <div class="card">
     <h2>Senha do painel</h2>
@@ -316,7 +324,7 @@ $('#btnTestar').onclick = async () => {
 
 async function carregarHistorico() {
   const h = await api('/api/historico');
-  $('#tbHist').innerHTML = h.map((p) => `<tr><td>${hora(p.quando)}</td><td>${esc(p.modelo)} ${esc(p.ano || '')}</td><td>${reais(p.custo)}</td><td>${reais(p.venda)}</td><td>${reais(p.fipe)}</td><td class="sub">${esc(p.origem?.grupo)}<br>${esc(p.origem?.vendedor || '')}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Nada postado ainda.</td></tr>';
+  $('#tbHist').innerHTML = h.map((p) => `<tr><td>${hora(p.quando)}</td><td>${esc(p.modelo)} ${esc(p.ano || '')}${p.vendido ? ' <span class="tag vendido">vendido</span>' : ''}</td><td>${reais(p.custo)}</td><td>${reais(p.venda)}</td><td>${reais(p.fipe)}</td><td class="sub">${esc(p.origem?.grupo)}<br>${esc(p.origem?.vendedor || '')}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Nada postado ainda.</td></tr>';
 }
 
 carregarConfig();

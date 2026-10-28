@@ -41,6 +41,10 @@ const PADRAO = {
 
   logo: { ativo: true, posicao: 'inferior-direito', tamanho: 22, opacidade: 90 },
 
+  // Quando o vendedor avisa no grupo de origem que vendeu, responde em cima do nosso post
+  avisarVendido: true,
+  textoVendido: '🚫 *VENDIDO*\n{modelo} {ano}',
+
   segundosParaJuntarFotos: 25,
   segundosEsperandoFotos: 120, // quando o texto chega antes das fotos
   maxFotos: 10,
