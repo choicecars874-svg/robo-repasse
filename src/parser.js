@@ -5,7 +5,7 @@ const TELEFONE = /(\+?55[\s-]?)?\(?\b\d{2}\)?[\s-]?9?\s?\d{4}[\s.-]?\d{4}\b/g;
 const LINK = /(https?:\/\/\S+|www\.\S+|wa\.me\/\S+|chat\.whatsapp\.com\/\S+)/gi;
 const MENCAO = /@\d{6,}/g;
 const ANO = /\b(19[89]\d|20[0-3]\d)\s*(?:\/\s*(\d{4}|\d{2}))?\b/;
-const KM = /([\d.,]+)\s*(mil|m)?\s*(?:km|kms|quil[oô]metros)\b/i; // "90 Mkm" = 90 mil km
+const KM = /([\d.,]+)[ \t]*(mil|m)?[ \t]*(?:km|kms|quil[oô]metros)\b/i; // "90 Mkm" = 90 mil km
 const CAMBIO = /\b(autom[aá]tico|automatizado|manual|cvt|aut\.?)\b/i;
 const CORES = ['branco', 'branca', 'preto', 'preta', 'prata', 'cinza', 'vermelho', 'vermelha', 'azul', 'verde', 'amarelo', 'amarela', 'marrom', 'bege', 'vinho', 'dourado', 'dourada', 'laranja', 'grafite'];
 
@@ -89,7 +89,7 @@ function limparLinha(linha) {
 }
 
 function semEmoji(s) {
-  return s.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}*_~]/gu, '').trim();
+  return s.replace(/[\p{Extended_Pictographic}\p{Regional_Indicator}\u{FE0F}\u{200D}*_~]/gu, '').trim();
 }
 
 function parseAnuncio(textoOriginal) {
@@ -121,17 +121,25 @@ function parseAnuncio(textoOriginal) {
       // linha de preço só se tiver um valor de verdade ("Vendo Onix 2019" é modelo, "venda 140.000" é preço)
       !(LINHA_DE_PRECO.test(t) && /\d[\d.,]{2,}|\d+\s*(mil|k)\b/i.test(t.replace(ANO, ' '))) &&
       !LINHA_DE_CONTATO.test(t) &&
-      !/^(repasse|oportunidade|aten[cç][aã]o|pronta entrega|urgente|baixou|imperd[ií]vel|abaixo da fipe|ipva|blindad|[uú]nico dono|revisad)/i.test(t) &&
+      !/^(repasse|oportunidade|aten[cç][aã]o|pronta entrega|urgente|baixou|imperd[ií]vel|abaixo da fipe|ipva|blindad|[uú]nico dono|revisad|derret|ano\b|km\b|cor\b|c[aâ]mbio|combust|portas|placa|final\b|\d\s*\/\s*\d|motor|pneus?|laudo|doc\b|documento|marca\s*:)/i.test(t) &&
+      !/\bpe[cç]as?\b/i.test(t) &&
       !/^\d{4}$/.test(t)
     );
   });
   // Prefere a linha que cita marca/modelo conhecido (ex.: "AUDI Q5 2.0 TFSI")
-  const linhaModelo = candidatas.find((l) => acharMarca(l)) || candidatas[0];
-  const modelo = linhaModelo ? semEmoji(limparLinha(linhaModelo)).replace(ANO, '').replace(/\b(vendo|vende-se|fipe|tabela|repasse)\b/gi, '').replace(/\s{2,}/g, ' ').trim() || null : null;
+  let linhaModelo = candidatas.find((l) => acharMarca(l)) || candidatas[0];
+  const usadasNoModelo = [linhaModelo];
+  // Só a marca na linha (ex.: "Nissan"): junta com a linha seguinte (ex.: "Kicks SV 1.6")
+  const iCand = candidatas.indexOf(linhaModelo);
+  if (linhaModelo && semEmoji(linhaModelo).split(/\s+/).filter(Boolean).length === 1 && candidatas[iCand + 1]) {
+    usadasNoModelo.push(candidatas[iCand + 1]);
+    linhaModelo = `${semEmoji(linhaModelo)} ${candidatas[iCand + 1]}`;
+  }
+  const modelo = linhaModelo ? semEmoji(limparLinha(linhaModelo)).replace(/^\s*(modelo|ve[ií]culo|carro)\s*[:\-]\s*/i, '').replace(ANO, '').replace(/\b(vendo|vende-se|fipe|tabela|repasse)\b/gi, '').replace(/\s{2,}/g, ' ').trim() || null : null;
 
   // Detalhes = demais linhas úteis (opcionais, observações), sem preço e sem contato
   const detalhes = linhas
-    .filter((l) => l !== linhaModelo)
+    .filter((l) => !usadasNoModelo.includes(l))
     .filter((l) => !LINHA_DE_PRECO.test(l) && !LINHA_DE_CONTATO.test(l))
     .filter((l) => !KM.test(l) || l.length > 40)
     .filter((l) => !/blindad/i.test(l)) // a blindagem aparece em destaque no topo
@@ -142,7 +150,7 @@ function parseAnuncio(textoOriginal) {
     .join('\n');
 
   // Motor/versão em linhas próprias logo abaixo do nome (ex.: "5.0 V8") ajudam a achar a versão certa na FIPE
-  const iModelo = linhas.indexOf(linhaModelo);
+  const iModelo = linhas.indexOf(usadasNoModelo[usadasNoModelo.length - 1]);
   const motor = linhas
     .slice(iModelo + 1, iModelo + 5)
     .map((l) => semEmoji(l))

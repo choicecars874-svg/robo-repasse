@@ -214,7 +214,12 @@ async function receber(m) {
   }
 
   if (ehFoto && b.fotos.length < cfg.maxFotos) {
-    b.fotos.push(downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock?.updateMediaMessage }).catch(() => null));
+    b.fotos.push(
+      downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock?.updateMediaMessage }).catch((e) => {
+        evento('aviso', `Não consegui baixar uma foto de ${nomeGrupo(m.key.remoteJid)}: ${e.message}`);
+        return null;
+      })
+    );
   }
   if (t) b.textos.push(t);
 
@@ -222,14 +227,21 @@ async function receber(m) {
   if (!ehFoto && t && b.fotos.length) return fechar(b);
 
   clearTimeout(b.timer);
-  b.timer = setTimeout(() => fechar(b), cfg.segundosParaJuntarFotos * 1000);
+  // Texto sem nenhuma foto ainda: o vendedor costuma mandar as fotos logo depois (álbum pode demorar)
+  const espera = b.textos.length && !b.fotos.length ? cfg.segundosEsperandoFotos : cfg.segundosParaJuntarFotos;
+  b.timer = setTimeout(() => fechar(b), espera * 1000);
 }
 
 async function processar({ grupo, vendedor, fotos: downloads, textos }) {
   const cfg = config.get();
   const fotos = (await Promise.all(downloads)).filter(Boolean);
-  evento('lendo', `${fotos.length} foto(s) e ${textos.length} texto(s) de ${nomeGrupo(grupo)}`);
+  const falharam = downloads.length - fotos.length;
+  evento('lendo', `${fotos.length} foto(s)${falharam ? ` (${falharam} não baixou)` : ''} e ${textos.length} texto(s) de ${nomeGrupo(grupo)}`);
   if (!textos.length) return evento('ignorado', `${nomeGrupo(grupo)} — só fotos, sem texto do anúncio`);
+  if (!fotos.length && cfg.filtros.exigirFoto) {
+    const inicio = textos[0].split('\n').find((l) => l.trim()) || '';
+    return evento('ignorado', `${inicio.slice(0, 50)} — sem foto${falharam ? ' (a foto não baixou)' : ' (o vendedor não mandou foto)'}`);
+  }
   const carro = parseAnuncio(textos.join('\n'));
   const nome = `${carro.modelo || textos[0].slice(0, 40)} ${carro.ano || ''}`.trim();
 

@@ -36,11 +36,13 @@ const PADRAO = {
   filtros: {
     palavrasBloqueadas: ['sinistro', 'leilão', 'leilao', 'batido', 'recuperado', 'procuro', 'compro', 'troco'],
     exigirPreco: true,
+    exigirFoto: true, // não posta anúncio sem foto
   },
 
   logo: { ativo: true, posicao: 'inferior-direito', tamanho: 22, opacidade: 90 },
 
   segundosParaJuntarFotos: 25,
+  segundosEsperandoFotos: 120, // quando o texto chega antes das fotos
   maxFotos: 10,
   intervaloEntrePostagens: [8, 20],
 
