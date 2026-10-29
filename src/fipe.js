@@ -12,16 +12,16 @@ const salvarCache = () => fs.writeFileSync(ARQ_CACHE, JSON.stringify(cache));
 
 // modelo popular -> como a marca aparece na FIPE
 const MARCAS = {
-  'GM - Chevrolet': ['onix', 'prisma', 'cruze', 'tracker', 'spin', 'cobalt', 's10', 'celta', 'corsa', 'classic', 'agile', 'montana', 'equinox', 'trailblazer', 'sonic', 'joy'],
-  'VW - VolksWagen': ['gol', 'voyage', 'polo', 'virtus', 'fox', 'up!', 'up', 'saveiro', 'jetta', 'golf', 'tcross', 't-cross', 'nivus', 'taos', 'amarok', 'spacefox', 'crossfox', 'tiguan'],
-  Fiat: ['uno', 'palio', 'siena', 'grand siena', 'strada', 'toro', 'argo', 'cronos', 'mobi', 'fiorino', 'punto', 'idea', 'doblo', 'pulse', 'fastback', 'weekend'],
+  'GM - Chevrolet': ['onix', 'prisma', 'cruze', 'tracker', 'spin', 'cobalt', 's10', 'celta', 'corsa', 'classic', 'agile', 'montana', 'equinox', 'trailblazer', 'sonic', 'joy', 'captiva', 'zafira', 'meriva', 'vectra', 'astra', 'blazer', 'silverado'],
+  'VW - VolksWagen': ['gol', 'voyage', 'polo', 'virtus', 'fox', 'up!', 'up', 'saveiro', 'jetta', 'golf', 'tcross', 't-cross', 'nivus', 'taos', 'amarok', 'spacefox', 'crossfox', 'tiguan', 'passat', 'fusca', 'kombi', 'touareg'],
+  Fiat: ['uno', 'palio', 'siena', 'grand siena', 'strada', 'toro', 'argo', 'cronos', 'mobi', 'fiorino', 'punto', 'idea', 'doblo', 'pulse', 'fastback', 'weekend', 'bravo', 'linea', 'stilo', 'freemont', 'titano'],
   Ford: ['ka', 'fiesta', 'focus', 'ecosport', 'ranger', 'fusion', 'territory', 'maverick', 'bronco'],
-  Hyundai: ['hb20', 'hb20s', 'creta', 'tucson', 'ix35', 'santa fe', 'azera', 'elantra', 'i30'],
-  Toyota: ['corolla', 'etios', 'yaris', 'hilux', 'sw4', 'rav4', 'corolla cross'],
+  Hyundai: ['hb20', 'hb20s', 'hb20x', 'creta', 'tucson', 'ix35', 'santa fe', 'azera', 'elantra', 'i30', 'veloster', 'sonata', 'vera cruz'],
+  Toyota: ['corolla', 'etios', 'yaris', 'hilux', 'sw4', 'rav4', 'corolla cross', 'camry', 'prius'],
   Honda: ['civic', 'city', 'fit', 'hr-v', 'hrv', 'wr-v', 'wrv', 'cr-v', 'crv', 'accord'],
-  Renault: ['sandero', 'logan', 'kwid', 'duster', 'captur', 'oroch', 'clio', 'stepway', 'fluence', 'megane'],
+  Renault: ['sandero', 'logan', 'kwid', 'duster', 'captur', 'oroch', 'clio', 'stepway', 'fluence', 'megane', 'symbol', 'kardian', 'master', 'koleos'],
   Nissan: ['kicks', 'versa', 'march', 'sentra', 'frontier', 'livina', 'tiida'],
-  Jeep: ['renegade', 'compass', 'commander'],
+  Jeep: ['renegade', 'compass', 'commander', 'wrangler', 'cherokee'],
   Peugeot: ['208', '2008', '308', '3008', '207', '408'],
   'Citroën': ['c3', 'c4', 'aircross', 'c4 cactus', 'cactus'],
   Mitsubishi: ['lancer', 'asx', 'outlander', 'pajero', 'l200', 'eclipse'],
@@ -40,6 +40,10 @@ const MARCAS = {
   Subaru: ['forester', 'impreza', 'xv'],
   Mini: ['cooper', 'countryman'],
 };
+
+// Como a marca aparece no nosso anúncio
+const NOME_MARCA = { 'GM - Chevrolet': 'Chevrolet', 'VW - VolksWagen': 'Volkswagen', 'Kia Motors': 'Kia', 'Caoa Chery': 'Chery' };
+const nomeMarca = (m) => NOME_MARCA[m] || m;
 
 const normalizar = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const tokens = (s) => normalizar(s).replace(/[^a-z0-9.]+/g, ' ').split(' ').filter((t) => t.length > 1 || /\d/.test(t));
@@ -205,4 +209,4 @@ async function completarFipe(carro, config, avisar = () => {}) {
   return carro;
 }
 
-module.exports = { consultarFipe, completarFipe, acharMarca, normalizar };
+module.exports = { consultarFipe, completarFipe, acharMarca, normalizar, MARCAS, nomeMarca };

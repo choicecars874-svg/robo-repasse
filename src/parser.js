@@ -97,6 +97,59 @@ function regraLaudo(linha) {
   return null;
 }
 
+// ---------- Nome do carro no padrão Choice ----------
+// Corrige erros de digitação dos modelos conhecidos ("reneguede" -> "Renegade") e coloca a marca na frente.
+function distancia(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+let _conhecidas;
+function palavrasConhecidas() {
+  if (_conhecidas) return _conhecidas;
+  const { MARCAS, nomeMarca } = require('./fipe');
+  _conhecidas = new Map();
+  for (const [marca, modelos] of Object.entries(MARCAS)) {
+    for (const p of nomeMarca(marca).split(/[\s-]+/)) _conhecidas.set(normalizarSimples(p), p);
+    for (const m of modelos) {
+      // nomes compostos ("range rover", "santa fe"): cada palavra também é conhecida
+      for (const p of m.split(' ')) if (/^[a-z]{3,}$/.test(p) && !_conhecidas.has(p)) _conhecidas.set(p, p[0].toUpperCase() + p.slice(1));
+    }
+  }
+  return _conhecidas;
+}
+function normalizarSimples(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+function corrigirPalavra(w) {
+  const n = normalizarSimples(w);
+  if (n.length < 5 || !/^[a-z]+$/.test(n)) return w;
+  const conhecidas = palavrasConhecidas();
+  if (conhecidas.has(n)) return w;
+  const limite = n.length >= 7 ? 2 : 1;
+  let melhor = null;
+  for (const [k, v] of conhecidas) {
+    if (Math.abs(k.length - n.length) > limite) continue;
+    const dist = distancia(n, k);
+    if (dist <= limite && (!melhor || dist < melhor.dist)) melhor = { dist, v };
+  }
+  return melhor ? melhor.v : w;
+}
+function nomePadrao(modelo, textoTodo) {
+  if (!modelo) return modelo;
+  let nome = modelo.split(/(\s+)/).map((p) => (/\s/.test(p) ? p : corrigirPalavra(p))).join('');
+  const marca = acharMarca(`${nome} ${textoTodo}`);
+  if (marca) {
+    const { nomeMarca } = require('./fipe');
+    const exibicao = nomeMarca(marca);
+    const temMarca = exibicao.split(/[\s-]+/).some((p) => new RegExp(`\\b${p}\\b`, 'i').test(nome)) || /\b(gm|vw)\b/i.test(nome);
+    if (!temMarca) nome = `${exibicao} ${nome}`;
+  }
+  return nome.replace(/\s{2,}/g, ' ').trim();
+}
+
 // Reescreve uma linha de detalhe no padrão da loja: sem emoji/marcadores, sem CAIXA ALTA,
 // sem frase de "vender hoje", sem repetir o que já está nos campos (ano, km, cor, câmbio...)
 const FRASE_DE_VENDA = /derret|vender (hoje|agora|logo|r[aá]pido|j[aá])|pra vender|imperd|baixou|\bcorre\b|urgente|queima|oportunidade|aproveit|abaixo da fipe|aceit[oa] troca|financ|precinho|liquida|s[oó] hoje|repasse/i;
@@ -167,7 +220,8 @@ function parseAnuncio(textoOriginal) {
     usadasNoModelo.push(candidatas[iCand + 1]);
     linhaModelo = `${semEmoji(linhaModelo)} ${candidatas[iCand + 1]}`;
   }
-  const modelo = linhaModelo ? semEmoji(limparLinha(linhaModelo)).replace(/^\s*(modelo|ve[ií]culo|carro)\s*[:\-]\s*/i, '').replace(ANO, '').replace(/\b(vendo|vende-se|fipe|tabela|repasse)\b/gi, '').replace(/\s{2,}/g, ' ').trim() || null : null;
+  const modeloBruto = linhaModelo ? semEmoji(limparLinha(linhaModelo)).replace(/^\s*(modelo|ve[ií]culo|carro)\s*[:\-]\s*/i, '').replace(ANO, '').replace(/\b(vendo|vende-se|fipe|tabela|repasse)\b/gi, '').replace(/\s{2,}/g, ' ').trim() || null : null;
+  const modelo = nomePadrao(modeloBruto, texto);
 
   // Detalhes = demais linhas úteis (opcionais, observações), sem preço e sem contato
   const detalhes = linhas
