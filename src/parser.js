@@ -161,6 +161,9 @@ function padronizarLinha(linha) {
     .replace(/\s{2,}/g, ' ')
     .trim();
   if (l.length < 3 || FRASE_DE_VENDA.test(l) || CAMPO_REPETIDO.test(l)) return null;
+  // linha só com cor/câmbio/combustível ("Branco, automático"): já está nos campos
+  const resto = normalizarSimples(l).replace(/\b(branc[oa]|pret[oa]|prata|cinza|vermelh[oa]|azul|verde|amarel[oa]|marrom|bege|vinho|dourad[oa]|laranja|grafite|manual|automatico|aut|cvt|flex|gasolina|diesel|etanol|cor|cambio)\b/g, '').replace(/[^a-z0-9]/g, '');
+  if (!resto) return null;
   if (/^[a-z\s]*\d[\d.,]*$/i.test(l) && !/pneu|pe[cç]a|dono|chave/i.test(l)) return null; // "MEDIA 32.100" e afins
   const letras = l.replace(/[^a-zA-ZÀ-ú]/g, '');
   if (letras.length >= 6 && letras === letras.toUpperCase()) l = l.toLowerCase(); // tira a CAIXA ALTA (mas mantém "5.0 V8")
@@ -183,7 +186,8 @@ function parseAnuncio(textoOriginal) {
   const { preco, fipe, precoWeb } = extrairPrecos(linhas);
 
   const mAno = texto.match(ANO);
-  const ano = mAno ? (mAno[2] ? `${mAno[1]}/${mAno[2]}` : mAno[1]) : null;
+  // "2019/2019" vira "2019"
+  const ano = mAno ? (mAno[2] && mAno[2] !== mAno[1] && mAno[2] !== mAno[1].slice(2) ? `${mAno[1]}/${mAno[2]}` : mAno[1]) : null;
 
   const textoKm = linhas.filter((l) => !/laudo|ecv|vistoria|cautelar/i.test(l)).join('\n');
   const mKm = textoKm.match(KM) || textoKm.match(/\bkm\s*[:.-]?\s*(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(mil)?/i);
