@@ -187,14 +187,15 @@ async function atualizarGrupos() {
 }
 
 // Fotos e texto do mesmo carro chegam em mensagens separadas: junta por remetente durante alguns segundos.
-// Separa os anúncios que a mesma pessoa manda em sequência:
-// - fotos e depois o texto: o texto fecha o anúncio, que é processado na hora;
-// - foto com legenda depois de um anúncio que já tem texto: começa outro anúncio;
-// - texto primeiro e fotos depois: espera as fotos por alguns segundos.
+// Separa os anúncios que a mesma pessoa manda em sequência. Há grupos que misturam os dois jeitos:
+// "fotos e depois o texto" e "texto e depois as fotos". Regra: cada foto fica com o texto mais
+// próximo dela no tempo. Ex.: texto HR-V ... (1 min) ... foto BYD ... (3 s) ... texto BYD
+// -> a foto é do BYD, não do HR-V.
 async function receber(m) {
   const cfg = config.get();
   const chave = `${m.key.remoteJid}|${m.key.participant || ''}`;
-  const novo = () => ({ grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], ids: [], timer: null });
+  const quando = Number(m.messageTimestamp) * 1000 || Date.now();
+  const novo = () => ({ grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], ids: [], tTexto: null, timer: null });
   const fechar = (b) => {
     clearTimeout(b.timer);
     if (buffers.get(chave) === b) buffers.delete(chave);
@@ -204,25 +205,38 @@ async function receber(m) {
   const ehFoto = !!conteudo(m).imageMessage;
   const t = textoDe(m);
   let b = buffers.get(chave);
+  let herdadas = [];
   // um anúncio que já tem texto não recebe outro texto/legenda: é anúncio novo
   if (b && b.textos.length && t) {
+    // fotos que chegaram depois do texto anterior, mas estão mais perto deste novo texto, são deste anúncio
+    const anterior = b.tTexto;
+    herdadas = b.fotos.filter((f) => f.t > anterior && quando - f.t <= 20000 && (quando - f.t) * 2 <= f.t - anterior);
+    b.fotos = b.fotos.filter((f) => !herdadas.includes(f));
+    b.ids = b.ids.filter((id) => !herdadas.some((f) => f.id === id));
     fechar(b);
     b = null;
   }
   if (!b) {
     b = novo();
+    b.fotos.push(...herdadas);
+    b.ids.push(...herdadas.map((f) => f.id));
     buffers.set(chave, b);
   }
 
   if (ehFoto && b.fotos.length < cfg.maxFotos) {
-    b.fotos.push(
-      downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock?.updateMediaMessage }).catch((e) => {
+    b.fotos.push({
+      t: quando,
+      id: m.key.id,
+      p: downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock?.updateMediaMessage }).catch((e) => {
         evento('aviso', `Não consegui baixar uma foto de ${nomeGrupo(m.key.remoteJid)}: ${e.message}`);
         return null;
-      })
-    );
+      }),
+    });
   }
-  if (t) b.textos.push(t);
+  if (t) {
+    b.textos.push(t);
+    b.tTexto = quando;
+  }
   b.ids.push(m.key.id);
 
   // texto solto depois das fotos = anúncio completo
@@ -234,9 +248,17 @@ async function receber(m) {
   b.timer = setTimeout(() => fechar(b), espera * 1000);
 }
 
+// Limite diário de posts (conta o que já foi postado hoje + o que está na fila para postar)
+let naFila = 0;
+const diaSP = (t) => new Date(t).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+function postadosHoje() {
+  const hoje = diaSP(Date.now());
+  return historico.postados.filter((p) => diaSP(p.quando) === hoje).length + naFila;
+}
+
 async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [] }) {
   const cfg = config.get();
-  const fotos = (await Promise.all(downloads)).filter(Boolean);
+  const fotos = (await Promise.all(downloads.map((f) => f.p))).filter(Boolean);
   const falharam = downloads.length - fotos.length;
   evento('lendo', `${fotos.length} foto(s)${falharam ? ` (${falharam} não baixou)` : ''} e ${textos.length} texto(s) de ${nomeGrupo(grupo)}`);
   if (!textos.length) return evento('ignorado', `${nomeGrupo(grupo)} — só fotos, sem texto do anúncio`);
@@ -247,7 +269,11 @@ async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [] }
   const carro = parseAnuncio(textos.join('\n'));
   const nome = `${carro.modelo || textos[0].slice(0, 40)} ${carro.ano || ''}`.trim();
 
-  const motivo = filtrarAntesDaFipe(carro, cfg) || (historico.chaves.includes(chaveCarro(carro)) && 'já postado');
+  const limite = cfg.limiteDiario;
+  const motivo =
+    filtrarAntesDaFipe(carro, cfg) ||
+    (historico.chaves.includes(chaveCarro(carro)) && 'já postado') ||
+    (limite > 0 && cfg.modo === 'auto' && postadosHoje() >= limite && `limite de ${limite} posts por dia atingido (volta amanhã)`);
   if (motivo) return evento('ignorado', `${nome} — ${motivo}`);
 
   await completarFipe(carro, cfg, (erro) => evento('aviso', `FIPE indisponível para ${nome}: ${erro}`));
@@ -304,6 +330,7 @@ function aprovar(id, precoVenda) {
   const dir = path.join(DIR_PEND, id);
 
   // fila com pausa aleatória entre postagens para não parecer spam
+  naFila++;
   fila = fila.then(async () => {
     const cfg = config.get();
     if (!cfg.grupoDestino) throw new Error('Grupo de destino não configurado');
@@ -324,11 +351,13 @@ function aprovar(id, precoVenda) {
       },
       ...historico.postados,
     ].slice(0, 500);
+    naFila--;
     salvarHist();
     fs.rmSync(dir, { recursive: true, force: true });
     evento('postado', `${item.carro.modelo} ${item.carro.ano || ''} por ${formatarReais(item.precoVenda)}`);
     await esperar(aleatorio(cfg.intervaloEntrePostagens));
   }).catch((e) => {
+    naFila = Math.max(0, naFila - 1);
     pendentes.set(id, item); // volta para a lista se falhar
     evento('erro', `Não postou ${item.carro.modelo}: ${e.message}`);
   });

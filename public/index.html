@@ -86,6 +86,7 @@
     <h2>Abaixo da FIPE</h2>
     <div class="linha">
       <div><label>Desconto mínimo na FIPE (%)</label><input type="number" data-c="fipe.descontoMinimo"></div>
+      <div><label>Desconto máximo (%) — acima é suspeito</label><input type="number" data-c="fipe.descontoMaximo"></div>
       <div><label>Consultar FIPE na internet quando o anúncio não traz</label><select data-c="fipe.consultarOnline" data-t="bool"><option value="true">Sim</option><option value="false">Não</option></select></div>
     </div>
     <p class="sub">O desconto é calculado sobre o preço de venda, já com a margem. Ex.: FIPE 100 mil, repasse 82 mil + 3 mil = 85 mil → 15% abaixo. No modo automático, carro sem FIPE encontrada é ignorado.</p>
@@ -94,6 +95,15 @@
     <h2>Palavras que descartam o anúncio</h2>
     <input data-c="filtros.palavrasBloqueadas" data-t="lista">
     <p class="sub">Separe por vírgula.</p>
+  </div>
+  <div class="card">
+    <h2>Regras do grupo</h2>
+    <div class="linha">
+      <div><label>Ano mínimo (0 = qualquer)</label><input type="number" data-c="filtros.anoMinimo"></div>
+      <div><label>Máx. de coisas para resolver</label><input type="number" data-c="filtros.maxProblemas"></div>
+      <div><label>Posts por dia (0 = sem limite)</label><input type="number" data-c="limiteDiario"></div>
+    </div>
+    <p class="sub">"Fazer 2 peças e faixa couro" conta 3. Laudo: no texto só vai "aprovado", "reprovado" ou "com apontamento" — "último ECV/laudo com km" é removido.</p>
   </div>
   <div class="card">
     <h2>Fotos</h2>

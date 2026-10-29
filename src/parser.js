@@ -84,6 +84,19 @@ function extrairPrecos(linhas) {
   return { preco, fipe, precoWeb };
 }
 
+// Laudo/ECV: só pode ir "laudo aprovado", "laudo reprovado" ou "laudo com apontamento".
+// "Último ECV", "último laudo", laudo com quilometragem etc. saem do texto (não pode parecer que
+// incentivamos baixar km). O carro continua sendo postado.
+function regraLaudo(linha) {
+  const n = linha.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!/laudo|ecv|vistoria|cautelar/.test(n)) return linha;
+  if (/ultim|km|quilometr/.test(n) || /ecv/.test(n) || (/\d/.test(n) && !/100\s*%/.test(n))) return null;
+  if (/reprovad/.test(n)) return '📋 Laudo reprovado';
+  if (/apontament|ressalva/.test(n)) return '📋 Laudo com apontamento';
+  if (/aprovad|aprova\b|ok\b|\btop\b|100\s*%/.test(n)) return '📋 Laudo aprovado';
+  return null;
+}
+
 function limparLinha(linha) {
   return linha.replace(TELEFONE, '').replace(LINK, '').replace(MENCAO, '').replace(/\s{2,}/g, ' ').trim();
 }
@@ -101,7 +114,8 @@ function parseAnuncio(textoOriginal) {
   const mAno = texto.match(ANO);
   const ano = mAno ? (mAno[2] ? `${mAno[1]}/${mAno[2]}` : mAno[1]) : null;
 
-  const mKm = texto.match(KM) || texto.match(/\bkm\s*[:.-]?\s*(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(mil)?/i);
+  const textoKm = linhas.filter((l) => !/laudo|ecv|vistoria|cautelar/i.test(l)).join('\n');
+  const mKm = textoKm.match(KM) || textoKm.match(/\bkm\s*[:.-]?\s*(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(mil)?/i);
   let km = null;
   if (mKm) {
     const n = paraNumero(mKm[1], !!mKm[2]);
@@ -143,6 +157,10 @@ function parseAnuncio(textoOriginal) {
     .filter((l) => !LINHA_DE_PRECO.test(l) && !LINHA_DE_CONTATO.test(l))
     .filter((l) => !KM.test(l) || l.length > 40)
     .filter((l) => !/blindad/i.test(l)) // a blindagem aparece em destaque no topo
+    .map(regraLaudo)
+    .filter(Boolean)
+    .filter((l) => !/^\W*km\b/i.test(l)) // o km já aparece no campo KM
+    .filter((l, i, todas) => todas.indexOf(l) === i) // sem linhas repetidas
     // tira o que já aparece nos campos do modelo (ano, câmbio)
     .filter((l) => !/^\W*(19|20)\d{2}(\s*\/\s*\d{2,4})?\W*$/.test(l) && !/^\W*c[aâ]mbio\s+\S+\W*$/i.test(l))
     .map(limparLinha)

@@ -31,12 +31,15 @@ const PADRAO = {
   fipe: {
     consultarOnline: true,
     descontoMinimo: 15, // % mínimo abaixo da FIPE, calculado sobre o preço de venda (já com a margem)
+    descontoMaximo: 50, // acima disso é suspeito (erro de leitura): não posta
   },
 
   filtros: {
     palavrasBloqueadas: ['sinistro', 'leilão', 'leilao', 'batido', 'recuperado', 'procuro', 'compro', 'troco'],
     exigirPreco: true,
     exigirFoto: true, // não posta anúncio sem foto
+    anoMinimo: 2010,
+    maxProblemas: 3, // mais que isso de coisas para resolver: não posta
   },
 
   logo: { ativo: true, posicao: 'inferior-direito', tamanho: 22, opacidade: 90 },
@@ -44,6 +47,8 @@ const PADRAO = {
   // Quando o vendedor avisa no grupo de origem que vendeu, responde em cima do nosso post
   avisarVendido: true,
   textoVendido: '🚫 *VENDIDO*\n{modelo} {ano}',
+
+  limiteDiario: 10, // máximo de posts por dia (0 = sem limite)
 
   segundosParaJuntarFotos: 25,
   segundosEsperandoFotos: 120, // quando o texto chega antes das fotos
