@@ -59,7 +59,7 @@ const PADRAO = {
   intervaloEntrePostagens: [8, 20],
 
   modelo:
-    '🚗 *{modelo}*\n{blindado}\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n⛽ Combustível: {combustivel}\n⚙️ Câmbio: {cambio}\n🎨 Cor: {cor}\n\n{destaques}\n\n{afazer}\n\n📊 FIPE: {fipe}\n🌐 Preço Web: {web}\n💰 *Nosso preço: {preco}*\n🔥 *{abaixoFipe}*\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📲 WhatsApp: {link}\n📸 Conheça nossa loja: {instagram}\n📍 {endereco}\n🗺️ Como chegar: {maps}'
+    '🚗 *{modelo}*\n{blindado}\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n⛽ Combustível: {combustivel}\n⚙️ Câmbio: {cambio}\n🎨 Cor: {cor}\n\n{destaques}\n\n{afazer}\n\n📊 FIPE: {fipe}\n🌐 Preço Web: {web}\n💰 *Nosso preço: {preco}*\n🔥 *{abaixoFipe}*\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📲 Interesse nesse carro? Chame no WhatsApp: {link}\n📸 Conheça nossa loja: {instagram}\n📍 {endereco} {maps}'
 };
 
 function mesclar(base, extra) {
