@@ -12,6 +12,9 @@ const PADRAO = {
     whatsapp: '5500000000000',
     cidade: 'Sua cidade - UF',
     mensagemLink: 'Olá! Vi no grupo o {modelo} {ano} e tenho interesse.',
+    instagram: 'https://www.instagram.com/choicecarsbr/',
+    endereco: 'Av. Maria Campos, 874 – Centro, Osasco - SP',
+    maps: 'https://www.google.com/maps/search/?api=1&query=Av.%20Maria%20Campos%2C%20874%20-%20Centro%2C%20Osasco%20-%20SP%2C%2006010-065',
   },
 
   gruposOrigem: [],
@@ -56,7 +59,7 @@ const PADRAO = {
   intervaloEntrePostagens: [8, 20],
 
   modelo:
-    '🚗 *{modelo}*\n{blindado}\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n🎨 Cor: {cor}\n⚙️ Câmbio: {cambio}\n\n{detalhes}\n\n📊 FIPE: {fipe}\n🌐 Preço Web: {web}\n💰 *Nosso preço: {preco}*\n🔥 *{abaixoFipe}*\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📍 {cidade}\n📲 Chame agora: {link}',
+    '🚗 *{modelo}*\n{blindado}\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n⛽ Combustível: {combustivel}\n⚙️ Câmbio: {cambio}\n🎨 Cor: {cor}\n\n{destaques}\n\n{afazer}\n\n📊 FIPE: {fipe}\n🌐 Preço Web: {web}\n💰 *Nosso preço: {preco}*\n🔥 *{abaixoFipe}*\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📲 WhatsApp: {link}\n📸 Conheça nossa loja: {instagram}\n📍 {endereco}\n🗺️ Como chegar: {maps}'
 };
 
 function mesclar(base, extra) {
@@ -69,6 +72,7 @@ function mesclar(base, extra) {
 let atual = mesclar(PADRAO, fs.existsSync(ARQ) ? JSON.parse(fs.readFileSync(ARQ, 'utf8')) : {});
 // Modelos padrão antigos (não editados pelo usuário) passam para o padrão atual
 const MODELOS_ANTIGOS = [
+  '🚗 *{modelo}*\n{blindado}\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n🎨 Cor: {cor}\n⚙️ Câmbio: {cambio}\n\n{detalhes}\n\n📊 FIPE: {fipe}\n🌐 Preço Web: {web}\n💰 *Nosso preço: {preco}*\n🔥 *{abaixoFipe}*\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📍 {cidade}\n📲 Chame agora: {link}',,
   '🚗 *{modelo}*\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n🎨 Cor: {cor}\n⚙️ Câmbio: {cambio}\n\n{detalhes}\n\n📊 FIPE: {fipe}\n💰 *Nosso preço: {preco}*\n🔥 *{abaixoFipe}*\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📍 {cidade}\n📲 Chame agora: {link}',
   '🚗 *{modelo}*\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n🎨 Cor: {cor}\n⚙️ Câmbio: {cambio}\n\n{detalhes}\n\n💰 *{preco}*\n📊 FIPE: {fipe}\n🔥 {abaixoFipe}\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📍 {cidade}\n📲 Chame agora: {link}',
 ];

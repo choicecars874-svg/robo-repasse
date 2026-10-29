@@ -33,7 +33,13 @@ function montarTexto(carro, config, precoVenda) {
   const base = carro.referencia?.valor || carro.fipe;
   const abaixo = base && venda && venda < base ? Math.floor(((base - venda) / base) * 100) : null;
   const campos = {
-    modelo: carro.modelo || 'Consulte',
+    modelo: (carro.modelo || 'Consulte').toUpperCase(),
+    combustivel: carro.combustivel,
+    destaques: carro.destaques?.length ? `✅ *Destaques*\n${carro.destaques.map((d) => `• ${d}`).join('\n')}` : null,
+    afazer: carro.afazer?.length ? `🔧 *Para fazer*\n${carro.afazer.map((d) => `• ${d}`).join('\n')}` : null,
+    instagram: config.loja.instagram,
+    endereco: config.loja.endereco,
+    maps: config.loja.maps,
     ano: carro.ano,
     km: carro.km,
     cor: carro.cor,

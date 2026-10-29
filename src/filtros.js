@@ -73,4 +73,4 @@ function filtrarFipe(carro, config) {
   return null;
 }
 
-module.exports = { filtrarAntesDaFipe, filtrarFipe, descontoFipe, contarProblemas };
+module.exports = { filtrarAntesDaFipe, filtrarFipe, descontoFipe, contarProblemas, PROBLEMA };

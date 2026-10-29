@@ -97,6 +97,24 @@ function regraLaudo(linha) {
   return null;
 }
 
+// Reescreve uma linha de detalhe no padrão da loja: sem emoji/marcadores, sem CAIXA ALTA,
+// sem frase de "vender hoje", sem repetir o que já está nos campos (ano, km, cor, câmbio...)
+const FRASE_DE_VENDA = /derret|vender (hoje|agora|logo|r[aá]pido|j[aá])|pra vender|imperd|baixou|\bcorre\b|urgente|queima|oportunidade|aproveit|abaixo da fipe|aceit[oa] troca|financ|precinho|liquida|s[oó] hoje|repasse/i;
+const CAMPO_REPETIDO = /^(marca|modelo|ano|km|quilometragem|cor|c[aâ]mbio|combust[ií]vel|vers[aã]o|motor\s*[:\-]\s*\d)\b|^(flex|gasolina|diesel|etanol|manual|autom[aá]tico)$/i;
+function padronizarLinha(linha) {
+  let l = semEmoji(linha)
+    .replace(/^[\s•·\-–>✔✓*|#]+/, '')
+    .replace(/[!]+$/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (l.length < 3 || FRASE_DE_VENDA.test(l) || CAMPO_REPETIDO.test(l)) return null;
+  if (/^[a-z\s]*\d[\d.,]*$/i.test(l) && !/pneu|pe[cç]a|dono|chave/i.test(l)) return null; // "MEDIA 32.100" e afins
+  const letras = l.replace(/[^a-zA-ZÀ-ú]/g, '');
+  if (letras.length >= 6 && letras === letras.toUpperCase()) l = l.toLowerCase(); // tira a CAIXA ALTA (mas mantém "5.0 V8")
+  l = l.replace(/\b(ipva)\b/gi, 'IPVA').replace(/\b(abs|gnv|suv|led|usb)\b/gi, (x) => x.toUpperCase());
+  return l[0].toUpperCase() + l.slice(1);
+}
+
 function limparLinha(linha) {
   return linha.replace(TELEFONE, '').replace(LINK, '').replace(MENCAO, '').replace(/\s{2,}/g, ' ').trim();
 }
@@ -178,7 +196,38 @@ function parseAnuncio(textoOriginal) {
   const mBlind = texto.match(/blindad[oa]s?\s*(?:n[ií]vel\s*)?(iii\s*-?\s*a|iii|ii\s*-?\s*a|ii|3\s*-?\s*a)?/i);
   const blindagem = mBlind ? `BLINDADO${mBlind[1] ? ' ' + mBlind[1].toUpperCase().replace(/\s+/g, '') : ''}` : null;
 
-  return { modelo, motor, blindagem, ano, km, cor: cor ? cor[0].toUpperCase() + cor.slice(1) : null, cambio, preco, fipe, precoWeb, detalhes, textoOriginal: texto };
+  // Padrão Choice: os detalhes do vendedor viram duas listas padronizadas
+  const { PROBLEMA } = require('./filtros');
+  const destaques = [];
+  const afazer = [];
+  for (const l of detalhes.split('\n')) {
+    const p = padronizarLinha(l);
+    if (!p) continue;
+    const n = p.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const ehProblema = PROBLEMA.test(n) || (/\d+\s*(pecas?|pneus?)/.test(n) && !/novo|bons?\b|otimo|zero/.test(n));
+    if (ehProblema && !/^(sem|nada|zero|nenhum)\b/.test(n)) afazer.push(p);
+    else destaques.push(p);
+  }
+  const mComb = texto.match(/\b(flex|gasolina|diesel|etanol|el[eé]trico|h[ií]brido|gnv)\b/i);
+  const combustivel = mComb ? mComb[1][0].toUpperCase() + mComb[1].slice(1).toLowerCase() : null;
+
+  return {
+    modelo,
+    motor,
+    blindagem,
+    ano,
+    km,
+    cor: cor ? cor[0].toUpperCase() + cor.slice(1) : null,
+    cambio,
+    combustivel,
+    preco,
+    fipe,
+    precoWeb,
+    detalhes,
+    destaques: destaques.slice(0, 6),
+    afazer,
+    textoOriginal: texto,
+  };
 }
 
 module.exports = { parseAnuncio };
