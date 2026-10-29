@@ -35,6 +35,11 @@ const PADRAO = {
     consultarOnline: true,
     descontoMinimo: 15, // % mínimo abaixo da FIPE, calculado sobre o preço de venda (já com a margem)
     descontoMaximo: 50, // acima disso é suspeito (erro de leitura): não posta
+    // "mais oportunidade": [a partir do Nº post do dia, desconto mínimo %]
+    escada: [
+      [6, 20],
+      [9, 25],
+    ],
   },
 
   filtros: {
@@ -43,6 +48,9 @@ const PADRAO = {
     exigirFoto: true, // não posta anúncio sem foto
     anoMinimo: 2010,
     maxProblemas: 3, // mais que isso de coisas para resolver: não posta
+    kmMaximo: 180000,
+    // utilitários grandes ficam de fora (picapes continuam)
+    utilitarios: ['sprinter', 'master', 'ducato', 'daily', 'boxer', 'jumper', 'transit', 'hr', 'bongo', 'kombi', 'trafic', 'accelo', 'delivery', 'iveco', 'besta', 'topic', 'van', 'furgao', 'furgão', 'bau', 'baú', 'caminhao', 'caminhão', 'micro-onibus'],
   },
 
   logo: { ativo: true, posicao: 'inferior-direito', tamanho: 22, opacidade: 90 },

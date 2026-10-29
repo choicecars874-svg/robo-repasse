@@ -277,7 +277,7 @@ async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [] }
   if (motivo) return evento('ignorado', `${nome} — ${motivo}`);
 
   await completarFipe(carro, cfg, (erro) => evento('aviso', `FIPE indisponível para ${nome}: ${erro}`));
-  const motivoFipe = filtrarFipe(carro, cfg);
+  const motivoFipe = filtrarFipe(carro, cfg, postadosHoje());
   if (motivoFipe) return evento('ignorado', `${nome} — ${motivoFipe}`);
   // No automático, sem FIPE não dá para garantir que está abaixo: não posta
   if (cfg.modo === 'auto' && !carro.fipe) return evento('ignorado', `${nome} — FIPE não encontrada${carro.fipeMotivo ? ` (${carro.fipeMotivo})` : ''}`);

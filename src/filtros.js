@@ -35,6 +35,21 @@ function contarProblemas(texto) {
   return total;
 }
 
+// Km em número ("158" num anúncio quase sempre é 158 mil)
+function kmNumero(carro) {
+  if (!carro.km) return null;
+  const n = parseInt(String(carro.km).replace(/\D/g, ''), 10);
+  if (!n) return null;
+  return n < 1000 ? n * 1000 : n;
+}
+
+// Utilitários grandes (vans, furgões, caminhãozinho) ficam de fora; picapes continuam
+function utilitario(carro, config) {
+  // "HR-V"/"WR-V" viram "hrv"/"wrv" para não confundir com o caminhão "HR"
+  const nome = normalizar(`${carro.modelo || ''} ${carro.textoOriginal.split('\n').slice(0, 3).join(' ')}`).replace(/\b([a-z]{2})-(v)\b/g, '$1$2');
+  return (config.filtros.utilitarios || []).find((u) => new RegExp(`\\b${normalizar(u).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(nome));
+}
+
 // Retorna o motivo de rejeição, ou null se o carro passou.
 function filtrarAntesDaFipe(carro, config) {
   const t = normalizar(carro.textoOriginal);
@@ -47,6 +62,11 @@ function filtrarAntesDaFipe(carro, config) {
     if (!ano) return 'ano não informado';
     if (ano < anoMin) return `ano ${ano} (mínimo ${anoMin})`;
   }
+  const kmMax = config.filtros.kmMaximo;
+  const km = kmNumero(carro);
+  if (kmMax && km && km > kmMax) return `${km.toLocaleString('pt-BR')} km (máximo ${kmMax.toLocaleString('pt-BR')})`;
+  const util = utilitario(carro, config);
+  if (util) return `utilitário grande ("${util}")`;
   const max = config.filtros.maxProblemas;
   if (max != null && max > 0) {
     const n = contarProblemas(carro.textoOriginal);
@@ -64,13 +84,22 @@ function descontoFipe(carro, config) {
   return Math.round(((base - venda) / base) * 1000) / 10;
 }
 
-function filtrarFipe(carro, config) {
+// "Mais oportunidade": conforme as vagas do dia vão sendo usadas, o desconto mínimo sobe.
+// Ex.: [[6, 20], [9, 25]] = a partir do 6º post do dia exige 20%; a partir do 9º, 25%.
+function descontoMinimoAgora(config, postadosHoje = 0) {
+  let min = config.fipe.descontoMinimo;
+  for (const [aPartirDe, desconto] of config.fipe.escada || []) if (postadosHoje + 1 >= aPartirDe) min = Math.max(min, desconto);
+  return min;
+}
+
+function filtrarFipe(carro, config, postadosHoje = 0) {
   const d = descontoFipe(carro, config);
   if (d == null) return null; // sem FIPE: não rejeita, vai para aprovação manual
   // Desconto grande demais quase sempre é erro de leitura (preço/foto de outro anúncio), não oportunidade
   if (config.fipe.descontoMaximo && d > config.fipe.descontoMaximo) return `${d}% abaixo é suspeito (máximo ${config.fipe.descontoMaximo}%) — conferir o anúncio`;
-  if (d < config.fipe.descontoMinimo) return `só ${d}% abaixo ${carro.referencia?.nome || 'da FIPE'} (mínimo ${config.fipe.descontoMinimo}%)`;
+  const min = descontoMinimoAgora(config, postadosHoje);
+  if (d < min) return `só ${d}% abaixo ${carro.referencia?.nome || 'da FIPE'} (mínimo agora: ${min}%${min > config.fipe.descontoMinimo ? `, ${postadosHoje} posts hoje` : ''})`;
   return null;
 }
 
-module.exports = { filtrarAntesDaFipe, filtrarFipe, descontoFipe, contarProblemas, PROBLEMA };
+module.exports = { filtrarAntesDaFipe, filtrarFipe, descontoFipe, descontoMinimoAgora, contarProblemas, PROBLEMA };
