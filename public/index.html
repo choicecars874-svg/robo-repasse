@@ -369,6 +369,12 @@
     <h2>Atualização</h2>
     <p class="sub">Versão instalada: <b id="cfgVersao"></b>. O painel procura versão nova sozinho a cada 30 minutos.</p>
     <p><button class="btn" id="btnAtualizar">Buscar atualização agora</button></p>
+  </div>
+  <div class="card">
+    <div class="cardTopo"><div><h2>Saúde do servidor</h2><p class="sub">Memória, disco e o que aconteceu nas últimas atualizações.</p></div><a id="btnSaude">Atualizar</a></div>
+    <div class="kpis" id="saudeKpis" style="margin:0 0 12px"></div>
+    <div id="saudeAvisos"></div>
+    <details><summary class="sub">Registro das atualizações</summary><pre id="saudeLog" style="max-height:260px;overflow:auto;margin-top:10px"></pre></details>
     <details id="detDiag"><summary class="sub">Diagnóstico técnico (para o suporte)</summary><pre id="diag" style="max-height:320px;overflow:auto;margin-top:10px"></pre></details>
   </div>
   <div class="card">
@@ -438,7 +444,7 @@ function abrirAba(aba) {
   const [titulo, sub] = TITULOS[aba];
   $('#tEyebrow').textContent = ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarPainel, instagram: carregarInstagram, integracoes: carregarIgCfg, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarPainel, instagram: carregarInstagram, integracoes: carregarIgCfg, sistema: carregarSistema, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -653,6 +659,26 @@ async function carregarInstagram() {
     <div class="info"><b>@${esc(m.usuario)}</b> · ${esc(m.tipo)} · ${new Date(m.quando).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })}<br>${num(m.curtidas)} curtidas · ${num(m.comentarios)} comentários</div></a>`).join('') : '<div class="vazio">Nenhum post encontrado.</div>';
   $('#igAtual').textContent = 'Atualizado às ' + new Date(r.atualizadoEm).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) + ' · a Meta libera os números com alguns minutos de atraso.';
 }
+async function carregarSistema() {
+  const r = await api('/api/sistema');
+  const tempo = (s) => s >= 86400 ? `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h` : s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : `${Math.floor(s / 60)} min`;
+  const m = r.memoria;
+  const usoSwap = m.swapTotalMB ? m.swapTotalMB - m.swapLivreMB : 0;
+  $('#saudeKpis').innerHTML = [
+    ['Memória livre', `${num(m.livreMB)} MB`, `de ${num(m.totalMB)} MB · robô usando ${num(r.robo.memoriaMB)} MB`],
+    ['Swap em uso', `${num(usoSwap)} MB`, m.swapTotalMB ? `de ${num(m.swapTotalMB)} MB` : 'sem swap configurado'],
+    ['Disco livre', r.disco ? `${num(Math.round(r.disco.livreMB / 1024 * 10) / 10)} GB` : '—', r.disco ? `de ${num(Math.round(r.disco.totalMB / 1024))} GB` : ''],
+    ['Ligado há', tempo(r.servidor.ligadoHa), `robô reiniciou há ${tempo(r.robo.ligadoHa)} · carga ${r.servidor.carga[0]}`],
+  ].map(([t, v, s]) => `<div class="kpi"><div class="eyebrow">${t}</div><b style="font-size:28px">${v}</b><small>${esc(s)}</small></div>`).join('');
+  const avisos = [];
+  if (m.livreMB < 120) avisos.push('Memória quase no fim: o servidor pode travar. Reinicie pelo console da Oracle se o painel ficar lento.');
+  if (m.swapTotalMB && usoSwap > m.swapTotalMB * 0.6) avisos.push('Swap muito usada: o servidor está apertado de memória.');
+  if (r.disco && r.disco.livreMB < 1024) avisos.push('Menos de 1 GB livre no disco.');
+  if (r.oom) avisos.push('O sistema já matou processos por falta de memória:\n' + r.oom);
+  $('#saudeAvisos').innerHTML = avisos.map((a) => `<pre class="ruim" style="margin-bottom:10px">${esc(a)}</pre>`).join('') || '<p class="bom" style="margin:0 0 10px">Tudo certo com memória e disco.</p>';
+  $('#saudeLog').textContent = r.atualizacoes || 'Sem registros.';
+}
+$('#btnSaude').onclick = () => carregarSistema();
 async function carregarIgCfg() {
   const e = await api('/api/instagram/estado');
   $('#igContasCfg').innerHTML = e.contas.length ? e.contas.map((c) => `<div><span><b>@${esc(c.usuario)}</b> <span class="sub">· conectado em ${hora(c.salvoEm)}${c.erro ? ' · <span class="ruim">' + esc(c.erro) + '</span>' : ''}</span></span><button class="btn verm" data-rm="${esc(c.usuario)}">Remover</button></div>`).join('')

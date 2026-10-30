@@ -12,6 +12,10 @@ process.on('unhandledRejection', (e) => console.error('Erro não tratado:', e));
 // Atualização automática feita pelo próprio robô (não depende do cron do servidor):
 // a cada 30 min busca versão nova no GitHub; se houver, baixa e reinicia.
 const RAIZ = path.join(__dirname, '..');
+// versão que está rodando de verdade: o atualizar.sh usa para saber se falta reiniciar
+try {
+  fs.writeFileSync(path.join(RAIZ, '.versao-rodando'), require('child_process').execSync('git rev-parse HEAD', { cwd: RAIZ }).toString().trim());
+} catch {}
 if (fs.existsSync(path.join(RAIZ, '.git')) && fs.existsSync(path.join(RAIZ, 'atualizar.sh'))) {
   const atualizar = () => {
     const log = fs.openSync('/tmp/robo-atualizacao.log', 'a');

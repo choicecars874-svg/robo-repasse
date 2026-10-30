@@ -152,6 +152,25 @@ function iniciarPainel() {
     res.json({ ok: true });
   });
 
+  // Saúde do servidor (para descobrir travamento por memória sem abrir o console da Oracle)
+  app.get('/api/sistema', (_, res) => {
+    const ler = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
+    const mem = Object.fromEntries(ler('/proc/meminfo').split('\n').filter(Boolean).map((l) => { const [k, v] = l.split(':'); return [k, Math.round(parseInt(v, 10) / 1024)]; }));
+    let disco = null;
+    try { const d = fs.statfsSync('/'); disco = { totalMB: Math.round((d.blocks * d.bsize) / 1048576), livreMB: Math.round((d.bavail * d.bsize) / 1048576) }; } catch {}
+    let oom = '';
+    try { oom = require('child_process').execSync('dmesg -T 2>/dev/null | grep -iE "out of memory|killed process|oom-kill" | tail -5', { timeout: 3000 }).toString(); } catch {}
+    const ultimas = (t, n) => t.trim().split('\n').slice(-n).join('\n');
+    res.json({
+      memoria: { totalMB: mem.MemTotal, livreMB: mem.MemAvailable, swapTotalMB: mem.SwapTotal, swapLivreMB: mem.SwapFree },
+      robo: { memoriaMB: Math.round(process.memoryUsage().rss / 1048576), ligadoHa: Math.round(process.uptime()) },
+      servidor: { ligadoHa: Math.round(require('os').uptime()), carga: require('os').loadavg().map((x) => x.toFixed(2)) },
+      disco,
+      oom: oom.trim(),
+      atualizacoes: ultimas(ler('/var/log/robo-atualizacao.log') + ler('/tmp/robo-atualizacao.log') + ler('/tmp/robo-atualizacao-manual.log'), 12),
+    });
+  });
+
   app.post('/api/senha', (req, res) => {
     const { atual, nova } = req.body;
     if (!senhaConfere(atual)) return res.status(400).json({ erro: 'Senha atual incorreta' });
