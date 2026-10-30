@@ -58,46 +58,32 @@ function criarCliente({ email, senha }) {
       for (const re of res) for (const m of js.matchAll(re)) mapa[m[2]] = m[1];
       await esperar(80);
     }
-    if (!mapa.loginAction && !Object.keys(mapa).length) throw new Error('Não achei as ações do LeadsOK (o site pode ter mudado)');
+    if (!Object.keys(mapa).length) throw new Error('Não achei as ações do LeadsOK (o site pode ter mudado)');
     acoes = mapa;
     return mapa;
   }
 
   // ---------- Login ----------
-  // A tela /login chama a server action "loginAction". O formato do corpo depende de como o
-  // formulário foi escrito; tenta os formatos do Next.js e fica com o que devolver sessão.
+  // O formulário de /login funciona sem JavaScript: os campos ocultos ($ACTION_REF_1, $ACTION_1:0,
+  // $ACTION_1:1, $ACTION_KEY) já trazem o id da loginAction do deploy atual. Basta reenviar o
+  // formulário (multipart) com e-mail e senha, como um navegador faria.
   async function login() {
     if (!email || !senha) throw new Error('E-mail e senha do LeadsOK não configurados');
     cookies.clear();
-    if (!acoes?.loginAction) await descobrirAcoes();
-    const id = acoes.loginAction;
-    if (!id) throw new Error('Ação de login do LeadsOK não encontrada');
     const html = await (await req('/login', { seguir: true })).text();
-    const campos = [...html.matchAll(/<input[^>]+name="([^"$]+)"/g)].map((m) => m[1]);
-    const cEmail = campos.find((n) => /mail|user|login/i.test(n)) || 'email';
-    const cSenha = campos.find((n) => /pass|senha/i.test(n)) || 'password';
-    const formulario = (raiz) => {
-      const f = new FormData();
-      f.set('0', raiz);
-      f.set(`1_${cEmail}`, email);
-      f.set(`1_${cSenha}`, senha);
-      return f;
-    };
-    const tentativas = [
-      () => ({ corpo: formulario('["$undefined","$K1"]') }), // useActionState(prev, formData)
-      () => ({ corpo: formulario('["$K1"]') }), // action(formData)
-      () => ({ corpo: JSON.stringify([{ [cEmail]: email, [cSenha]: senha }]), tipo: 'text/plain;charset=UTF-8' }),
-      () => ({ corpo: JSON.stringify([email, senha]), tipo: 'text/plain;charset=UTF-8' }),
-    ];
-    let ultimaResposta = '';
-    for (const t of tentativas) {
-      const { corpo, tipo } = t();
-      const r = await req('/login', { metodo: 'POST', corpo, headers: { 'Next-Action': id, Accept: 'text/x-component', ...(tipo ? { 'Content-Type': tipo } : {}) } });
-      ultimaResposta = (await r.text()).slice(0, 300);
-      if (await sessaoValida()) return true;
-      cookies.clear();
-    }
-    const erro = ultimaResposta.match(/"(?:error|erro|message)":"([^"]+)"/i)?.[1];
+    const campos = camposDoFormulario(html);
+    const nomes = Object.keys(campos);
+    const cEmail = nomes.find((n) => /mail/i.test(n)) || 'email';
+    const cSenha = nomes.find((n) => /pass|senha/i.test(n)) || 'password';
+    const f = new FormData();
+    for (const [k, v] of Object.entries(campos)) if (k !== cEmail && k !== cSenha) f.set(k, v);
+    f.set(cEmail, email);
+    f.set(cSenha, senha);
+    const r = await req('/login', { metodo: 'POST', corpo: f, headers: { Accept: 'text/html,application/xhtml+xml', Origin: BASE, Referer: BASE + '/login' } });
+    const resposta = r.status < 300 ? (await r.text()).slice(0, 4000) : '';
+    if (await sessaoValida()) return true;
+    const erro = resposta.match(/"error":"([^"]+)"/)?.[1] || resposta.match(/role="alert"[^>]*>([^<]+)</)?.[1];
+    cookies.clear();
     throw new Error(`Login no LeadsOK recusado${erro ? `: ${erro}` : ' (confira e-mail e senha)'}`);
   }
 
@@ -118,7 +104,7 @@ function criarCliente({ email, senha }) {
       await login();
       return pagina(aba, n, 1);
     }
-    return { leads: extrairLeads(texto), total: +total[1], pageSize: +total[2], page: +total[3] };
+    return { leads: extrairLeads(texto), agenda: aba === 'agendados' ? extrairArray(texto, 'agenda') : null, total: +total[1], pageSize: +total[2], page: +total[3] };
   }
 
   // ---------- Server actions (só leitura) ----------
@@ -180,4 +166,41 @@ function extrairLeads(texto) {
   return [...vistos.values()];
 }
 
-module.exports = { criarCliente, extrairLeads, SessaoExpirada };
+// Campos <input> de um formulário HTML (com os valores desescapados)
+function camposDoFormulario(html) {
+  const ent = (v) => v.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const campos = {};
+  for (const m of html.matchAll(/<input\b[^>]*>/gi)) {
+    const nome = m[0].match(/\bname="([^"]*)"/)?.[1];
+    if (!nome) continue;
+    campos[ent(nome)] = ent(m[0].match(/\bvalue="([^"]*)"/)?.[1] || '');
+  }
+  return campos;
+}
+
+// Primeiro array "chave":[...] do texto RSC, casando colchetes fora de strings
+function extrairArray(texto, chave) {
+  const i = texto.indexOf(`"${chave}":[`);
+  if (i < 0) return null;
+  const ini = i + chave.length + 3;
+  let nivel = 0;
+  let emString = false;
+  for (let j = ini; j < texto.length; j++) {
+    const c = texto[j];
+    if (emString) {
+      if (c === '\\') j++;
+      else if (c === '"') emString = false;
+    } else if (c === '"') emString = true;
+    else if (c === '[' || c === '{') nivel++;
+    else if ((c === ']' || c === '}') && --nivel === 0) {
+      try {
+        return JSON.parse(texto.slice(ini, j + 1));
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+module.exports = { criarCliente, extrairLeads, extrairArray, camposDoFormulario, SessaoExpirada };
