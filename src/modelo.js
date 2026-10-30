@@ -43,6 +43,7 @@ function montarTexto(carro, config, precoVenda) {
     afazer: carro.afazer?.length ? `🔧 *Para fazer*\n${carro.afazer.map((d) => `• ${d}`).join('\n')}` : null,
     instagram: (config.loja.instagram || '').match(/instagram\.com\/([^/?#]+)/i) ? `@${config.loja.instagram.match(/instagram\.com\/([^/?#]+)/i)[1]}` : config.loja.instagram,
     codigo: carro.codigo || null,
+    aviso: config.aviso || null,
     endereco: config.loja.endereco,
     maps: config.loja.maps,
     ano: carro.ano,
