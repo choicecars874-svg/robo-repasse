@@ -195,7 +195,7 @@
 </section>
 
 <section id="historico"><div class="card"><h2>Postados</h2>
-  <input id="buscaHist" placeholder="Buscar pelo código do post (ex.: DR1001) ou pelo carro" style="margin-bottom:10px">
+  <input id="buscaHist" placeholder="Buscar pelo código do post (ex.: DR 10:01) ou pelo carro" style="margin-bottom:10px">
   <p class="sub">O código no fim de cada post = sigla do grupo de origem + horário em que o anúncio chegou. Clique em "ver original" para ver o anúncio como veio do grupo.</p>
   <div style="overflow-x:auto"><table><thead><tr><th>Código</th><th>Chegou</th><th>Carro</th><th>Custo</th><th>Venda</th><th>FIPE</th><th>Origem</th></tr></thead><tbody id="tbHist"></tbody></table></div></div></section>
 </main>
@@ -351,8 +351,10 @@ async function carregarHistorico() {
   desenharHistorico();
 }
 function desenharHistorico() {
-  const q = $('#buscaHist').value.trim().toLowerCase().replace('#', '');
-  const lista = historicoCache.filter((p) => !q || `${p.codigo || ''} ${p.modelo} ${p.ano || ''} ${p.origem?.grupo || ''}`.toLowerCase().replace(/#/g, '').includes(q));
+  // busca ignora #, espaço e dois-pontos: "DR1001", "dr 10:01" e "#DR 10:01" acham o mesmo post
+  const limpa = (s) => s.toLowerCase().replace(/[#:\s]/g, '');
+  const q = limpa($('#buscaHist').value);
+  const lista = historicoCache.filter((p) => !q || limpa(`${p.codigo || ''}`).includes(q) || limpa(`${p.modelo} ${p.ano || ''} ${p.origem?.grupo || ''}`).includes(q));
   $('#tbHist').innerHTML = lista.map((p) => `<tr>
     <td><b>${esc(p.codigo || '—')}</b></td>
     <td>${p.origem?.recebidoEm ? hora(p.origem.recebidoEm) : '—'}<br><span class="sub">postado ${hora(p.quando)}</span></td>

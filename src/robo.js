@@ -257,7 +257,7 @@ function postadosHoje() {
   return historico.postados.filter((p) => diaSP(p.quando) === hoje).length + naFila;
 }
 
-// Código de origem no fim do post: sigla do grupo + hora em que o anúncio chegou. Ex.: #DR1001 = Danilo Repasse, 10:01
+// Código de origem no fim do post: sigla do grupo + hora em que o anúncio chegou. Ex.: #DR 10:01 = Danilo Repasse, 10:01
 const PALAVRAS_SEM_SIGLA = new Set(['repasse', 'repasses', 'grupo', 'de', 'do', 'da', 'dos', 'das', 'sp', 'rj', 'mg', 'oficial', 'intermediacoes', 'intermediacao', 'automotive', 'veiculos', 'carros', 'multimarcas', 'the']);
 function siglaAutomatica(nome, letras = 1) {
   const palavra = normalizar(nome).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).find((w) => w && !PALAVRAS_SEM_SIGLA.has(w));
@@ -274,8 +274,8 @@ function siglaGrupo(jid, nome = nomeGrupo(jid)) {
   return conflito ? siglaAutomatica(nome, 2) : curta;
 }
 function codigoOrigem(jid, quando) {
-  const hhmm = new Date(quando).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }).replace(':', '');
-  return `#${siglaGrupo(jid)}${hhmm}`;
+  const hora = new Date(quando).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  return `#${siglaGrupo(jid)} ${hora}`; // ex.: #DR 10:01
 }
 
 async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [], t0 = Date.now() }) {
