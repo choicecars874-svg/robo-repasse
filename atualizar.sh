@@ -20,6 +20,18 @@ ligar() {
   pm2 save >/dev/null 2>&1
 }
 
+# Guarda contra travamento da máquina de 1 GB: quando a memória acaba, o earlyoom encerra o robô
+# (o pm2 liga de novo) antes de o sistema afundar no swap e parar de responder. Instala uma vez só.
+proteger_maquina() {
+  command -v earlyoom >/dev/null 2>&1 && return
+  echo "$(date) instalando proteção contra falta de memória (earlyoom)"
+  nice -n 19 apt-get install -y -qq earlyoom >/dev/null 2>&1 || { nice -n 19 apt-get update -qq >/dev/null 2>&1 && nice -n 19 apt-get install -y -qq earlyoom >/dev/null 2>&1; } || return
+  # age quando sobra menos de 8% de memória, sem esperar o swap encher; prefere matar o node do robô
+  echo 'EARLYOOM_ARGS="-m 8 -s 100 -r 3600 --prefer ^(node|npm)$ --avoid ^(sshd|systemd|caddy|pm2)$"' > /etc/default/earlyoom
+  systemctl enable --now earlyoom >/dev/null 2>&1 && systemctl restart earlyoom
+  sysctl -qw vm.swappiness=10 && echo 'vm.swappiness=10' > /etc/sysctl.d/99-robo.conf
+}
+
 main() {
   cd "$(dirname "$0")"
   exec 9>/tmp/robo-atualizacao.lock
@@ -29,7 +41,7 @@ main() {
   RODANDO=$(cat .versao-rodando 2>/dev/null)   # versão que o robô está executando (gravada ao iniciar)
   ATUAL=$(git rev-parse HEAD)
   NOVA=$(git rev-parse origin/main 2>/dev/null || echo "$ATUAL")
-  [ "$ATUAL" = "$NOVA" ] && [ "$RODANDO" = "$ATUAL" ] && exit 0
+  [ "$ATUAL" = "$NOVA" ] && [ "$RODANDO" = "$ATUAL" ] && { proteger_maquina; exit 0; }
   # versão que já falhou no teste: espera uma correção nova
   [ "$(cat .versao-ruim 2>/dev/null)" = "$NOVA" ] && exit 0
 
@@ -54,7 +66,7 @@ main() {
   # confere se o painel voltou; se não, volta para a versão anterior
   for i in $(seq 1 18); do
     sleep 5
-    curl -fsS -m 5 -o /dev/null http://localhost:3000/login && { echo "$(date) ok, painel respondendo"; exit 0; }
+    curl -fsS -m 5 -o /dev/null http://localhost:3000/login && { echo "$(date) ok, painel respondendo"; proteger_maquina; exit 0; }
   done
   echo "$NOVA" > .versao-ruim
   echo "$(date) painel não respondeu na versão nova: voltando para $(git rev-parse --short "$VOLTAR")"
