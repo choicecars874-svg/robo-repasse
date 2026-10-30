@@ -102,4 +102,4 @@ function filtrarFipe(carro, config, postadosHoje = 0) {
   return null;
 }
 
-module.exports = { filtrarAntesDaFipe, filtrarFipe, descontoFipe, descontoMinimoAgora, contarProblemas, PROBLEMA };
+module.exports = { filtrarAntesDaFipe, filtrarFipe, descontoFipe, descontoMinimoAgora, contarProblemas, PROBLEMA, kmNumero };

@@ -19,7 +19,7 @@ const { montarTexto, aplicarMargem, formatarReais, linkWhatsApp } = require('./m
 const { completarFipe, normalizar } = require('./fipe');
 const estatisticas = require('./estatisticas');
 const { aplicarLogo } = require('./logo');
-const { filtrarAntesDaFipe, filtrarFipe, descontoFipe } = require('./filtros');
+const { filtrarAntesDaFipe, filtrarFipe, descontoFipe, kmNumero } = require('./filtros');
 
 const { DATA_DIR } = config;
 const DIR_AUTH = path.join(DATA_DIR, 'auth');
@@ -82,6 +82,31 @@ const textoDe = (m) => {
   return msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption || '';
 };
 const chaveCarro = (c) => [c.modelo, c.ano, c.km, c.preco].map((x) => String(x || '').toLowerCase()).join('|');
+// Mesmo carro que já capturamos nos últimos 3 dias (repostado, com preço novo ou vindo de outro grupo)?
+// Mesmo modelo e ano; km parecido decide. Sem km, decide a cor.
+const TRES_DIAS = 3 * 24 * 3600 * 1000;
+const identidade = (c) => ({
+  nome: normalizar(c.modelo || '').split(/\s+/).filter((w) => w && !/^\d/.test(w)).slice(0, 2).join(' '),
+  ano: String(c.ano || '').slice(0, 4),
+  km: kmNumero(c),
+  cor: normalizar(c.cor || '').split(/\s+/)[0] || '',
+});
+function mesmoCarro(a, b) {
+  if (!a.nome || a.nome !== b.nome || a.ano !== b.ano) return false;
+  if (a.km && b.km) return Math.abs(a.km - b.km) <= 2000;
+  if (a.cor && b.cor) return a.cor === b.cor;
+  return true;
+}
+const capturados = []; // { ...identidade, preco, codigo, quando }
+// depois de reiniciar, recupera os posts dos últimos 3 dias (os antigos não guardavam km/cor: lê do original)
+for (const p of historico.postados.filter((p) => Date.now() - p.quando < TRES_DIAS)) {
+  const c = p.km || p.cor || !p.textoOriginal ? p : { ...parseAnuncio(p.textoOriginal), modelo: p.modelo, ano: p.ano };
+  capturados.push({ ...identidade(c), preco: p.custo, codigo: p.codigo, quando: p.quando });
+}
+function jaCapturado(carro) {
+  const id = identidade(carro);
+  return capturados.find((c) => Date.now() - c.quando < TRES_DIAS && mesmoCarro(id, c));
+}
 const nomeGrupo = (jid) => estado.grupos.find((g) => g.id === jid)?.nome || jid;
 const jidAprovador = () => {
   const n = String(config.get().numeroAprovador || '').replace(/\D/g, '');
@@ -318,6 +343,7 @@ async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [],
   const motivo =
     filtrarAntesDaFipe(carro, cfg) ||
     (historico.chaves.includes(chaveCarro(carro)) && 'já postado') ||
+    ((r) => r && `já postado (${r.codigo || 'post'} com custo ${formatarReais(r.preco)}; agora ${formatarReais(carro.preco)})`)(jaCapturado(carro)) ||
     (limite > 0 && cfg.modo === 'auto' && postadosHoje() >= limite && `limite de ${limite} posts por dia atingido (volta amanhã)`);
   if (motivo) return evento('ignorado', `${nome} — ${motivo}`);
 
@@ -327,6 +353,11 @@ async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [],
   // No automático, sem FIPE não dá para garantir que está abaixo: não posta
   if (cfg.modo === 'auto' && !carro.fipe) return evento('ignorado', `${nome} — FIPE não encontrada${carro.fipeMotivo ? ` (${carro.fipeMotivo})` : ''}`);
 
+  // de novo aqui: dois anúncios do mesmo carro podem ter passado juntos pela checagem lá de cima
+  const repetido = jaCapturado(carro);
+  if (repetido) return evento('ignorado', `${nome} — já postado (${repetido.codigo || 'post'} com custo ${formatarReais(repetido.preco)}; agora ${formatarReais(carro.preco)})`);
+  capturados.push({ ...identidade(carro), preco: carro.preco, quando: Date.now() });
+  const reserva = capturados[capturados.length - 1];
   const id = Date.now().toString(36);
   const dir = path.join(DIR_PEND, id);
   fs.mkdirSync(dir, { recursive: true });
@@ -348,6 +379,7 @@ async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [],
   };
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(item));
   pendentes.set(id, item);
+  reserva.codigo = item.origem.codigo;
   evento('capturado', `${nome} — custo ${formatarReais(carro.preco)}, FIPE ${formatarReais(carro.fipe) || '?'}`);
 
   if (cfg.modo === 'auto') return aprovar(id);
@@ -395,6 +427,8 @@ function aprovar(id, precoVenda) {
         modelo: item.carro.modelo,
         ano: item.carro.ano,
         custo: item.carro.preco,
+        km: item.carro.km,
+        cor: item.carro.cor,
         venda: item.precoVenda,
         fipe: item.carro.fipe,
         origem: item.origem,
