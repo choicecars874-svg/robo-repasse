@@ -148,7 +148,7 @@
   <div class="logo"><img src="/marca.png" alt="Choice Cars"><div><b>GESTÃO</b><small id="versao"></small></div></div>
   <button data-aba="painel" class="ativo"><svg class="i"><use href="#i-painel"/></svg>Painel</button>
   <div class="grupoMenu" id="menuGrupos">
-    <button class="titulo" id="abrirGrupos"><svg class="i"><use href="#i-grupos"/></svg>Grupos <svg class="i seta"><use href="#i-seta"/></svg></button>
+    <button class="titulo" data-abre="menuGrupos"><svg class="i"><use href="#i-grupos"/></svg>Grupos <svg class="i seta"><use href="#i-seta"/></svg></button>
     <div class="sub-itens">
       <button data-aba="inicio">Início</button>
       <button data-aba="aprovar">Aprovar <span class="badge" id="nPend" hidden></span></button>
@@ -159,6 +159,13 @@
     </div>
   </div>
   <button data-aba="instagram"><svg class="i"><use href="#i-instagram"/></svg>Instagram</button>
+  <div class="grupoMenu" id="menuConfig">
+    <button class="titulo" data-abre="menuConfig"><svg class="i"><use href="#i-config"/></svg>Configurações <svg class="i seta"><use href="#i-seta"/></svg></button>
+    <div class="sub-itens">
+      <button data-aba="integracoes">Integrações</button>
+      <button data-aba="sistema">Sistema</button>
+    </div>
+  </div>
   <div class="secao">Em breve</div>
   <button disabled><svg class="i"><use href="#i-leads"/></svg>Leads <span class="breve">breve</span></button>
   <button disabled><svg class="i"><use href="#i-metas"/></svg>Metas <span class="breve">breve</span></button>
@@ -280,19 +287,6 @@
 
 <section id="config">
   <div class="card">
-    <h2>Conexão e sistema</h2>
-    <p class="sub">WhatsApp do robô: <b id="cfgNumero">—</b> · <span id="cfgVersao"></span></p>
-    <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="btnAtualizar">Buscar atualização agora</button>
-    <button class="btn verm" id="btnDesconectar">Desconectar WhatsApp</button></p>
-    <details id="detDiag"><summary class="sub">Diagnóstico técnico (para o suporte)</summary><pre id="diag" style="max-height:320px;overflow:auto;margin-top:10px"></pre></details>
-  </div>
-  <div class="card">
-    <h2>Instagram</h2>
-    <p class="sub" style="margin:4px 0 8px">No app da Meta (Dream Content → API do Instagram → 2. Gerar tokens de acesso), clique em "Gerar token" na linha do perfil, copie e cole aqui. Um perfil por vez. O token fica guardado só no servidor e é renovado sozinho.</p>
-    <div class="contasIg" id="igContasCfg"></div>
-    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><input type="password" id="igToken" placeholder="Cole o token do perfil aqui" autocomplete="off" style="flex:1;min-width:220px"><button class="btn verde" id="btnIgToken">Conectar perfil</button></div>
-  </div>
-  <div class="card">
     <h2>Grupos</h2>
     <p><button class="btn" id="btnGrupos">Atualizar lista de grupos</button></p>
     <label>Grupos de repasse (de onde pegar os carros)</label><div class="grupos" id="gOrigem"><span class="sub">Conecte o WhatsApp para ver os grupos.</span></div>
@@ -352,6 +346,31 @@
       <div><label>Texto do aviso ({modelo} {ano})</label><input data-c="textoVendido"></div>
     </div>
   </div>
+  <div class="salvar"><button class="btn verde salvarCfg">Salvar</button></div>
+</section>
+
+<section id="integracoes">
+  <div class="card">
+    <div class="cardTopo"><div><h2>WhatsApp</h2><p class="sub">Número que lê os grupos de repasse e posta no grupo da Choice.</p></div><span class="status"><span class="dot" id="dot2"></span><span id="statusTxt2">…</span></span></div>
+    <div class="num"><div><span class="sub">Número conectado</span><b id="cfgNumero">—</b></div></div>
+    <div id="cardQr2" hidden><p class="sub">No celular que participa dos grupos: WhatsApp → Aparelhos conectados → Conectar aparelho → aponte para o código.</p><img class="qr" id="qr2" alt="QR Code"></div>
+    <p><button class="btn verm" id="btnDesconectar">Desconectar WhatsApp</button></p>
+  </div>
+  <div class="card">
+    <h2>Instagram</h2>
+    <p class="sub" style="margin:4px 0 8px">No app da Meta (Dream Content → API do Instagram → Configuração da API com login do Instagram → Gerar tokens de acesso), clique em "Gerar token" na linha do perfil, copie e cole aqui. Um perfil por vez. O token fica guardado só no servidor e é renovado sozinho.</p>
+    <div class="contasIg" id="igContasCfg"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><input type="password" id="igToken" placeholder="Cole o token do perfil aqui" autocomplete="off" style="flex:1;min-width:220px"><button class="btn verde" id="btnIgToken">Conectar perfil</button></div>
+  </div>
+</section>
+
+<section id="sistema">
+  <div class="card">
+    <h2>Atualização</h2>
+    <p class="sub">Versão instalada: <b id="cfgVersao"></b>. O painel procura versão nova sozinho a cada 30 minutos.</p>
+    <p><button class="btn" id="btnAtualizar">Buscar atualização agora</button></p>
+    <details id="detDiag"><summary class="sub">Diagnóstico técnico (para o suporte)</summary><pre id="diag" style="max-height:320px;overflow:auto;margin-top:10px"></pre></details>
+  </div>
   <div class="card">
     <h2>Senha do painel</h2>
     <div class="linha">
@@ -361,7 +380,6 @@
     </div>
     <p><button class="btn" id="btnSenha">Trocar senha</button></p>
   </div>
-  <div class="salvar"><button class="btn verde salvarCfg">Salvar</button></div>
 </section>
 
 <section id="testar">
@@ -405,24 +423,26 @@ const TITULOS = {
   buscas: ['O que buscamos', 'Regras que decidem quais carros vão para o grupo.'],
   instagram: ['Instagram', 'Seguidores, alcance e posts dos perfis da Choice, somados e por perfil.'],
   testar: ['Testar anúncio', 'Cole um anúncio e veja o que o robô faria com ele.'],
-  config: ['Configurações', 'Conexão, grupos, loja, margem, logo e texto do post.'],
+  config: ['Configurações do grupo', 'Grupos de origem e destino, loja, margem, logo e texto do post.'],
+  integracoes: ['Integrações', 'Contas conectadas ao GESTÃO CHOICE: WhatsApp e Instagram.'],
+  sistema: ['Sistema', 'Versão, atualização e senha do painel.'],
 };
 function abrirAba(aba) {
   const b = document.querySelector(`nav button[data-aba="${aba}"]`);
   if (!b) return;
   document.querySelectorAll('nav button, section').forEach((e) => e.classList.remove('ativo'));
   b.classList.add('ativo'); $('#' + aba).classList.add('ativo');
-  if (b.closest('#menuGrupos')) $('#menuGrupos').classList.remove('fechado');
+  b.closest('.grupoMenu')?.classList.remove('fechado');
   document.body.classList.remove('menuAberto'); scrollTo(0, 0);
   try { localStorage.setItem('aba', aba); } catch {}
   const [titulo, sub] = TITULOS[aba];
-  $('#tEyebrow').textContent = aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
+  $('#tEyebrow').textContent = ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarPainel, instagram: carregarInstagram, config: carregarIgCfg, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarPainel, instagram: carregarInstagram, integracoes: carregarIgCfg, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
-$('#abrirGrupos').onclick = () => $('#menuGrupos').classList.toggle('fechado');
+document.querySelectorAll('[data-abre]').forEach((b) => b.onclick = () => $('#' + b.dataset.abre).classList.toggle('fechado'));
 $('#menu').onclick = () => document.body.classList.toggle('menuAberto');
 
 // Estado
@@ -434,7 +454,9 @@ async function atualizarEstado() {
   $('#dot').className = 'dot ' + (e.status === 'conectado' ? 'on' : e.status === 'desconectado' ? 'off' : '');
   $('#cardQr').hidden = !e.qr; if (e.qr) $('#qr').src = e.qr;
   $('#numero').textContent = $('#cfgNumero').textContent = e.numero || '—';
-  $('#cfgVersao').textContent = 'versão ' + (e.versao || '?');
+  $('#cfgVersao').textContent = e.versao || '?';
+  $('#statusTxt2').textContent = nomes[e.status] || e.status; $('#dot2').className = $('#dot').className;
+  $('#cardQr2').hidden = !e.qr; if (e.qr) $('#qr2').src = e.qr;
 
   $('#resPend').textContent = e.pendentes; $('#resPost').textContent = e.postados;
   $('#nPend').hidden = !e.pendentes; $('#nPend').textContent = e.pendentes;
