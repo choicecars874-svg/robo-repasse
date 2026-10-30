@@ -61,7 +61,7 @@ const PADRAO = {
 
   // aviso fixo em todo post (proteção contra erro de digitação / CDC). Vazio = sem aviso
   aviso:
-    '⚠️ _Consulte disponibilidade com nossa equipe antes de fechar negócio._',
+    '_Obs.: Sujeito a eventuais erros de digitação ou divergências nas informações. Consulte e confirme os dados antes de fechar negócio._',
 
   limiteDiario: 10, // máximo de posts por dia (0 = sem limite)
 
@@ -97,8 +97,12 @@ const MODELOS_ANTIGOS = [
   '🚗 *{modelo}*\n\n📅 Ano: {ano}\n🛣️ KM: {km}\n🎨 Cor: {cor}\n⚙️ Câmbio: {cambio}\n\n{detalhes}\n\n💰 *{preco}*\n📊 FIPE: {fipe}\n🔥 {abaixoFipe}\n\n━━━━━━━━━━━━━━━\n🏁 *{loja}*\n📍 {cidade}\n📲 Chame agora: {link}',
 ];
 if (MODELOS_ANTIGOS.includes(atual.modelo)) atual.modelo = PADRAO.modelo;
-// aviso longo antigo (não editado) passa para o curto
-if (atual.aviso === '⚠️ _Anúncio sujeito a confirmação. Preço, fotos e informações podem conter erros de digitação e podem mudar sem aviso. Consulte disponibilidade e valores com nossa equipe antes de fechar negócio._') atual.aviso = PADRAO.aviso;
+// avisos padrão antigos (não editados) passam para o atual
+const AVISOS_ANTIGOS = [
+  '⚠️ _Anúncio sujeito a confirmação. Preço, fotos e informações podem conter erros de digitação e podem mudar sem aviso. Consulte disponibilidade e valores com nossa equipe antes de fechar negócio._',
+  '⚠️ _Consulte disponibilidade com nossa equipe antes de fechar negócio._',
+];
+if (AVISOS_ANTIGOS.includes(atual.aviso)) atual.aviso = PADRAO.aviso;
 
 module.exports = {
   DATA_DIR,
