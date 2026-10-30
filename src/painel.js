@@ -45,7 +45,8 @@ function iniciarPainel() {
   }
   const app = express();
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '1mb' }));
+  const json1mb = express.json({ limit: '1mb' });
+  app.use((req, res, next) => (req.path === '/api/backup/restaurar' ? next() : json1mb(req, res, next))); // backup tem limite maior
   app.use(express.urlencoded({ extended: false }));
 
   // Login fica num cookie assinado (não na memória): continua valendo depois que o robô reinicia.
@@ -150,6 +151,25 @@ function iniciarPainel() {
     const log = fs.openSync('/tmp/robo-atualizacao-manual.log', 'a');
     require('child_process').spawn('bash', ['atualizar.sh'], { cwd: raiz, detached: true, stdio: ['ignore', log, log] }).unref();
     res.json({ ok: true });
+  });
+
+  // Backup para guardar fora do servidor: configuração, histórico de posts e números do painel.
+  // Não leva a sessão do WhatsApp nem tokens (num servidor novo é só escanear o QR de novo).
+  app.get('/api/backup', (_, res) => {
+    const ler = (arq) => { try { return JSON.parse(fs.readFileSync(path.join(config.DATA_DIR, arq), 'utf8')); } catch { return null; } };
+    const dia = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+    res.set('Content-Disposition', `attachment; filename="backup-gestao-choice-${dia}.json"`);
+    res.json({ versao: 1, criadoEm: new Date().toISOString(), config: config.get(), historico: ler('historico.json'), estatisticas: ler('estatisticas.json') });
+  });
+  app.post('/api/backup/restaurar', express.json({ limit: '20mb' }), (req, res) => {
+    const b = req.body || {};
+    if (b.versao !== 1 || !b.config) return res.status(400).json({ erro: 'Arquivo de backup inválido' });
+    config.salvar(b.config);
+    if (b.historico) fs.writeFileSync(path.join(config.DATA_DIR, 'historico.json'), JSON.stringify(b.historico));
+    if (b.estatisticas) fs.writeFileSync(path.join(config.DATA_DIR, 'estatisticas.json'), JSON.stringify(b.estatisticas));
+    res.json({ ok: true });
+    // reinicia para o robô carregar o histórico restaurado (o pm2 liga de novo)
+    setTimeout(() => process.exit(0), 1500);
   });
 
   // Saúde do servidor (para descobrir travamento por memória sem abrir o console da Oracle)

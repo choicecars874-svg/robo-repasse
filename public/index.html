@@ -366,6 +366,12 @@
 
 <section id="sistema">
   <div class="card">
+    <h2>Backup</h2>
+    <p class="sub" style="margin:4px 0 12px">Baixe toda semana e guarde no Google Drive ou no computador. Leva configurações (grupos, siglas, buscas, texto do post), histórico de posts e números do painel. Num servidor novo: instale, escaneie o QR e restaure aqui. A sessão do WhatsApp e os tokens do Instagram não vão no arquivo.</p>
+    <p style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn verde" href="/api/backup" style="text-decoration:none">Baixar backup</a>
+    <label class="btn" style="margin:0;color:var(--txt)">Restaurar backup<input type="file" id="arqBackup" accept=".json,application/json" hidden></label></p>
+  </div>
+  <div class="card">
     <h2>Atualização</h2>
     <p class="sub">Versão instalada: <b id="cfgVersao"></b>. O painel procura versão nova sozinho a cada 30 minutos.</p>
     <p><button class="btn" id="btnAtualizar">Buscar atualização agora</button></p>
@@ -678,6 +684,12 @@ async function carregarSistema() {
   $('#saudeAvisos').innerHTML = avisos.map((a) => `<pre class="ruim" style="margin-bottom:10px">${esc(a)}</pre>`).join('') || '<p class="bom" style="margin:0 0 10px">Tudo certo com memória e disco.</p>';
   $('#saudeLog').textContent = r.atualizacoes || 'Sem registros.';
 }
+$('#arqBackup').onchange = async (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  if (!confirm('Restaurar este backup? As configurações e o histórico atuais serão substituídos e o robô reinicia.')) return;
+  try { await api('/api/backup/restaurar', { method:'POST', body: await f.text() }); alert('Backup restaurado. O robô está reiniciando: recarregue a página em 1 minuto.'); }
+  catch (e) { alert(e.message); }
+};
 $('#btnSaude').onclick = () => carregarSistema();
 async function carregarIgCfg() {
   const e = await api('/api/instagram/estado');
