@@ -16,11 +16,15 @@ function aplicarMargem(preco, margem) {
 function linkWhatsApp(carro, config) {
   const numero = String(config.loja.whatsapp || '').replace(/\D/g, '');
   if (!numero) return null;
-  const msg = (config.loja.mensagemLink || '')
+  // o código do post (#DR1001) vai junto na mensagem do cliente: quem atende já sabe de onde veio o carro
+  const codigo = (carro.codigo || '').replace('#', '');
+  let msg = (config.loja.mensagemLink || '')
     .replace('{modelo}', carro.modelo || '')
     .replace('{ano}', carro.ano || '')
+    .replace('{codigo}', codigo)
     .replace(/\s+/g, ' ')
     .trim();
+  if (codigo && !(config.loja.mensagemLink || '').includes('{codigo}')) msg = `${msg} (${codigo})`;
   return `https://wa.me/${numero}${msg ? '?text=' + encodeURIComponent(msg) : ''}`;
 }
 
