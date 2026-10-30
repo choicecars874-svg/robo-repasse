@@ -18,8 +18,8 @@ try {
 } catch {}
 if (fs.existsSync(path.join(RAIZ, '.git')) && fs.existsSync(path.join(RAIZ, 'atualizar.sh'))) {
   const atualizar = () => {
-    const log = fs.openSync('/tmp/robo-atualizacao.log', 'a');
-    spawn('bash', ['atualizar.sh'], { cwd: RAIZ, detached: true, stdio: ['ignore', log, log] }).unref();
+    // roda solto (o bash intermediário sai na hora): quando o pm2 reinicia o robô, não mata a atualização junto
+    spawn('bash', ['-c', 'nohup setsid bash atualizar.sh >> /tmp/robo-atualizacao.log 2>&1 < /dev/null &'], { cwd: RAIZ, detached: true, stdio: 'ignore' }).unref();
   };
   setTimeout(atualizar, 2 * 60 * 1000);
   setInterval(atualizar, 30 * 60 * 1000);

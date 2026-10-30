@@ -14,6 +14,12 @@
 # prioridade baixa, e volta para a versão anterior se o painel não responder depois de reiniciar.
 # Todo o código fica dentro de main(): o bash lê a função inteira antes de rodar, então trocar este
 # arquivo no meio da atualização não quebra nada. As linhas de # abaixo protegem a troca da versão antiga.
+# Liga o robô: reinicia se existir no pm2; se não existir (apagado/caiu), cria de novo
+ligar() {
+  if pm2 describe repasse >/dev/null 2>&1; then pm2 restart repasse; else pm2 start ecosystem.config.js; fi
+  pm2 save >/dev/null 2>&1
+}
+
 main() {
   cd "$(dirname "$0")"
   exec 9>/tmp/robo-atualizacao.lock
@@ -41,10 +47,9 @@ main() {
   # limite de memória do robô mais seguro para 1 GB (uma vez só)
   if grep -q '"max_memory_restart": "600M"' ecosystem.config.js 2>/dev/null; then
     sed -i 's/"max_memory_restart": "600M"/"max_memory_restart": "420M"/' ecosystem.config.js
-    pm2 delete repasse >/dev/null 2>&1; pm2 start ecosystem.config.js && pm2 save
-  else
-    pm2 restart repasse
+    pm2 delete repasse >/dev/null 2>&1
   fi
+  ligar
 
   # confere se o painel voltou; se não, volta para a versão anterior
   for i in $(seq 1 18); do
@@ -55,7 +60,7 @@ main() {
   echo "$(date) painel não respondeu na versão nova: voltando para $(git rev-parse --short "$VOLTAR")"
   git reset -q --hard "$VOLTAR"
   git diff --quiet "$VOLTAR" "$NOVA" -- package.json package-lock.json 2>/dev/null || nice -n 19 npm install --omit=dev --no-audit --no-fund
-  pm2 restart repasse
+  ligar
 }
 main "$@"
 exit

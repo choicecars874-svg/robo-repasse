@@ -148,8 +148,8 @@ function iniciarPainel() {
   // Busca a versão nova no GitHub na hora (o robô reinicia sozinho em ~1 min se houver)
   app.post('/api/atualizar', (_, res) => {
     const raiz = path.join(__dirname, '..');
-    const log = fs.openSync('/tmp/robo-atualizacao-manual.log', 'a');
-    require('child_process').spawn('bash', ['atualizar.sh'], { cwd: raiz, detached: true, stdio: ['ignore', log, log] }).unref();
+    // roda solto (o bash intermediário sai na hora): quando o pm2 reinicia o robô, não mata a atualização junto
+    require('child_process').spawn('bash', ['-c', 'nohup setsid bash atualizar.sh >> /tmp/robo-atualizacao-manual.log 2>&1 < /dev/null &'], { cwd: raiz, detached: true, stdio: 'ignore' }).unref();
     res.json({ ok: true });
   });
 
