@@ -64,7 +64,7 @@ function iniciarPainel() {
     return assinatura.length === esperado.length && crypto.timingSafeEqual(Buffer.from(assinatura), Buffer.from(esperado));
   };
 
-  app.get('/login', (_, res) => res.sendFile(path.join(PUBLICO, 'login.html')));
+  app.get('/login', (_, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(PUBLICO, 'login.html')));
   app.get('/marca.png', (_, res) => res.sendFile(path.join(__dirname, '..', 'logo.png')));
   app.post('/login', (req, res) => {
     if (!senhaConfere(req.body.senha)) return res.redirect('/login?erro=1');
@@ -89,7 +89,8 @@ function iniciarPainel() {
     res.redirect('/login');
   });
 
-  app.get('/', (_, res) => res.sendFile(path.join(PUBLICO, 'index.html')));
+  // sem cache: depois de atualizar, o navegador sempre pega a tela nova
+  app.get('/', (_, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(PUBLICO, 'index.html')));
 
   app.get('/api/diagnostico', (_, res) => res.type('text').send(robo.diagnostico.join('\n') || 'Nenhum aviso interno.'));
 
