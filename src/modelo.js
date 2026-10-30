@@ -58,7 +58,7 @@ function montarTexto(carro, config, precoVenda) {
     abaixoFipe: abaixo >= 3 ? `${abaixo}% abaixo ${usaWeb ? 'do preço Web' : 'da FIPE'}` : null,
     loja: config.loja.nome,
     cidade: config.loja.cidade,
-    link: linkWhatsApp(carro, config),
+    link: carro.linkCurto || linkWhatsApp(carro, config),
   };
 
   return config.modelo
@@ -71,4 +71,4 @@ function montarTexto(carro, config, precoVenda) {
     .trim();
 }
 
-module.exports = { montarTexto, aplicarMargem, formatarReais };
+module.exports = { montarTexto, aplicarMargem, formatarReais, linkWhatsApp };

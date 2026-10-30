@@ -13,6 +13,7 @@ const { montarTexto, aplicarMargem } = require('./modelo');
 const { filtrarAntesDaFipe, filtrarFipe, descontoFipe } = require('./filtros');
 const { completarFipe } = require('./fipe');
 const { aplicarLogo, ARQ_LOGO } = require('./logo');
+const estatisticas = require('./estatisticas');
 
 const SENHA = process.env.PAINEL_SENHA;
 let VERSAO = '?';
@@ -71,6 +72,15 @@ function iniciarPainel() {
     res.cookie('painel', `${validade}.${assinar(validade)}`, { maxAge: TRINTA_DIAS, httpOnly: true, sameSite: 'lax', secure: req.secure });
     res.redirect('/');
   });
+  // Link do "Chame no WhatsApp" dos posts: conta o clique e manda para o WhatsApp da loja (não pede senha)
+  const ROBOS = /whatsapp|facebookexternalhit|facebot|bot|crawler|spider|preview|telegram|slack|discord|twitter|curl|wget/i;
+  app.get('/c/:id', (req, res) => {
+    const ua = req.headers['user-agent'] || '';
+    const l = ROBOS.test(ua) ? estatisticas.link(req.params.id) : estatisticas.clicar(req.params.id, req.ip);
+    const numero = String(config.get().loja.whatsapp || '').replace(/\D/g, '');
+    res.set('Cache-Control', 'no-store').redirect(l?.destino || `https://wa.me/${numero}`);
+  });
+
   app.get('/sair', (_, res) => res.clearCookie('painel').redirect('/login'));
 
   app.use((req, res, next) => {
@@ -148,7 +158,12 @@ function iniciarPainel() {
     res.json({ ok: true });
   });
 
-  app.get('/api/historico', (_, res) => res.json(robo.historico.postados));
+  app.get('/api/historico', (_, res) => res.json(robo.historico.postados.map((h) => (h.idLink ? { ...h, cliques: estatisticas.cliquesDoLink(h.idLink) } : h))));
+
+  app.get('/api/painel', (_, res) => {
+    const { status, numero } = robo.estado;
+    res.json({ ...estatisticas.resumo(), limiteDiario: config.get().limiteDiario, conexao: { status, numero }, pendentes: robo.pendentes.size });
+  });
 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
   app.post('/api/logo', upload.single('logo'), async (req, res) => {

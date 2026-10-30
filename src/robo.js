@@ -15,8 +15,9 @@ const {
 
 const config = require('./config');
 const { parseAnuncio } = require('./parser');
-const { montarTexto, aplicarMargem, formatarReais } = require('./modelo');
+const { montarTexto, aplicarMargem, formatarReais, linkWhatsApp } = require('./modelo');
 const { completarFipe, normalizar } = require('./fipe');
+const estatisticas = require('./estatisticas');
 const { aplicarLogo } = require('./logo');
 const { filtrarAntesDaFipe, filtrarFipe, descontoFipe } = require('./filtros');
 
@@ -70,6 +71,8 @@ function evento(tipo, texto) {
   try {
     fs.writeFileSync(ARQ_EVENTOS, JSON.stringify(estado.eventos));
   } catch {}
+  if (tipo === 'ignorado') estatisticas.contarIgnorado(texto);
+  if (tipo === 'vendido') estatisticas.contar('vendidos');
 }
 
 // Tira "embrulhos" (mensagem temporária, visualização única, etc.) para chegar no conteúdo real
@@ -252,6 +255,18 @@ async function receber(m) {
 // Limite diário de posts (conta o que já foi postado hoje + o que está na fila para postar)
 let naFila = 0;
 const diaSP = (t) => new Date(t).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+// Endereço público do painel (ex.: https://137-131-197-47.sslip.io), usado no link rastreável.
+// Vem da configuração ou do arquivo que o instalador grava.
+function urlPublica() {
+  const cfg = config.get();
+  if (cfg.urlPublica) return cfg.urlPublica.replace(/\/+$/, '');
+  try {
+    return fs.readFileSync(path.join(__dirname, '..', 'endereco-do-painel.txt'), 'utf8').trim().replace(/\/+$/, '') || null;
+  } catch {
+    return null;
+  }
+}
+
 function postadosHoje() {
   const hoje = diaSP(Date.now());
   return historico.postados.filter((p) => diaSP(p.quando) === hoje).length + naFila;
@@ -288,6 +303,7 @@ async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [],
   if (descartadas) evento('aviso', `${nomeGrupo(grupo)}: ${descartadas} foto(s) chegaram longe do texto (mais de ${cfg.segundosMaxFotoTexto}s) e foram descartadas por segurança`);
   const fotos = (await Promise.all(downloads.map((f) => f.p))).filter(Boolean);
   const falharam = downloads.length - fotos.length;
+  estatisticas.contar('lidos', nomeGrupo(grupo));
   evento('lendo', `${fotos.length} foto(s)${falharam ? ` (${falharam} não baixou)` : ''} e ${textos.length} texto(s) de ${nomeGrupo(grupo)}`);
   if (!textos.length) return evento('ignorado', `${nomeGrupo(grupo)} — só fotos, sem texto do anúncio`);
   if (!fotos.length && cfg.filtros.exigirFoto) {
@@ -364,6 +380,12 @@ function aprovar(id, precoVenda) {
     const cfg = config.get();
     if (!cfg.grupoDestino) throw new Error('Grupo de destino não configurado');
     item.carro.codigo = item.origem.codigo;
+    // link do "Chame no WhatsApp" passa pelo painel para contar os cliques (se o painel tem endereço público)
+    const base = urlPublica();
+    if (base) {
+      item.carro.linkCurto = `${base}/c/${id}`;
+      estatisticas.registrarLink(id, { destino: linkWhatsApp(item.carro, cfg), codigo: item.origem.codigo, modelo: item.carro.modelo, ano: item.carro.ano, grupo: item.origem.grupo });
+    }
     const texto = montarTexto(item.carro, cfg, item.precoVenda);
     const msg = await enviar(cfg.grupoDestino, item.fotos.map((f) => path.join(dir, f)), texto);
     historico.chaves = [...historico.chaves, chaveCarro(item.carro)].slice(-3000);
@@ -377,6 +399,7 @@ function aprovar(id, precoVenda) {
         fipe: item.carro.fipe,
         origem: item.origem,
         codigo: item.origem.codigo,
+        idLink: item.carro.linkCurto ? id : null,
         textoOriginal: (item.carro.textoOriginal || '').slice(0, 2000),
         // para responder "VENDIDO" em cima do nosso post quando o vendedor avisar
         nosso: msg?.key ? { key: msg.key, texto: texto.slice(0, 300), grupo: cfg.grupoDestino } : null,
@@ -386,6 +409,7 @@ function aprovar(id, precoVenda) {
     naFila--;
     salvarHist();
     fs.rmSync(dir, { recursive: true, force: true });
+    estatisticas.contar('postados', item.origem.grupo);
     evento('postado', `${item.carro.modelo} ${item.carro.ano || ''} por ${formatarReais(item.precoVenda)}`);
     await esperar(aleatorio(cfg.intervaloEntrePostagens));
   }).catch((e) => {
