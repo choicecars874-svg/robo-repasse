@@ -162,7 +162,8 @@ function iniciarPainel() {
 
   app.get('/api/painel', (_, res) => {
     const { status, numero } = robo.estado;
-    res.json({ ...estatisticas.resumo(), limiteDiario: config.get().limiteDiario, conexao: { status, numero }, pendentes: robo.pendentes.size });
+    const ultimosPosts = robo.historico.postados.slice(0, 6).map((h) => ({ codigo: h.codigo, grupo: h.origem?.grupo, modelo: h.modelo, ano: h.ano, venda: h.venda, quando: h.quando, vendido: !!h.vendido, cliques: h.idLink ? estatisticas.cliquesDoLink(h.idLink) : null }));
+    res.json({ ...estatisticas.resumo(), ultimosPosts, limiteDiario: config.get().limiteDiario, conexao: { status, numero }, pendentes: robo.pendentes.size });
   });
 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });

@@ -5,79 +5,142 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GESTÃO CHOICE</title>
 <link rel="icon" href="/marca.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#0f1115; --card:#181b21; --borda:#2a2f38; --txt:#e8eaed; --sub:#9aa0a6; --verde:#22c55e; --verm:#ef4444; --amar:#f59e0b; --azul:#3b82f6; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.45 system-ui, sans-serif; }
-  header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; border-bottom:1px solid var(--borda); position:sticky; top:0; background:var(--bg); z-index:3; }
-  header .marca { display:flex; align-items:center; gap:10px; } header .marca b { font-size:16px; letter-spacing:.06em; }
-  #menu { display:none; background:none; border:1px solid var(--borda); color:var(--txt); border-radius:8px; font-size:18px; padding:4px 10px; cursor:pointer; }
-  .layout { display:grid; grid-template-columns:230px minmax(0, 1fr); min-height:calc(100vh - 61px); }
-  nav { border-right:1px solid var(--borda); padding:14px 10px; position:sticky; top:61px; height:calc(100vh - 61px); overflow-y:auto; }
-  nav button { display:flex; align-items:center; gap:10px; width:100%; background:none; border:0; color:var(--sub); padding:9px 12px; border-radius:8px; font:inherit; cursor:pointer; text-align:left; }
-  nav button:hover { color:var(--txt); }
-  nav button.ativo { background:var(--card); color:var(--txt); font-weight:600; }
-  nav .grupoMenu > button.titulo { color:var(--txt); font-weight:600; }
-  nav .grupoMenu .seta { margin-left:auto; transition:transform .15s; } nav .grupoMenu.fechado .seta { transform:rotate(-90deg); }
-  nav .sub-itens { padding-left:14px; border-left:1px solid var(--borda); margin:2px 0 6px 18px; } nav .grupoMenu.fechado .sub-itens { display:none; }
-  nav .secao { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--sub); margin:18px 12px 6px; }
-  nav button[disabled] { cursor:default; opacity:.55; } nav .breve { margin-left:auto; font-size:10px; background:var(--borda); border-radius:99px; padding:1px 7px; }
-  main { max-width:1040px; width:100%; padding:20px; }
-  @media (max-width:820px) {
-    #menu { display:block; } .layout { grid-template-columns:1fr; }
-    nav { display:none; position:fixed; top:61px; left:0; right:0; bottom:0; height:auto; background:var(--bg); z-index:2; border-right:0; }
-    body.menuAberto nav { display:block; } main { padding:14px 12px; }
-    .soPc { display:none; } header { padding:10px 12px; } header .marca { gap:8px; } header .marca img { height:30px !important; } header .marca b { font-size:13px; }
+  :root {
+    --bg:#08090b; --card:rgba(255,255,255,.035); --card2:rgba(255,255,255,.06); --borda:rgba(255,255,255,.08); --borda2:rgba(255,255,255,.14);
+    --txt:#f2f3f5; --sub:#8b9099; --verde:#34d399; --verm:#f87171; --amar:#fbbf24; --azul:#60a5fa; --ouro:#e2b350; --ouro2:rgba(226,179,80,.14);
+    --mono:'JetBrains Mono', ui-monospace, monospace;
   }
-  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:14px; }
-  .kpi { background:var(--card); border:1px solid var(--borda); border-radius:12px; padding:14px 16px; }
-  .kpi span { color:var(--sub); font-size:13px; } .kpi b { display:block; font-size:28px; line-height:1.2; margin-top:4px; } .kpi small { color:var(--sub); font-size:12px; }
-  .meta { height:6px; background:var(--borda); border-radius:99px; margin-top:8px; overflow:hidden; } .meta i { display:block; height:100%; background:var(--verde); border-radius:99px; }
-  .duas { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; } .duas .card { margin-bottom:0; } .duas { margin-bottom:14px; }
-  .barra { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:4px 10px; font-size:14px; margin:8px 0; }
-  .barra .trilho { grid-column:1 / -1; height:8px; background:var(--borda); border-radius:99px; overflow:hidden; } .barra .trilho i { display:block; height:100%; background:var(--azul); border-radius:99px; }
-  .barra.amarela .trilho i { background:var(--amar); }
-  .semana { display:grid; grid-template-columns:repeat(7, 1fr); gap:8px; align-items:end; height:150px; margin-top:6px; }
-  .semana div { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; font-size:12px; color:var(--sub); gap:4px; }
-  .semana i { width:70%; max-width:34px; background:var(--verde); border-radius:4px 4px 0 0; min-height:2px; } .semana b { color:var(--txt); font-size:13px; }
-  .breveCard { opacity:.75; } .breveCard h2 { display:flex; gap:8px; align-items:center; }
+  * { box-sizing:border-box; }
+  body { margin:0; color:var(--txt); font:15px/1.5 Inter, system-ui, sans-serif; background:var(--bg);
+    background-image:radial-gradient(900px 500px at 85% -10%, rgba(226,179,80,.09), transparent 60%), radial-gradient(700px 500px at -10% 110%, rgba(96,165,250,.06), transparent 60%); background-attachment:fixed; min-height:100vh; }
+  a { color:inherit; }
+  svg.i { width:18px; height:18px; flex:none; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* menu lateral */
+  .layout { display:grid; grid-template-columns:248px minmax(0, 1fr); min-height:100vh; }
+  nav { position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:2px; padding:18px 12px; border-right:1px solid var(--borda); background:rgba(10,11,14,.6); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); overflow-y:auto; z-index:3; }
+  .logo { display:flex; align-items:center; gap:10px; padding:4px 10px 18px; }
+  .logo img { height:34px; } .logo b { font-size:14px; letter-spacing:.14em; } .logo small { display:block; color:var(--sub); font:11px var(--mono); letter-spacing:0; }
+  nav button { display:flex; align-items:center; gap:12px; width:100%; background:none; border:1px solid transparent; color:var(--sub); padding:10px 12px; border-radius:12px; font:inherit; font-size:14.5px; cursor:pointer; text-align:left; }
+  nav button:hover:not([disabled]) { color:var(--txt); background:var(--card); }
+  nav button.ativo { color:var(--txt); background:var(--ouro2); border-color:rgba(226,179,80,.45); box-shadow:inset 3px 0 0 var(--ouro); }
+  nav .grupoMenu > button.titulo { color:var(--txt); }
+  nav .seta { margin-left:auto; width:16px; height:16px; transition:transform .15s; } nav .grupoMenu.fechado .seta { transform:rotate(-90deg); }
+  nav .sub-itens { margin:2px 0 6px 21px; padding-left:10px; border-left:1px solid var(--borda); } nav .grupoMenu.fechado .sub-itens { display:none; }
+  nav .sub-itens button { padding:8px 12px; font-size:14px; }
+  nav .secao { font:11px var(--mono); text-transform:uppercase; letter-spacing:.18em; color:var(--sub); margin:20px 12px 6px; }
+  nav button[disabled] { cursor:default; opacity:.5; }
+  nav .breve { margin-left:auto; font:10px var(--mono); letter-spacing:.06em; border:1px solid var(--borda2); border-radius:99px; padding:1px 7px; }
+  nav .rodape { margin-top:auto; padding-top:12px; border-top:1px solid var(--borda); }
+  nav .rodape a { display:flex; align-items:center; gap:12px; padding:10px 12px; color:var(--verm); text-decoration:none; border-radius:12px; font-size:14.5px; } nav .rodape a:hover { background:var(--card); }
+
+  /* topo */
+  .barraTopo { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 32px; border-bottom:1px solid var(--borda); position:sticky; top:0; z-index:2; background:rgba(8,9,11,.65); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
+  .eyebrow { font:12px var(--mono); letter-spacing:.2em; text-transform:uppercase; color:var(--sub); }
+  #menu { display:none; background:var(--card); border:1px solid var(--borda); color:var(--txt); border-radius:10px; padding:7px; cursor:pointer; }
+  .status { display:inline-flex; align-items:center; gap:8px; font-size:13px; padding:6px 12px; border:1px solid var(--borda); border-radius:99px; background:var(--card); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--amar); box-shadow:0 0 10px currentColor; color:var(--amar); } .dot.on { background:var(--verde); color:var(--verde); } .dot.off { background:var(--verm); color:var(--verm); }
+  main { max-width:1280px; width:100%; padding:28px 32px 48px; }
+  .cabeca { margin-bottom:24px; } .cabeca h1 { font-size:40px; line-height:1.1; letter-spacing:-.02em; margin:8px 0 6px; font-weight:700; } .cabeca p { color:var(--sub); margin:0; max-width:680px; font-size:16px; }
   section { display:none; } section.ativo { display:block; }
-  .card { background:var(--card); border:1px solid var(--borda); border-radius:12px; padding:16px; margin-bottom:14px; }
-  h2 { font-size:16px; margin:0 0 12px; }
-  label { display:block; font-size:13px; color:var(--sub); margin:10px 0 4px; }
-  input, select, textarea { width:100%; font:inherit; color:inherit; background:var(--bg); border:1px solid var(--borda); border-radius:8px; padding:9px 10px; }
-  textarea { min-height:120px; resize:vertical; font-family:ui-monospace, monospace; font-size:13px; }
-  .linha { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
-  .btn { font:inherit; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600; background:var(--borda); color:var(--txt); }
-  .btn.verde { background:var(--verde); color:#052e14; } .btn.verm { background:var(--verm); color:#fff; }
-  .badge { background:var(--verm); color:#fff; border-radius:99px; padding:0 7px; font-size:12px; margin-left:4px; }
-  .status { display:inline-flex; align-items:center; gap:8px; font-size:14px; }
-  .dot { width:10px; height:10px; border-radius:50%; background:var(--amar); } .dot.on { background:var(--verde); } .dot.off { background:var(--verm); }
-  .qr { background:#fff; padding:12px; border-radius:12px; width:280px; max-width:100%; }
-  .eventos div { padding:6px 0; border-bottom:1px solid var(--borda); font-size:13px; display:flex; gap:8px; }
-  .eventos time { color:var(--sub); flex:none; }
-  .tag { font-size:11px; padding:1px 7px; border-radius:99px; background:var(--borda); flex:none; height:fit-content; }
-  .tag.postado,.tag.ok { background:#14532d; } .tag.capturado { background:#1e3a8a; } .tag.vendido { background:#7c2d12; } .tag.erro { background:#7f1d1d; } .tag.aviso { background:#78350f; }
-  .anuncio { display:grid; grid-template-columns:minmax(0, 260px) 1fr; gap:16px; }
-  @media (max-width:640px) { .anuncio { grid-template-columns:1fr; } }
-  .fotos { display:flex; gap:6px; overflow-x:auto; } .fotos img { height:180px; border-radius:8px; }
-  pre { white-space:pre-wrap; background:var(--bg); border-radius:8px; padding:10px; font-size:13px; margin:0; }
-  .num { display:flex; gap:14px; flex-wrap:wrap; margin:8px 0; font-size:14px; } .num b { display:block; font-size:17px; }
-  .bom { color:var(--verde); } .ruim { color:var(--verm); } .sub { color:var(--sub); font-size:13px; }
-  table { width:100%; border-collapse:collapse; font-size:14px; } td, th { padding:8px 6px; border-bottom:1px solid var(--borda); text-align:left; }
-  .grupos { max-height:260px; overflow:auto; border:1px solid var(--borda); border-radius:8px; padding:6px 10px; }
-  .grupos label { display:flex; gap:8px; color:var(--txt); margin:6px 0; } .grupos input { width:auto; }
+
+  /* cartões de vidro */
+  .card { background:var(--card); border:1px solid var(--borda); border-radius:20px; padding:22px 24px; margin-bottom:16px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:inset 0 1px 0 rgba(255,255,255,.04); }
+  h2 { font-size:17px; margin:0 0 4px; font-weight:600; } .card > h2 + .sub, .cardTopo .sub { margin:0 0 16px; }
+  .cardTopo { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; } .cardTopo a, .link { color:var(--sub); font-size:14px; cursor:pointer; text-decoration:none; } .cardTopo a:hover { color:var(--txt); }
+  label { display:block; font-size:13px; color:var(--sub); margin:12px 0 5px; }
+  input, select, textarea { width:100%; font:inherit; color:inherit; background:rgba(0,0,0,.35); border:1px solid var(--borda); border-radius:10px; padding:10px 12px; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:rgba(226,179,80,.6); }
+  select option { background:#15171b; }
+  textarea { min-height:120px; resize:vertical; font-family:var(--mono); font-size:13px; }
+  .linha { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:12px; }
+  .btn { font:inherit; font-size:14px; border:1px solid var(--borda2); border-radius:10px; padding:9px 16px; cursor:pointer; font-weight:600; background:var(--card2); color:var(--txt); }
+  .btn:hover { background:rgba(255,255,255,.1); }
+  .btn.verde { background:var(--ouro); border-color:var(--ouro); color:#1a1405; } .btn.verde:hover { filter:brightness(1.08); }
+  .btn.verm { background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.4); color:var(--verm); }
+  .badge { background:var(--ouro); color:#1a1405; border-radius:7px; padding:0 7px; font-size:12px; font-weight:700; margin-left:auto; }
+  .qr { background:#fff; padding:12px; border-radius:14px; width:280px; max-width:100%; }
+  .eventos div { padding:9px 0; border-bottom:1px solid var(--borda); font-size:13.5px; display:flex; gap:10px; } .eventos div:last-child { border:0; }
+  .eventos time { color:var(--sub); flex:none; font:12px var(--mono); padding-top:2px; }
+  .tag { font:11px var(--mono); padding:2px 8px; border-radius:99px; border:1px solid var(--borda2); color:var(--sub); flex:none; height:fit-content; }
+  .tag.postado,.tag.ok { color:var(--verde); border-color:rgba(52,211,153,.4); } .tag.capturado { color:var(--azul); border-color:rgba(96,165,250,.4); } .tag.vendido { color:var(--ouro); border-color:rgba(226,179,80,.45); } .tag.erro { color:var(--verm); border-color:rgba(248,113,113,.45); } .tag.aviso { color:var(--amar); border-color:rgba(251,191,36,.4); }
+  .anuncio { display:grid; grid-template-columns:minmax(0, 280px) 1fr; gap:18px; }
+  .fotos { display:flex; gap:6px; overflow-x:auto; } .fotos img { height:180px; border-radius:10px; }
+  pre { white-space:pre-wrap; background:rgba(0,0,0,.35); border:1px solid var(--borda); border-radius:12px; padding:12px; font-size:13px; margin:0; }
+  .num { display:flex; gap:22px; flex-wrap:wrap; margin:8px 0; font-size:13px; } .num b { display:block; font-size:19px; }
+  .bom { color:var(--verde); } .ruim { color:var(--verm); } .sub { color:var(--sub); font-size:13.5px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; } td, th { padding:11px 8px; border-bottom:1px solid var(--borda); text-align:left; vertical-align:top; }
+  th { font:11px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--sub); font-weight:400; }
+  .grupos { max-height:280px; overflow:auto; border:1px solid var(--borda); border-radius:12px; padding:6px 12px; background:rgba(0,0,0,.2); }
+  .grupos label { display:flex; align-items:center; gap:8px; color:var(--txt); margin:8px 0; } .grupos input { width:auto; }
   .tbBuscas input { min-width:80px; } .tbBuscas td:first-child input { min-width:130px; }
-  .salvar { position:sticky; bottom:12px; text-align:right; }
+  .salvar { position:sticky; bottom:14px; text-align:right; }
+  details summary { cursor:pointer; }
+
+  /* painel */
+  .kpis { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; margin:12px 0 16px; }
+  .kpi { background:var(--card); border:1px solid var(--borda); border-radius:20px; padding:20px 22px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:inset 0 1px 0 rgba(255,255,255,.04); position:relative; overflow:hidden; }
+  .kpi .eyebrow { font-size:11.5px; } .kpi b { display:block; font-size:42px; line-height:1.1; letter-spacing:-.02em; margin:10px 0 4px; font-weight:700; } .kpi small { color:var(--sub); font-size:13px; }
+  .kpi b span.de { font-size:20px; color:var(--sub); font-weight:500; }
+  .meta { height:5px; background:rgba(255,255,255,.07); border-radius:99px; margin-top:12px; overflow:hidden; } .meta i { display:block; height:100%; background:var(--ouro); border-radius:99px; transition:width .4s; }
+  .grade { display:grid; grid-template-columns:minmax(0, 1.25fr) minmax(0, 1fr); gap:16px; } .grade .card { margin-bottom:16px; }
+  .etapa { display:grid; grid-template-columns:150px minmax(0, 1fr) 56px; align-items:center; gap:14px; margin:14px 0; font-size:15px; }
+  .etapa .nome { display:flex; align-items:center; gap:10px; } .etapa .nome::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--c); flex:none; }
+  .etapa .trilho { height:8px; background:rgba(255,255,255,.07); border-radius:99px; overflow:hidden; } .etapa .trilho i { display:block; height:100%; background:var(--c); border-radius:99px; min-width:3px; transition:width .4s; }
+  .etapa b { text-align:right; font:500 15px var(--mono); }
+  .barra { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:6px 12px; font-size:14px; margin:12px 0; }
+  .barra b { font:500 14px var(--mono); } .barra .trilho { grid-column:1 / -1; height:6px; background:rgba(255,255,255,.07); border-radius:99px; overflow:hidden; } .barra .trilho i { display:block; height:100%; background:var(--c, var(--azul)); border-radius:99px; }
+  .item { display:block; border:1px solid var(--borda); background:rgba(255,255,255,.02); border-radius:14px; padding:12px 16px; margin-bottom:10px; }
+  .item .linhaSup { display:flex; justify-content:space-between; gap:10px; font:12px var(--mono); color:var(--sub); letter-spacing:.04em; }
+  .item .titulo { font-weight:600; margin-top:4px; display:flex; justify-content:space-between; gap:10px; } .item .titulo > span { font:500 13px var(--mono); color:var(--ouro); white-space:nowrap; }
+  .grafico { display:grid; grid-template-columns:repeat(7, 1fr); gap:10px; align-items:end; height:190px; margin-top:8px; }
+  .grafico .col { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:6px; font:11px var(--mono); color:var(--sub); }
+  .grafico .barras { display:flex; align-items:flex-end; gap:4px; height:100%; width:100%; justify-content:center; }
+  .grafico .barras i { width:38%; max-width:22px; border-radius:6px 6px 2px 2px; min-height:3px; transition:height .4s; }
+  .grafico .p { background:linear-gradient(var(--ouro), rgba(226,179,80,.35)); } .grafico .c { background:linear-gradient(var(--azul), rgba(96,165,250,.3)); }
+  .legenda { display:flex; gap:16px; font-size:13px; color:var(--sub); } .legenda span { display:inline-flex; align-items:center; gap:7px; } .legenda span::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--c); }
+  .breves { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+  .breves .card { display:flex; gap:14px; align-items:flex-start; margin:0; } .breves svg.i { width:22px; height:22px; color:var(--ouro); margin-top:2px; }
+  .vazio { color:var(--sub); font-size:14px; padding:18px 0; }
+
+  @media (max-width:1100px) { .kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:1fr; } }
+  @media (max-width:820px) {
+    .layout { grid-template-columns:1fr; } #menu { display:inline-flex; }
+    nav { position:fixed; inset:0 auto 0 0; width:270px; transform:translateX(-100%); transition:transform .2s; background:rgba(10,11,14,.92); }
+    body.menuAberto nav { transform:none; box-shadow:0 0 0 100vmax rgba(0,0,0,.5); }
+    .barraTopo { padding:12px 16px; } main { padding:20px 16px 40px; } .cabeca h1 { font-size:30px; }
+    .kpi b { font-size:32px; } .kpi { padding:16px; } .soPc { display:none; }
+    .etapa { grid-template-columns:100px minmax(0, 1fr) 44px; gap:10px; }
+    .anuncio { grid-template-columns:1fr; }
+  }
 </style>
 </head>
 <body>
-<header><span class="marca"><button id="menu" aria-label="Menu">☰</button><img src="/marca.png" alt="Choice Cars" style="height:40px;display:block"><b>GESTÃO CHOICE</b></span><span class="status"><span class="dot" id="dot"></span><span id="statusTxt">…</span><span class="soPc"> · <span class="sub" id="versao"></span></span> · <a href="/sair" style="color:var(--sub)">sair</a></span></header>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-painel" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+  <symbol id="i-grupos" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="i-inicio" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-aprovar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></symbol>
+  <symbol id="i-historico" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+  <symbol id="i-buscas" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-testar" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 14h9"/></symbol>
+  <symbol id="i-config" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-instagram" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6"/></symbol>
+  <symbol id="i-leads" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-metas" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></symbol>
+  <symbol id="i-sair" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></symbol>
+  <symbol id="i-seta" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+</svg>
 <div class="layout">
 <nav>
-  <button data-aba="painel" class="ativo">📊 Painel</button>
+  <div class="logo"><img src="/marca.png" alt="Choice Cars"><div><b>GESTÃO</b><small id="versao"></small></div></div>
+  <button data-aba="painel" class="ativo"><svg class="i"><use href="#i-painel"/></svg>Painel</button>
   <div class="grupoMenu" id="menuGrupos">
-    <button class="titulo" id="abrirGrupos">💬 Grupos <span class="seta">▾</span></button>
+    <button class="titulo" id="abrirGrupos"><svg class="i"><use href="#i-grupos"/></svg>Grupos <svg class="i seta"><use href="#i-seta"/></svg></button>
     <div class="sub-itens">
       <button data-aba="inicio">Início</button>
       <button data-aba="aprovar">Aprovar <span class="badge" id="nPend" hidden></span></button>
@@ -88,37 +151,48 @@
     </div>
   </div>
   <div class="secao">Em breve</div>
-  <button disabled>📸 Instagram <span class="breve">em breve</span></button>
-  <button disabled>🎯 Leads <span class="breve">em breve</span></button>
-  <button disabled>🏆 Metas <span class="breve">em breve</span></button>
+  <button disabled><svg class="i"><use href="#i-instagram"/></svg>Instagram <span class="breve">breve</span></button>
+  <button disabled><svg class="i"><use href="#i-leads"/></svg>Leads <span class="breve">breve</span></button>
+  <button disabled><svg class="i"><use href="#i-metas"/></svg>Metas <span class="breve">breve</span></button>
+  <div class="rodape"><a href="/sair"><svg class="i"><use href="#i-sair"/></svg>Sair</a></div>
 </nav>
+<div>
+<div class="barraTopo">
+  <div style="display:flex;align-items:center;gap:12px"><button id="menu" aria-label="Menu"><svg class="i"><use href="#i-menu"/></svg></button><span class="eyebrow">Gestão Choice</span></div>
+  <span class="status"><span class="dot" id="dot"></span><span id="statusTxt">…</span></span>
+</div>
 <main>
+<div class="cabeca"><div class="eyebrow" id="tEyebrow"></div><h1 id="tTitulo">Painel</h1><p id="tSub"></p></div>
 
 <section id="painel" class="ativo">
-  <p class="sub" style="margin-top:0">Hoje, <span id="pDia"></span> · atualiza sozinho</p>
+  <div class="eyebrow">Hoje</div>
   <div class="kpis">
-    <div class="kpi"><span>Postados hoje</span><b id="kPost">0</b><small id="kPostMeta"></small><div class="meta"><i id="kPostBarra" style="width:0"></i></div></div>
-    <div class="kpi"><span>Cliques no WhatsApp hoje</span><b id="kClq">0</b><small id="kClqMedia"></small></div>
-    <div class="kpi"><span>Anúncios lidos hoje</span><b id="kLidos">0</b><small id="kAprov"></small></div>
-    <div class="kpi"><span>Vendidos (aviso dos grupos)</span><b id="kVend">0</b><small>hoje</small></div>
-    <div class="kpi"><span>WhatsApp do robô</span><b id="kCon" style="font-size:18px;margin-top:10px">…</b><small id="kPend"></small></div>
+    <div class="kpi"><div class="eyebrow">Postados</div><b><span id="kPost">0</span><span class="de" id="kPostMeta"></span></b><small id="kPostTxt">no grupo hoje</small><div class="meta"><i id="kPostBarra" style="width:0"></i></div></div>
+    <div class="kpi"><div class="eyebrow">Cliques no WhatsApp</div><b id="kClq">0</b><small id="kClqMedia">clientes que chamaram</small></div>
+    <div class="kpi"><div class="eyebrow">Anúncios lidos</div><b id="kLidos">0</b><small id="kAprov">nos grupos de repasse</small></div>
+    <div class="kpi"><div class="eyebrow">Vendidos nos grupos</div><b id="kVend">0</b><small>avisos de venda dos nossos posts</small></div>
   </div>
-  <div class="card"><h2>Últimos 7 dias</h2>
-    <div class="sub">Barras = postados · número de cima = cliques</div>
-    <div class="semana" id="pSemana"></div>
+  <div class="grade">
+    <div class="card"><h2>Funil do dia</h2><p class="sub">Do anúncio que chega no grupo de repasse até o cliente que chama a loja.</p><div id="pFunil"></div></div>
+    <div class="card"><div class="cardTopo"><div><h2>Últimos postados</h2><p class="sub">Cliques de cada post no "Chame no WhatsApp".</p></div><a data-ir="historico">Ver histórico</a></div><div id="pUltimos"></div></div>
   </div>
-  <div class="duas">
-    <div class="card"><h2>Mais clicados</h2><div id="pClicados"></div></div>
-    <div class="card"><h2>Por que ficaram de fora hoje</h2><div id="pIgnorados"></div></div>
+  <div class="grade">
+    <div class="card"><div class="cardTopo"><div><h2>Últimos 7 dias</h2><p class="sub">Posts e cliques por dia.</p></div><div class="legenda"><span style="--c:var(--ouro)">Postados</span><span style="--c:var(--azul)">Cliques</span></div></div><div class="grafico" id="pSemana"></div></div>
+    <div class="card"><h2>Por que ficaram de fora hoje</h2><p class="sub">Anúncios lidos que o robô não postou.</p><div id="pIgnorados"></div></div>
   </div>
-  <div class="duas">
-    <div class="card"><h2>De onde vêm (7 dias)</h2><div id="pGrupos"></div></div>
-    <div class="card breveCard"><h2>📸 Instagram · 🎯 Leads · 🏆 Metas <span class="breve tag">em breve</span></h2>
-      <p class="sub">Aqui vão entrar os números do Instagram (alcance, seguidores, mensagens), os leads de Mercado Livre, Webmotors, Napista e Facebook, e as metas do dia — tudo no mesmo painel.</p></div>
+  <div class="grade">
+    <div class="card"><h2>De onde vêm</h2><p class="sub">Posts por grupo de repasse nos últimos 7 dias.</p><div id="pGrupos"></div></div>
+    <div class="card"><h2>Mais clicados</h2><p class="sub">Carros que mais geraram conversa.</p><div id="pClicados"></div></div>
+  </div>
+  <div class="eyebrow" style="margin:8px 0 12px">Próximas integrações</div>
+  <div class="breves">
+    <div class="card"><svg class="i"><use href="#i-instagram"/></svg><div><h2>Instagram</h2><p class="sub" style="margin:0">Alcance, seguidores e mensagens do @choicecarsbr.</p></div></div>
+    <div class="card"><svg class="i"><use href="#i-leads"/></svg><div><h2>Leads</h2><p class="sub" style="margin:0">Mercado Livre, Webmotors, Napista e Facebook num lugar só.</p></div></div>
+    <div class="card"><svg class="i"><use href="#i-metas"/></svg><div><h2>Metas</h2><p class="sub" style="margin:0">Meta do dia por canal, com o quanto falta.</p></div></div>
   </div>
 </section>
 
-<section id="inicio" class="ativo">
+<section id="inicio">
   <div class="card" id="cardQr" hidden>
     <h2>Conectar o WhatsApp</h2>
     <p class="sub">No celular que participa dos grupos: WhatsApp → Aparelhos conectados → Conectar aparelho → aponte para o código.</p>
@@ -273,6 +347,7 @@
   <div style="overflow-x:auto"><table><thead><tr><th>Código</th><th>Chegou</th><th>Carro</th><th>Custo</th><th>Venda</th><th>FIPE</th><th>Cliques</th><th>Origem</th></tr></thead><tbody id="tbHist"></tbody></table></div></div></section>
 </main>
 </div>
+</div>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -290,6 +365,15 @@ async function api(url, opts = {}) {
 let cfg = null;
 
 // Abas
+const TITULOS = {
+  painel: ['Painel', 'A operação num olhar: o que chegou dos grupos de repasse, o que foi postado e quem chamou a loja.'],
+  inicio: ['Início', 'Conexão do WhatsApp e o que o robô está fazendo agora.'],
+  aprovar: ['Aprovar', 'Carros capturados esperando sua decisão.'],
+  historico: ['Histórico', 'Tudo que foi postado, com código, origem e cliques.'],
+  buscas: ['O que buscamos', 'Regras que decidem quais carros vão para o grupo.'],
+  testar: ['Testar anúncio', 'Cole um anúncio e veja o que o robô faria com ele.'],
+  config: ['Configurações', 'Conexão, grupos, loja, margem, logo e texto do post.'],
+};
 function abrirAba(aba) {
   const b = document.querySelector(`nav button[data-aba="${aba}"]`);
   if (!b) return;
@@ -298,9 +382,13 @@ function abrirAba(aba) {
   if (b.closest('#menuGrupos')) $('#menuGrupos').classList.remove('fechado');
   document.body.classList.remove('menuAberto'); scrollTo(0, 0);
   try { localStorage.setItem('aba', aba); } catch {}
+  const [titulo, sub] = TITULOS[aba];
+  $('#tEyebrow').textContent = aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
+  $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
   ({ painel: carregarPainel, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
+document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
 $('#abrirGrupos').onclick = () => $('#menuGrupos').classList.toggle('fechado');
 $('#menu').onclick = () => document.body.classList.toggle('menuAberto');
 
@@ -309,13 +397,12 @@ async function atualizarEstado() {
   const e = await api('/api/estado');
   const nomes = { conectado: 'Conectado', 'aguardando-qr': 'Escaneie o QR', desconectado: 'Reconectando…', iniciando: 'Iniciando…' };
   $('#statusTxt').textContent = nomes[e.status] || e.status;
-  $('#versao').textContent = 'versão ' + (e.versao || '?');
+  $('#versao').textContent = 'v ' + (e.versao || '?').split(' ')[0];
   $('#dot').className = 'dot ' + (e.status === 'conectado' ? 'on' : e.status === 'desconectado' ? 'off' : '');
   $('#cardQr').hidden = !e.qr; if (e.qr) $('#qr').src = e.qr;
   $('#numero').textContent = $('#cfgNumero').textContent = e.numero || '—';
   $('#cfgVersao').textContent = 'versão ' + (e.versao || '?');
-  $('#kCon').textContent = nomes[e.status] || e.status; $('#kCon').className = e.status === 'conectado' ? 'bom' : 'ruim';
-  $('#kPend').textContent = e.pendentes ? e.pendentes + ' aguardando aprovação' : '';
+
   $('#resPend').textContent = e.pendentes; $('#resPost').textContent = e.postados;
   $('#nPend').hidden = !e.pendentes; $('#nPend').textContent = e.pendentes;
   $('#eventos').innerHTML = e.eventos.map((v) => `<div><time>${hora(v.quando)}</time><span class="tag ${esc(v.tipo)}">${esc(v.tipo)}</span><span>${esc(v.texto)}</span></div>`).join('') || '<span class="sub">Nada ainda.</span>';
@@ -383,7 +470,7 @@ function lerConfig() {
 }
 document.querySelectorAll('.salvarCfg').forEach((b) => b.onclick = async () => {
   lerConfig(); cfg = await api('/api/config', { method:'POST', body: JSON.stringify(cfg) });
-  b.textContent = 'Salvo ✓'; setTimeout(() => b.textContent = 'Salvar', 1500);
+  b.textContent = 'Salvo'; setTimeout(() => b.textContent = 'Salvar', 1500);
   $('#previaLogo').src = '/api/logo/previa?' + Date.now();
 });
 
@@ -391,7 +478,7 @@ function desenharBuscas() {
   $('#tbBuscas').innerHTML = cfg.buscas.map((b) => linhaBusca(b)).join('');
   ligarRemover();
 }
-const linhaBusca = (b = {}) => `<tr><td><input value="${esc(b.modelo || '')}" placeholder="ex: onix"></td><td><input type="number" value="${b.anoMin || ''}"></td><td><input type="number" value="${b.anoMax || ''}"></td><td><input type="number" value="${b.precoMax || ''}"></td><td><input type="number" value="${b.kmMax || ''}"></td><td><button class="btn rm">✕</button></td></tr>`;
+const linhaBusca = (b = {}) => `<tr><td><input value="${esc(b.modelo || '')}" placeholder="ex: onix"></td><td><input type="number" value="${b.anoMin || ''}"></td><td><input type="number" value="${b.anoMax || ''}"></td><td><input type="number" value="${b.precoMax || ''}"></td><td><input type="number" value="${b.kmMax || ''}"></td><td><button class="btn rm">Remover</button></td></tr>`;
 const ligarRemover = () => document.querySelectorAll('#tbBuscas .rm').forEach((b) => b.onclick = () => b.closest('tr').remove());
 $('#addBusca').onclick = () => { $('#tbBuscas').insertAdjacentHTML('beforeend', linhaBusca()); ligarRemover(); };
 
@@ -423,7 +510,7 @@ $('#arqLogo').onchange = async (ev) => {
 $('#btnTestar').onclick = async () => {
   const r = await api('/api/testar', { method:'POST', body: JSON.stringify({ texto: $('#txtTeste').value }) });
   const c = r.carro;
-  $('#resTeste').innerHTML = `<p class="${r.aprovado ? 'bom' : 'ruim'}"><b>${r.aprovado ? '✓ Seria capturado' : '✕ Seria ignorado: ' + esc(r.motivo)}</b></p>
+  $('#resTeste').innerHTML = `<p class="${r.aprovado ? 'bom' : 'ruim'}"><b>${r.aprovado ? 'Seria capturado' : 'Seria ignorado: ' + esc(r.motivo)}</b></p>
     <div class="num"><div><span class="sub">Modelo</span><b>${esc(c.modelo || '?')}</b></div><div><span class="sub">Ano</span><b>${esc(c.ano || '?')}</b></div><div><span class="sub">KM</span><b>${esc(c.km || '?')}</b></div>
     <div><span class="sub">Custo</span><b>${reais(c.preco)}</b></div><div><span class="sub">FIPE</span><b>${reais(c.fipe)}</b></div><div><span class="sub">Abaixo FIPE</span><b>${r.desconto ?? '?'}%</b></div><div><span class="sub">Venda</span><b>${reais(r.precoVenda)}</b></div></div>
     ${c.fipeVersao ? `<p class="sub">FIPE usada: ${esc(c.fipeVersao)}</p>` : ''}${c.fipeErro ? `<p class="ruim">Erro FIPE: ${esc(c.fipeErro)}</p>` : ''}${c.fipeMotivo ? `<p class="ruim">FIPE não encontrada: ${esc(c.fipeMotivo)}</p>` : ''}
@@ -451,31 +538,42 @@ function desenharHistorico() {
 $('#buscaHist').oninput = desenharHistorico;
 
 // Painel
-const barras = (lista, cls = '') => {
+const num = (n) => Number(n || 0).toLocaleString('pt-BR');
+const barras = (lista, cor = 'var(--azul)') => {
   const max = Math.max(1, ...lista.map((x) => x[1]));
-  return lista.map(([nome, v, extra]) => `<div class="barra ${cls}"><span>${esc(nome)}</span><b>${v}${extra ? ' <span class="sub">' + esc(extra) + '</span>' : ''}</b><div class="trilho"><i style="width:${(v / max) * 100}%"></i></div></div>`).join('');
+  return lista.map(([nome, v, extra]) => `<div class="barra" style="--c:${cor}"><span>${esc(nome)}${extra ? ' <span class="sub">' + esc(extra) + '</span>' : ''}</span><b>${num(v)}</b><div class="trilho"><i style="width:${(v / max) * 100}%"></i></div></div>`).join('');
 };
+function haQuanto(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? 'agora' : m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : `há ${Math.round(m / 1440)} d`;
+}
 async function carregarPainel() {
   const p = await api('/api/painel');
   const h = p.hoje;
-  const [a, m, d] = h.dia.split('-'); $('#pDia').textContent = `${d}/${m}/${a}`;
-  $('#kPost').textContent = h.postados;
-  $('#kPostMeta').textContent = p.limiteDiario ? `de ${p.limiteDiario} por dia` : 'sem limite diário';
+  $('#kPost').textContent = num(h.postados);
+  $('#kPostMeta').textContent = p.limiteDiario ? ` / ${p.limiteDiario}` : '';
   $('#kPostBarra').style.width = p.limiteDiario ? Math.min(100, (h.postados / p.limiteDiario) * 100) + '%' : '0';
-  $('#kClq').textContent = h.cliques;
-  $('#kClqMedia').textContent = h.postados ? (h.cliques / h.postados).toFixed(1).replace('.', ',') + ' por post' : '';
-  $('#kLidos').textContent = h.lidos;
-  $('#kAprov').textContent = h.lidos ? `${Math.round((h.postados / h.lidos) * 100)}% viraram post` : '';
-  $('#kVend').textContent = h.vendidos || 0;
-  const maxS = Math.max(1, ...p.ultimos.map((x) => x.postados));
-  $('#pSemana').innerHTML = p.ultimos.map((x) => `<div><b title="cliques">${x.cliques}</b><i style="height:${(x.postados / maxS) * 100}%" title="${x.postados} postados"></i><span>${x.dia.slice(8)}/${x.dia.slice(5, 7)}</span><span>${x.postados}</span></div>`).join('');
-  $('#pClicados').innerHTML = p.maisClicados.length
-    ? barras(p.maisClicados.map((l) => [`${l.modelo} ${l.ano || ''}`, l.cliques, l.codigo]))
-    : '<p class="sub">Ainda sem cliques. O contador vale para os posts feitos a partir de agora: cada toque em "Chame no WhatsApp" aparece aqui.</p>';
+  $('#kPostTxt').textContent = p.limiteDiario ? (h.postados >= p.limiteDiario ? 'limite do dia atingido' : `faltam ${p.limiteDiario - h.postados} para o limite do dia`) : 'no grupo hoje';
+  $('#kClq').textContent = num(h.cliques);
+  $('#kClqMedia').textContent = h.postados ? `${(h.cliques / h.postados).toFixed(1).replace('.', ',')} por post` : 'clientes que chamaram';
+  $('#kLidos').textContent = num(h.lidos);
+  $('#kAprov').textContent = h.lidos ? `${Math.round((h.postados / h.lidos) * 100)}% viraram post` : 'nos grupos de repasse';
+  $('#kVend').textContent = num(h.vendidos);
   const ign = Object.entries(h.ignorados || {}).sort((x, y) => y[1] - x[1]);
-  $('#pIgnorados').innerHTML = ign.length ? barras(ign, 'amarela') : '<p class="sub">Nada descartado hoje.</p>';
-  const gr = Object.entries(p.grupos7dias).map(([g, v]) => [g, v.postados, `de ${v.lidos} lidos`]).sort((x, y) => y[1] - x[1]);
-  $('#pGrupos').innerHTML = gr.length ? barras(gr) : '<p class="sub">Sem dados ainda.</p>';
+  const totalIgn = ign.reduce((a, x) => a + x[1], 0);
+  const funil = [['Lidos', h.lidos, 'var(--azul)'], ['Descartados', totalIgn, 'var(--amar)'], ['Postados', h.postados, 'var(--ouro)'], ['Cliques', h.cliques, 'var(--verde)'], ['Vendidos', h.vendidos || 0, '#e5e7eb']];
+  const maxF = Math.max(1, ...funil.map((x) => x[1]));
+  $('#pFunil').innerHTML = funil.map(([n, v, c]) => `<div class="etapa" style="--c:${c}"><span class="nome">${n}</span><div class="trilho"><i style="width:${(v / maxF) * 100}%"></i></div><b>${num(v)}</b></div>`).join('');
+  $('#pUltimos').innerHTML = p.ultimosPosts.length ? p.ultimosPosts.map((x) => `<div class="item"><div class="linhaSup"><span>${esc(x.codigo || '—')} · ${esc(x.grupo || '')}</span><span>${haQuanto(x.quando)}</span></div>
+    <div class="titulo"><div>${esc(x.modelo)} ${esc(x.ano || '')} <span class="sub" style="font-weight:400">· ${reais(x.venda)}</span>${x.vendido ? ' <span class="tag vendido">vendido</span>' : ''}</div><span>${x.cliques == null ? '—' : num(x.cliques) + (x.cliques === 1 ? ' clique' : ' cliques')}</span></div></div>`).join('')
+    : '<div class="vazio">Nenhum post ainda.</div>';
+  const maxS = Math.max(1, ...p.ultimos.flatMap((x) => [x.postados, x.cliques]));
+  $('#pSemana').innerHTML = p.ultimos.map((x) => `<div class="col"><div class="barras"><i class="p" style="height:${(x.postados / maxS) * 100}%" title="${x.postados} postados"></i><i class="c" style="height:${(x.cliques / maxS) * 100}%" title="${x.cliques} cliques"></i></div><span>${x.dia.slice(8)}/${x.dia.slice(5, 7)}</span></div>`).join('');
+  $('#pIgnorados').innerHTML = ign.length ? barras(ign, 'var(--amar)') : '<div class="vazio">Nada descartado hoje.</div>';
+  const gr = Object.entries(p.grupos7dias).map(([g, v]) => [g, v.postados, `de ${num(v.lidos)} lidos`]).sort((x, y) => y[1] - x[1]);
+  $('#pGrupos').innerHTML = gr.length ? barras(gr, 'var(--ouro)') : '<div class="vazio">Sem dados ainda.</div>';
+  $('#pClicados').innerHTML = p.maisClicados.length ? barras(p.maisClicados.map((l) => [`${l.modelo} ${l.ano || ''}`, l.cliques, l.codigo]), 'var(--verde)')
+    : '<div class="vazio">Ainda sem cliques. Conta a partir dos posts feitos depois da atualização.</div>';
 }
 setInterval(() => $('#painel').classList.contains('ativo') && carregarPainel().catch(() => {}), 15000);
 
