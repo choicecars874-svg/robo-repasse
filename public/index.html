@@ -133,11 +133,8 @@
       <div><label>Cidade</label><input data-c="loja.cidade"></div>
     </div>
     <label>Mensagem que o cliente manda ao clicar no link</label><input data-c="loja.mensagemLink">
-    <label>Instagram</label><input data-c="loja.instagram">
-    <div class="linha">
-      <div><label>Endereço</label><input data-c="loja.endereco"></div>
-      <div><label>Link do Google Maps</label><input data-c="loja.maps"></div>
-    </div>
+    <label>Instagram (link do perfil — no post aparece como @perfil)</label><input data-c="loja.instagram">
+    <label>Endereço</label><input data-c="loja.endereco">
   </div>
   <div class="card">
     <h2>Margem e postagem</h2>
@@ -165,7 +162,7 @@
   </div>
   <div class="card">
     <h2>Modelo do anúncio</h2>
-    <p class="sub">Campos: {modelo} {blindado} {ano} {km} {combustivel} {cambio} {cor} {destaques} {afazer} {preco} {fipe} {web} {abaixoFipe} {loja} {link} {instagram} {endereco} {maps}. Linha com campo vazio some sozinha.</p>
+    <p class="sub">Campos: {modelo} {blindado} {ano} {km} {combustivel} {cambio} {cor} {destaques} {afazer} {preco} {fipe} {web} {abaixoFipe} {loja} {link} {instagram} {endereco} {codigo}. Linha com campo vazio some sozinha.</p>
     <textarea data-c="modelo" style="min-height:280px"></textarea>
   </div>
   <div class="card">
@@ -197,7 +194,10 @@
   </div>
 </section>
 
-<section id="historico"><div class="card"><h2>Postados</h2><table><thead><tr><th>Quando</th><th>Carro</th><th>Custo</th><th>Venda</th><th>FIPE</th><th>Origem</th></tr></thead><tbody id="tbHist"></tbody></table></div></section>
+<section id="historico"><div class="card"><h2>Postados</h2>
+  <input id="buscaHist" placeholder="Buscar pelo código do post (ex.: DR1001) ou pelo carro" style="margin-bottom:10px">
+  <p class="sub">O código no fim de cada post = sigla do grupo de origem + horário em que o anúncio chegou. Clique em "ver original" para ver o anúncio como veio do grupo.</p>
+  <div style="overflow-x:auto"><table><thead><tr><th>Código</th><th>Chegou</th><th>Carro</th><th>Custo</th><th>Venda</th><th>FIPE</th><th>Origem</th></tr></thead><tbody id="tbHist"></tbody></table></div></div></section>
 </main>
 
 <script>
@@ -289,8 +289,12 @@ function lerConfig() {
     const [m, a1, a2, p, k] = [...tr.querySelectorAll('input')].map((i) => i.value);
     return { modelo: m.trim(), anoMin: +a1 || 0, anoMax: +a2 || 0, precoMax: +p || 0, kmMax: +k || 0 };
   }).filter((b) => b.modelo);
-  const origem = [...document.querySelectorAll('#gOrigem input:checked')].map((i) => i.value);
-  if ($('#gOrigem input')) { cfg.gruposOrigem = origem; cfg.grupoDestino = $('#gDestino').value; }
+  const origem = [...document.querySelectorAll('#gOrigem input[type=checkbox]:checked')].map((i) => i.value);
+  if ($('#gOrigem input')) {
+    cfg.gruposOrigem = origem;
+    cfg.grupoDestino = $('#gDestino').value;
+    cfg.siglas = Object.fromEntries([...document.querySelectorAll('#gOrigem input.sigla')].filter((i) => i.value.trim()).map((i) => [i.dataset.jid, i.value.trim().toUpperCase()]));
+  }
 }
 document.querySelectorAll('.salvarCfg').forEach((b) => b.onclick = async () => {
   lerConfig(); cfg = await api('/api/config', { method:'POST', body: JSON.stringify(cfg) });
@@ -308,7 +312,8 @@ $('#addBusca').onclick = () => { $('#tbBuscas').insertAdjacentHTML('beforeend', 
 
 function desenharGrupos(grupos) {
   if (!grupos.length) return;
-  $('#gOrigem').innerHTML = grupos.map((g) => `<label><input type="checkbox" value="${esc(g.id)}" ${cfg.gruposOrigem.includes(g.id) ? 'checked' : ''}>${esc(g.nome)} <span class="sub">· ${g.membros} membros${g.tipo ? ' · ' + esc(g.tipo) : ''}</span></label>`).join('');
+  $('#gOrigem').innerHTML = grupos.map((g) => `<label><input type="checkbox" value="${esc(g.id)}" ${cfg.gruposOrigem.includes(g.id) ? 'checked' : ''}>${esc(g.nome)} <span class="sub">· ${g.membros} membros${g.tipo ? ' · ' + esc(g.tipo) : ''}</span>
+    <input class="sigla" data-jid="${esc(g.id)}" maxlength="4" title="Sigla no código do post (ex.: DR)" placeholder="${esc(g.sigla || '')}" value="${esc((cfg.siglas || {})[g.id] || '')}" style="width:58px;margin-left:auto;padding:2px 6px"></label>`).join('');
   $('#gDestino').innerHTML = '<option value="">— escolha —</option>' + grupos.map((g) => `<option value="${esc(g.id)}" ${cfg.grupoDestino === g.id ? 'selected' : ''}>${esc(g.nome)} · ${g.membros} membros${g.tipo ? ' · ' + esc(g.tipo) : ''}</option>`).join('');
 }
 $('#btnTesteEnvio').onclick = async () => {
@@ -340,10 +345,23 @@ $('#btnTestar').onclick = async () => {
     <pre>${esc(r.texto)}</pre>`;
 };
 
+let historicoCache = [];
 async function carregarHistorico() {
-  const h = await api('/api/historico');
-  $('#tbHist').innerHTML = h.map((p) => `<tr><td>${hora(p.quando)}</td><td>${esc(p.modelo)} ${esc(p.ano || '')}${p.vendido ? ' <span class="tag vendido">vendido</span>' : ''}</td><td>${reais(p.custo)}</td><td>${reais(p.venda)}</td><td>${reais(p.fipe)}</td><td class="sub">${esc(p.origem?.grupo)}<br>${esc(p.origem?.vendedor || '')}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Nada postado ainda.</td></tr>';
+  historicoCache = await api('/api/historico');
+  desenharHistorico();
 }
+function desenharHistorico() {
+  const q = $('#buscaHist').value.trim().toLowerCase().replace('#', '');
+  const lista = historicoCache.filter((p) => !q || `${p.codigo || ''} ${p.modelo} ${p.ano || ''} ${p.origem?.grupo || ''}`.toLowerCase().replace(/#/g, '').includes(q));
+  $('#tbHist').innerHTML = lista.map((p) => `<tr>
+    <td><b>${esc(p.codigo || '—')}</b></td>
+    <td>${p.origem?.recebidoEm ? hora(p.origem.recebidoEm) : '—'}<br><span class="sub">postado ${hora(p.quando)}</span></td>
+    <td>${esc(p.modelo)} ${esc(p.ano || '')}${p.vendido ? ' <span class="tag vendido">vendido</span>' : ''}
+      ${p.textoOriginal ? `<details><summary class="sub">ver original</summary><pre>${esc(p.textoOriginal)}</pre></details>` : ''}</td>
+    <td>${reais(p.custo)}</td><td>${reais(p.venda)}</td><td>${reais(p.fipe)}</td>
+    <td class="sub">${esc(p.origem?.grupo)}<br>${esc(p.origem?.vendedor || '')}</td></tr>`).join('') || '<tr><td colspan="7" class="sub">Nada encontrado.</td></tr>';
+}
+$('#buscaHist').oninput = desenharHistorico;
 
 carregarConfig();
 </script>

@@ -179,6 +179,7 @@ async function atualizarGrupos() {
       id: x.id,
       nome: x.subject,
       membros: x.size || x.participants?.length || 0,
+      sigla: siglaGrupo(x.id, x.subject),
       // grupos de Comunidade aparecem com o mesmo nome: diferencia para não confundir
       tipo: x.isCommunity ? 'comunidade (não recebe posts)' : x.isCommunityAnnounce ? 'avisos da comunidade' : x.announce ? 'só admins enviam' : '',
     }))
@@ -195,7 +196,7 @@ async function receber(m) {
   const cfg = config.get();
   const chave = `${m.key.remoteJid}|${m.key.participant || ''}`;
   const quando = Number(m.messageTimestamp) * 1000 || Date.now();
-  const novo = () => ({ grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], ids: [], tTexto: null, timer: null });
+  const novo = () => ({ grupo: m.key.remoteJid, vendedor: m.key.participantAlt || m.key.participant, fotos: [], textos: [], ids: [], tTexto: null, t0: quando, timer: null });
   const fechar = (b) => {
     clearTimeout(b.timer);
     if (buffers.get(chave) === b) buffers.delete(chave);
@@ -256,7 +257,28 @@ function postadosHoje() {
   return historico.postados.filter((p) => diaSP(p.quando) === hoje).length + naFila;
 }
 
-async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [] }) {
+// Código de origem no fim do post: sigla do grupo + hora em que o anúncio chegou. Ex.: #DR1001 = Danilo Repasse, 10:01
+const PALAVRAS_SEM_SIGLA = new Set(['repasse', 'repasses', 'grupo', 'de', 'do', 'da', 'dos', 'das', 'sp', 'rj', 'mg', 'oficial', 'intermediacoes', 'intermediacao', 'automotive', 'veiculos', 'carros', 'multimarcas', 'the']);
+function siglaAutomatica(nome, letras = 1) {
+  const palavra = normalizar(nome).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).find((w) => w && !PALAVRAS_SEM_SIGLA.has(w));
+  return `${palavra ? palavra.slice(0, letras) : 'X'}R`.toUpperCase();
+}
+function siglaGrupo(jid, nome = nomeGrupo(jid)) {
+  const cfg = config.get();
+  const manual = cfg.siglas?.[jid];
+  if (manual) return manual.toUpperCase();
+  const curta = siglaAutomatica(nome);
+  // duas origens com a mesma sigla (ex.: Carol e REPASSE CHOICE = "CR"): a que vem depois na lista usa 2 letras ("CHR")
+  const antes = cfg.gruposOrigem.slice(0, Math.max(0, cfg.gruposOrigem.indexOf(jid)));
+  const conflito = antes.some((outro) => (cfg.siglas?.[outro] || siglaAutomatica(nomeGrupo(outro))).toUpperCase() === curta);
+  return conflito ? siglaAutomatica(nome, 2) : curta;
+}
+function codigoOrigem(jid, quando) {
+  const hhmm = new Date(quando).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }).replace(':', '');
+  return `#${siglaGrupo(jid)}${hhmm}`;
+}
+
+async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [], t0 = Date.now() }) {
   const cfg = config.get();
   const fotos = (await Promise.all(downloads.map((f) => f.p))).filter(Boolean);
   const falharam = downloads.length - fotos.length;
@@ -299,7 +321,7 @@ async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [] }
     desconto: descontoFipe(carro, cfg),
     precoVenda: aplicarMargem(carro.preco, cfg.margem),
     fotos: arquivos,
-    origem: { grupo: nomeGrupo(grupo), vendedor: vendedor?.split('@')[0] || null, grupoJid: grupo, vendedorJid: vendedor, ids },
+    origem: { grupo: nomeGrupo(grupo), vendedor: vendedor?.split('@')[0] || null, grupoJid: grupo, vendedorJid: vendedor, ids, recebidoEm: t0, codigo: codigoOrigem(grupo, t0) },
   };
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(item));
   pendentes.set(id, item);
@@ -334,6 +356,7 @@ function aprovar(id, precoVenda) {
   fila = fila.then(async () => {
     const cfg = config.get();
     if (!cfg.grupoDestino) throw new Error('Grupo de destino não configurado');
+    item.carro.codigo = item.origem.codigo;
     const texto = montarTexto(item.carro, cfg, item.precoVenda);
     const msg = await enviar(cfg.grupoDestino, item.fotos.map((f) => path.join(dir, f)), texto);
     historico.chaves = [...historico.chaves, chaveCarro(item.carro)].slice(-3000);
@@ -346,6 +369,8 @@ function aprovar(id, precoVenda) {
         venda: item.precoVenda,
         fipe: item.carro.fipe,
         origem: item.origem,
+        codigo: item.origem.codigo,
+        textoOriginal: (item.carro.textoOriginal || '').slice(0, 2000),
         // para responder "VENDIDO" em cima do nosso post quando o vendedor avisar
         nosso: msg?.key ? { key: msg.key, texto: texto.slice(0, 300), grupo: cfg.grupoDestino } : null,
       },
@@ -468,7 +493,7 @@ async function enviarTeste(jid) {
 
 module.exports = {
   receber, // usado nos testes
-  _teste: { usarSocket: (s) => (sock = s), tratarVendido },
+  _teste: { usarSocket: (s) => (sock = s), tratarVendido, siglaGrupo },
   diagnostico,
   iniciar,
   enviarTeste,
