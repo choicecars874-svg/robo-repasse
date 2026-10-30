@@ -14,6 +14,7 @@ const { filtrarAntesDaFipe, filtrarFipe, descontoFipe } = require('./filtros');
 const { completarFipe } = require('./fipe');
 const { aplicarLogo, ARQ_LOGO } = require('./logo');
 const estatisticas = require('./estatisticas');
+const instagram = require('./instagram');
 
 const SENHA = process.env.PAINEL_SENHA;
 let VERSAO = '?';
@@ -156,6 +157,21 @@ function iniciarPainel() {
     if (!senhaConfere(atual)) return res.status(400).json({ erro: 'Senha atual incorreta' });
     if (!nova || nova.length < 8) return res.status(400).json({ erro: 'A nova senha precisa ter pelo menos 8 caracteres' });
     gravarSenha(nova);
+    res.json({ ok: true });
+  });
+
+  // Instagram: o token nunca volta para o navegador
+  app.get('/api/instagram', async (_, res) => res.json(await instagram.resumo()));
+  app.get('/api/instagram/estado', (_, res) => res.json(instagram.estado()));
+  app.post('/api/instagram/token', async (req, res) => {
+    try {
+      res.json(await instagram.guardarToken(req.body.token));
+    } catch (e) {
+      res.status(400).json({ erro: `Token não aceito pelo Instagram: ${e.message}` });
+    }
+  });
+  app.post('/api/instagram/remover', (req, res) => {
+    instagram.removerToken(req.body.usuario);
     res.json({ ok: true });
   });
 

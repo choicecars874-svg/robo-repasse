@@ -104,6 +104,14 @@
   .legenda { display:flex; gap:16px; font-size:13px; color:var(--sub); } .legenda span { display:inline-flex; align-items:center; gap:7px; } .legenda span::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--c); }
   .breves { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
   .breves .card { display:flex; gap:14px; align-items:flex-start; margin:0; } .breves svg.i { width:22px; height:22px; color:var(--ouro); margin-top:2px; }
+  .contas { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:16px; }
+  .conta { display:flex; flex-direction:column; gap:14px; margin:0; } .conta .quem { display:flex; align-items:center; gap:12px; }
+  .conta img.av { width:44px; height:44px; border-radius:50%; object-fit:cover; border:1px solid var(--borda2); } .conta .quem b { display:block; } .conta .quem span { color:var(--sub); font-size:13px; }
+  .mini { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; } .mini div { font-size:12px; color:var(--sub); } .mini b { display:block; color:var(--txt); font:600 18px Inter, sans-serif; }
+  .postsIg { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:14px; }
+  .postIg { border:1px solid var(--borda); border-radius:14px; overflow:hidden; background:rgba(255,255,255,.02); text-decoration:none; display:block; }
+  .postIg .img { aspect-ratio:1; background:#111 center/cover no-repeat; } .postIg .info { padding:10px 12px; font-size:12.5px; color:var(--sub); } .postIg .info b { color:var(--txt); font-weight:600; }
+  .contasIg div { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--borda); }
   .vazio { color:var(--sub); font-size:14px; padding:18px 0; }
 
   @media (max-width:1100px) { .kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:1fr; } }
@@ -150,8 +158,8 @@
       <button data-aba="config">Configurações</button>
     </div>
   </div>
+  <button data-aba="instagram"><svg class="i"><use href="#i-instagram"/></svg>Instagram</button>
   <div class="secao">Em breve</div>
-  <button disabled><svg class="i"><use href="#i-instagram"/></svg>Instagram <span class="breve">breve</span></button>
   <button disabled><svg class="i"><use href="#i-leads"/></svg>Leads <span class="breve">breve</span></button>
   <button disabled><svg class="i"><use href="#i-metas"/></svg>Metas <span class="breve">breve</span></button>
   <div class="rodape"><a href="/sair"><svg class="i"><use href="#i-sair"/></svg>Sair</a></div>
@@ -184,11 +192,29 @@
     <div class="card"><h2>De onde vêm</h2><p class="sub">Posts por grupo de repasse nos últimos 7 dias.</p><div id="pGrupos"></div></div>
     <div class="card"><h2>Mais clicados</h2><p class="sub">Carros que mais geraram conversa.</p><div id="pClicados"></div></div>
   </div>
-  <div class="eyebrow" style="margin:8px 0 12px">Próximas integrações</div>
+  <div class="eyebrow" style="margin:8px 0 12px">Integrações</div>
   <div class="breves">
-    <div class="card"><svg class="i"><use href="#i-instagram"/></svg><div><h2>Instagram</h2><p class="sub" style="margin:0">Alcance, seguidores e mensagens do @choicecarsbr.</p></div></div>
+    <div class="card" data-ir="instagram" style="cursor:pointer"><svg class="i"><use href="#i-instagram"/></svg><div><h2>Instagram</h2><p class="sub" style="margin:0" id="pIg">Alcance, seguidores e posts da Choice, da reserva e do Elyas.</p></div></div>
     <div class="card"><svg class="i"><use href="#i-leads"/></svg><div><h2>Leads</h2><p class="sub" style="margin:0">Mercado Livre, Webmotors, Napista e Facebook num lugar só.</p></div></div>
     <div class="card"><svg class="i"><use href="#i-metas"/></svg><div><h2>Metas</h2><p class="sub" style="margin:0">Meta do dia por canal, com o quanto falta.</p></div></div>
+  </div>
+</section>
+
+<section id="instagram">
+  <div id="igVazio" class="card" hidden><h2>Nenhum perfil conectado</h2><p class="sub" style="margin:4px 0 14px">Conecte os perfis em Configurações → Instagram (choicecarsbr, reservachoice1, elyaspereira).</p><button class="btn verde" data-ir="config">Conectar perfis</button></div>
+  <div id="igConteudo" hidden>
+    <div class="eyebrow">Hoje · todos os perfis</div>
+    <div class="kpis">
+      <div class="kpi"><div class="eyebrow">Seguidores</div><b id="igSeg">—</b><small id="igSegVar">soma dos perfis</small></div>
+      <div class="kpi"><div class="eyebrow">Alcance</div><b id="igAlc">—</b><small>contas alcançadas hoje</small></div>
+      <div class="kpi"><div class="eyebrow">Interações</div><b id="igInt">—</b><small>curtidas, comentários, salvos, compart.</small></div>
+      <div class="kpi"><div class="eyebrow">Visualizações</div><b id="igVis">—</b><small id="igLinks">dos posts e reels hoje</small></div>
+    </div>
+    <div class="eyebrow" style="margin-bottom:12px">Por perfil</div>
+    <div class="contas" id="igContas"></div>
+    <div class="card"><div class="cardTopo"><div><h2>Alcance nos últimos 7 dias</h2><p class="sub">Soma dos perfis conectados.</p></div></div><div class="grafico" id="igSemana"></div></div>
+    <div class="card"><h2>Últimos posts</h2><p class="sub">Dos perfis conectados, do mais novo para o mais antigo.</p><div class="postsIg" id="igPosts"></div></div>
+    <p class="sub" id="igAtual"></p>
   </div>
 </section>
 
@@ -259,6 +285,12 @@
     <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="btnAtualizar">Buscar atualização agora</button>
     <button class="btn verm" id="btnDesconectar">Desconectar WhatsApp</button></p>
     <details id="detDiag"><summary class="sub">Diagnóstico técnico (para o suporte)</summary><pre id="diag" style="max-height:320px;overflow:auto;margin-top:10px"></pre></details>
+  </div>
+  <div class="card">
+    <h2>Instagram</h2>
+    <p class="sub" style="margin:4px 0 8px">No app da Meta (Dream Content → API do Instagram → 2. Gerar tokens de acesso), clique em "Gerar token" na linha do perfil, copie e cole aqui. Um perfil por vez. O token fica guardado só no servidor e é renovado sozinho.</p>
+    <div class="contasIg" id="igContasCfg"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><input type="password" id="igToken" placeholder="Cole o token do perfil aqui" autocomplete="off" style="flex:1;min-width:220px"><button class="btn verde" id="btnIgToken">Conectar perfil</button></div>
   </div>
   <div class="card">
     <h2>Grupos</h2>
@@ -371,6 +403,7 @@ const TITULOS = {
   aprovar: ['Aprovar', 'Carros capturados esperando sua decisão.'],
   historico: ['Histórico', 'Tudo que foi postado, com código, origem e cliques.'],
   buscas: ['O que buscamos', 'Regras que decidem quais carros vão para o grupo.'],
+  instagram: ['Instagram', 'Seguidores, alcance e posts dos perfis da Choice, somados e por perfil.'],
   testar: ['Testar anúncio', 'Cole um anúncio e veja o que o robô faria com ele.'],
   config: ['Configurações', 'Conexão, grupos, loja, margem, logo e texto do post.'],
 };
@@ -383,9 +416,9 @@ function abrirAba(aba) {
   document.body.classList.remove('menuAberto'); scrollTo(0, 0);
   try { localStorage.setItem('aba', aba); } catch {}
   const [titulo, sub] = TITULOS[aba];
-  $('#tEyebrow').textContent = aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
+  $('#tEyebrow').textContent = aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarPainel, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarPainel, instagram: carregarInstagram, config: carregarIgCfg, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -575,6 +608,49 @@ async function carregarPainel() {
   $('#pClicados').innerHTML = p.maisClicados.length ? barras(p.maisClicados.map((l) => [`${l.modelo} ${l.ano || ''}`, l.cliques, l.codigo]), 'var(--verde)')
     : '<div class="vazio">Ainda sem cliques. Conta a partir dos posts feitos depois da atualização.</div>';
 }
+// Instagram
+const variacao = (agora, antes) => agora == null || antes == null ? '' : agora - antes === 0 ? 'igual a ontem' : `${agora > antes ? '+' : ''}${num(agora - antes)} desde ontem`;
+async function carregarInstagram() {
+  const r = await api('/api/instagram');
+  $('#igVazio').hidden = r.conectado; $('#igConteudo').hidden = !r.conectado;
+  if (!r.conectado) return;
+  const t = r.total;
+  $('#igSeg').textContent = t.seguidores == null ? '—' : num(t.seguidores);
+  $('#igSegVar').textContent = variacao(t.seguidores, t.seguidoresOntem) || 'soma dos perfis';
+  $('#igAlc').textContent = t.alcance == null ? '—' : num(t.alcance);
+  $('#igInt').textContent = t.interacoes == null ? '—' : num(t.interacoes);
+  $('#igVis').textContent = t.visualizacoes == null ? '—' : num(t.visualizacoes);
+  $('#igLinks').textContent = t.toquesLink ? `${num(t.toquesLink)} toques no link da bio` : 'dos posts e reels hoje';
+  $('#igContas').innerHTML = r.contas.map((c) => c.erro
+    ? `<div class="card conta"><div class="quem"><div><b>@${esc(c.usuario)}</b><span class="ruim">${esc(c.erro)}</span></div></div><span class="sub">Gere um token novo para este perfil em Configurações.</span></div>`
+    : `<div class="card conta"><div class="quem">${c.foto ? `<img class="av" src="${esc(c.foto)}" alt="">` : ''}<div><b>@${esc(c.usuario)}</b><span>${esc(variacao(c.seguidores, c.seguidoresOntem) || c.nome || '')}</span></div></div>
+      <div class="mini"><div><b>${num(c.seguidores)}</b>seguidores</div><div><b>${c.hoje.alcance == null ? '—' : num(c.hoje.alcance)}</b>alcance hoje</div><div><b>${c.hoje.interacoes == null ? '—' : num(c.hoje.interacoes)}</b>interações</div></div></div>`).join('');
+  const maxA = Math.max(1, ...r.semana.map((d) => d.alcance || 0));
+  $('#igSemana').innerHTML = r.semana.length ? r.semana.map((d) => `<div class="col"><div class="barras"><i class="c" style="width:55%;max-width:34px;height:${((d.alcance || 0) / maxA) * 100}%" title="${num(d.alcance)} contas alcançadas"></i></div><span>${d.dia.slice(8)}/${d.dia.slice(5, 7)}</span></div>`).join('') : '<div class="vazio">Sem dados de alcance.</div>';
+  $('#igPosts').innerHTML = r.ultimos.length ? r.ultimos.map((m) => `<a class="postIg" href="${esc(m.link)}" target="_blank" rel="noopener"><div class="img" style="background-image:url('${esc(m.imagem || '')}')"></div>
+    <div class="info"><b>@${esc(m.usuario)}</b> · ${esc(m.tipo)} · ${new Date(m.quando).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })}<br>${num(m.curtidas)} curtidas · ${num(m.comentarios)} comentários</div></a>`).join('') : '<div class="vazio">Nenhum post encontrado.</div>';
+  $('#igAtual').textContent = 'Atualizado às ' + new Date(r.atualizadoEm).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) + ' · a Meta libera os números com alguns minutos de atraso.';
+}
+async function carregarIgCfg() {
+  const e = await api('/api/instagram/estado');
+  $('#igContasCfg').innerHTML = e.contas.length ? e.contas.map((c) => `<div><span><b>@${esc(c.usuario)}</b> <span class="sub">· conectado em ${hora(c.salvoEm)}${c.erro ? ' · <span class="ruim">' + esc(c.erro) + '</span>' : ''}</span></span><button class="btn verm" data-rm="${esc(c.usuario)}">Remover</button></div>`).join('')
+    : '<div><span class="sub">Nenhum perfil conectado ainda.</span></div>';
+  document.querySelectorAll('[data-rm]').forEach((b) => b.onclick = async () => { if (confirm(`Desconectar @${b.dataset.rm} do painel?`)) { await api('/api/instagram/remover', { method:'POST', body: JSON.stringify({ usuario: b.dataset.rm }) }); carregarIgCfg(); } });
+}
+$('#btnIgToken').onclick = async () => {
+  const b = $('#btnIgToken'); b.disabled = true; b.textContent = 'Conferindo…';
+  try { const r = await api('/api/instagram/token', { method:'POST', body: JSON.stringify({ token: $('#igToken').value }) }); $('#igToken').value = ''; alert(`@${r.usuario} conectado!`); carregarIgCfg(); }
+  catch (e) { alert(e.message); }
+  b.disabled = false; b.textContent = 'Conectar perfil';
+};
+async function resumoIgPainel() {
+  try {
+    const r = await api('/api/instagram');
+    if (r.conectado && r.total.seguidores != null) $('#pIg').textContent = `${num(r.total.seguidores)} seguidores em ${r.contas.length} perfil(is)${r.total.alcance != null ? ` · alcance hoje ${num(r.total.alcance)}` : ''}`;
+  } catch {}
+}
+resumoIgPainel();
+
 setInterval(() => $('#painel').classList.contains('ativo') && carregarPainel().catch(() => {}), 15000);
 
 carregarConfig();
