@@ -70,6 +70,8 @@ const PADRAO = {
 
   segundosParaJuntarFotos: 25,
   segundosEsperandoFotos: 120, // quando o texto chega antes das fotos
+  // foto que chega mais longe que isso do texto não é usada (evita foto de um carro no texto de outro). 0 = sem limite
+  segundosMaxFotoTexto: 20,
   maxFotos: 10,
   intervaloEntrePostagens: [8, 20],
 

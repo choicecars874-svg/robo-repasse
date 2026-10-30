@@ -279,15 +279,21 @@ function codigoOrigem(jid, quando) {
   return `#${siglaGrupo(jid)}${hhmm}`;
 }
 
-async function processar({ grupo, vendedor, fotos: downloads, textos, ids = [], t0 = Date.now() }) {
+async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [], t0 = Date.now(), tTexto = null }) {
   const cfg = config.get();
+  // Segurança contra "texto de um carro com foto de outro": só fica a foto que chegou perto do texto
+  const distMax = (cfg.segundosMaxFotoTexto || 0) * 1000;
+  const downloads = distMax && tTexto ? todasFotos.filter((f) => Math.abs(f.t - tTexto) <= distMax) : todasFotos;
+  const descartadas = todasFotos.length - downloads.length;
+  if (descartadas) evento('aviso', `${nomeGrupo(grupo)}: ${descartadas} foto(s) chegaram longe do texto (mais de ${cfg.segundosMaxFotoTexto}s) e foram descartadas por segurança`);
   const fotos = (await Promise.all(downloads.map((f) => f.p))).filter(Boolean);
   const falharam = downloads.length - fotos.length;
   evento('lendo', `${fotos.length} foto(s)${falharam ? ` (${falharam} não baixou)` : ''} e ${textos.length} texto(s) de ${nomeGrupo(grupo)}`);
   if (!textos.length) return evento('ignorado', `${nomeGrupo(grupo)} — só fotos, sem texto do anúncio`);
   if (!fotos.length && cfg.filtros.exigirFoto) {
     const inicio = textos[0].split('\n').find((l) => l.trim()) || '';
-    return evento('ignorado', `${inicio.slice(0, 50)} — sem foto${falharam ? ' (a foto não baixou)' : ' (o vendedor não mandou foto)'}`);
+    const porque = descartadas ? ' (a foto chegou longe do texto — descartada por segurança)' : falharam ? ' (a foto não baixou)' : ' (o vendedor não mandou foto)';
+    return evento('ignorado', `${inicio.slice(0, 50)} — sem foto${porque}`);
   }
   const carro = parseAnuncio(textos.join('\n'));
   const nome = `${carro.modelo || textos[0].slice(0, 40)} ${carro.ano || ''}`.trim();

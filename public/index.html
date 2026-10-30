@@ -113,6 +113,9 @@
     <label>Postar anúncio sem foto?</label>
     <select data-c="filtros.exigirFoto" data-t="bool"><option value="true">Não (só posta com foto)</option><option value="false">Sim</option></select>
     <p class="sub">Quando o texto chega antes das fotos, o robô espera até 2 minutos por elas.</p>
+    <label>Distância máxima entre foto e texto (segundos, 0 = sem limite)</label>
+    <input type="number" data-c="segundosMaxFotoTexto">
+    <p class="sub">Foto que chega mais longe que isso do texto é descartada — evita postar o texto de um carro com a foto de outro. Mais baixo = mais seguro, mas alguns anúncios ficam sem foto e não saem.</p>
   </div>
   <div class="salvar"><button class="btn verde salvarCfg">Salvar</button></div>
 </section>
