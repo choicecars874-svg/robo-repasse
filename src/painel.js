@@ -148,6 +148,40 @@ function iniciarPainel() {
   });
 
   // Busca a versão nova no GitHub na hora (o robô reinicia sozinho em ~1 min se houver)
+  // Endereço próprio do painel (ex.: gestao.choicecars.com.br). Mantém o endereço antigo funcionando
+  // junto (links dos posts antigos), o Caddy tira o certificado HTTPS sozinho.
+  const ARQ_ENDERECO = path.join(__dirname, '..', 'endereco-do-painel.txt');
+  const ARQ_ENDERECOS = path.join(config.DATA_DIR, 'enderecos.json');
+  const lerEnderecos = () => { try { return JSON.parse(fs.readFileSync(ARQ_ENDERECOS, 'utf8')); } catch { return []; } };
+  app.get('/api/dominio', (_, res) => {
+    let atual = '';
+    try { atual = fs.readFileSync(ARQ_ENDERECO, 'utf8').trim(); } catch {}
+    res.json({ atual, todos: lerEnderecos() });
+  });
+  app.post('/api/dominio', async (req, res) => {
+    const dominio = String(req.body.dominio || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(dominio)) return res.status(400).json({ erro: 'Endereço inválido. Exemplo: gestao.choicecars.com.br' });
+    try {
+      // IP deste servidor = o do endereço sslip.io da instalação (ex.: 137-131-197-47.sslip.io)
+      const antigo = fs.readFileSync(ARQ_ENDERECO, 'utf8').trim().replace(/^https?:\/\//, '');
+      const ipServidor = (lerEnderecos().concat(antigo).find((d) => /\.sslip\.io$/.test(d)) || '').replace('.sslip.io', '').replace(/-/g, '.');
+      const ips = await require('dns').promises.resolve4(dominio).catch(() => []);
+      if (!ips.length) return res.status(400).json({ erro: `O endereço ${dominio} ainda não existe no DNS. Crie o registro tipo A apontando para ${ipServidor} e espere alguns minutos.` });
+      if (ipServidor && !ips.includes(ipServidor)) return res.status(400).json({ erro: `O endereço ${dominio} aponta para ${ips.join(', ')}, mas este servidor é ${ipServidor}. Corrija o registro A e tente de novo.` });
+      const todos = [...new Set([...lerEnderecos(), antigo, dominio].filter(Boolean))];
+      const caddy = `${todos.join(', ')} {\n  reverse_proxy localhost:3000\n}\n`;
+      const { execSync } = require('child_process');
+      const comoRoot = process.getuid && process.getuid() === 0 ? '' : 'sudo -n ';
+      execSync(`${comoRoot}tee /etc/caddy/Caddyfile >/dev/null`, { input: caddy, timeout: 10000 });
+      execSync(`${comoRoot}systemctl reload caddy`, { timeout: 20000 });
+      fs.writeFileSync(ARQ_ENDERECOS, JSON.stringify(todos));
+      fs.writeFileSync(ARQ_ENDERECO, `https://${dominio}\n`);
+      res.json({ ok: true, endereco: `https://${dominio}`, todos });
+    } catch (e) {
+      res.status(500).json({ erro: `Não consegui ativar: ${e.message}` });
+    }
+  });
+
   app.post('/api/atualizar', (_, res) => {
     const raiz = path.join(__dirname, '..');
     // roda solto (o bash intermediário sai na hora): quando o pm2 reinicia o robô, não mata a atualização junto

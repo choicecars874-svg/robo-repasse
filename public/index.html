@@ -516,6 +516,12 @@
     <label class="btn" style="margin:0;color:var(--txt)">Restaurar backup<input type="file" id="arqBackup" accept=".json,application/json" hidden></label></p>
   </div>
   <div class="card">
+    <h2>Endereço do painel</h2>
+    <p class="sub" style="margin:4px 0 10px">Endereço atual: <b id="domAtual">—</b>. Também é o endereço usado no link "Chame no WhatsApp" dos posts novos.</p>
+    <p class="sub" style="margin:0 0 10px">Para usar um endereço próprio (ex.: <b>gestao.choicecars.com.br</b>): no painel onde o domínio choicecars.com.br é administrado, crie um registro <b>tipo A</b>, nome <b>gestao</b>, valor <b id="domIp">o IP deste servidor</b>. Espere de 5 a 30 minutos e clique em "Verificar e ativar". O endereço antigo continua funcionando.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="domNovo" placeholder="gestao.choicecars.com.br" style="flex:1;min-width:220px"><button class="btn verde" id="btnDom">Verificar e ativar</button></div>
+  </div>
+  <div class="card">
     <h2>Atualização</h2>
     <p class="sub">Versão instalada: <b id="cfgVersao"></b>. O painel procura versão nova sozinho a cada 30 minutos.</p>
     <p><button class="btn" id="btnAtualizar">Buscar atualização agora</button></p>
@@ -597,7 +603,7 @@ function abrirAba(aba) {
   const [titulo, sub] = TITULOS[aba];
   $('#tEyebrow').textContent = aba.startsWith('com') ? 'Comercial' : ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, integracoes: () => { carregarIgCfg(); carregarLkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, sistema: carregarSistema, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, integracoes: () => { carregarIgCfg(); carregarLkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, sistema: () => { carregarSistema(); carregarDominio(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -834,6 +840,18 @@ async function carregarInstagram() {
     <div class="info"><b>@${esc(m.usuario)}</b> · ${esc(m.tipo)} · ${new Date(m.quando).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })}<br>${num(m.curtidas)} curtidas · ${num(m.comentarios)} comentários</div></a>`).join('') : '<div class="vazio">Nenhum post encontrado.</div>';
   $('#igAtual').textContent = 'Atualizado às ' + new Date(r.atualizadoEm).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) + ' · a Meta libera os números com alguns minutos de atraso.';
 }
+async function carregarDominio() {
+  const r = await api('/api/dominio');
+  $('#domAtual').textContent = r.atual || '—';
+  const sslip = (r.todos.concat(r.atual).find((d) => /sslip\.io/.test(d || '')) || '').replace(/^https?:\/\//, '').replace('.sslip.io', '').replace(/-/g, '.');
+  if (sslip) $('#domIp').textContent = sslip;
+}
+$('#btnDom').onclick = async () => {
+  const b = $('#btnDom'); b.disabled = true; b.textContent = 'Verificando…';
+  try { const r = await api('/api/dominio', { method:'POST', body: JSON.stringify({ dominio: $('#domNovo').value }) }); alert(`Pronto! Em 1 a 2 minutos o painel abre em ${r.endereco}.`); carregarDominio(); }
+  catch (e) { alert(e.message); }
+  b.disabled = false; b.textContent = 'Verificar e ativar';
+};
 async function carregarSistema() {
   const r = await api('/api/sistema');
   const tempo = (s) => s >= 86400 ? `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h` : s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : `${Math.floor(s / 60)} min`;
