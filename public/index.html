@@ -112,6 +112,14 @@
   .postIg { border:1px solid var(--borda); border-radius:14px; overflow:hidden; background:rgba(255,255,255,.02); text-decoration:none; display:block; }
   .postIg .img { aspect-ratio:1; background:#111 center/cover no-repeat; } .postIg .info { padding:10px 12px; font-size:12.5px; color:var(--sub); } .postIg .info b { color:var(--txt); font-weight:600; }
   .contasIg div { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--borda); }
+  .areas { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; } .areas .card { margin:0; }
+  .area[data-ir] { cursor:pointer; } .area[data-ir]:hover { border-color:var(--borda2); } .area .eyebrow { display:flex; align-items:center; gap:8px; } .area .eyebrow svg.i { width:16px; height:16px; }
+  .area .mini { margin-top:16px; } .area .mini b { font-size:26px; }
+  .metaLinha { display:grid; grid-template-columns:190px minmax(0, 1fr) 170px; align-items:center; gap:14px; margin:12px 0; font-size:14.5px; }
+  .metaLinha .trilho { height:8px; background:rgba(255,255,255,.07); border-radius:99px; overflow:hidden; } .metaLinha .trilho i { display:block; height:100%; border-radius:99px; background:var(--ouro); transition:width .4s; }
+  .metaLinha.ok .trilho i { background:var(--verde); } .metaLinha b { text-align:right; font:500 14px var(--mono); } .metaLinha .sub { font-size:12px; }
+  @media (max-width:1100px) { .areas { grid-template-columns:1fr; } }
+  @media (max-width:820px) { .metaLinha { grid-template-columns:110px minmax(0, 1fr) 90px; gap:10px; } }
   .vazio { color:var(--sub); font-size:14px; padding:18px 0; }
 
   @media (max-width:1100px) { .kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:1fr; } }
@@ -159,6 +167,16 @@
     </div>
   </div>
   <button data-aba="instagram"><svg class="i"><use href="#i-instagram"/></svg>Instagram</button>
+  <div class="grupoMenu fechado" id="menuComercial">
+    <button class="titulo" data-abre="menuComercial"><svg class="i"><use href="#i-leads"/></svg>Comercial <span class="breve">breve</span><svg class="i seta"><use href="#i-seta"/></svg></button>
+    <div class="sub-itens">
+      <button disabled>Leads e canais</button>
+      <button disabled>Time</button>
+      <button disabled>Agenda do dia</button>
+      <button disabled>Estoque</button>
+    </div>
+  </div>
+  <button data-aba="metas"><svg class="i"><use href="#i-metas"/></svg>Metas</button>
   <div class="grupoMenu" id="menuConfig">
     <button class="titulo" data-abre="menuConfig"><svg class="i"><use href="#i-config"/></svg>Configurações <svg class="i seta"><use href="#i-seta"/></svg></button>
     <div class="sub-itens">
@@ -166,9 +184,6 @@
       <button data-aba="sistema">Sistema</button>
     </div>
   </div>
-  <div class="secao">Em breve</div>
-  <button disabled><svg class="i"><use href="#i-leads"/></svg>Leads <span class="breve">breve</span></button>
-  <button disabled><svg class="i"><use href="#i-metas"/></svg>Metas <span class="breve">breve</span></button>
   <div class="rodape"><a href="/sair"><svg class="i"><use href="#i-sair"/></svg>Sair</a></div>
 </nav>
 <div>
@@ -180,6 +195,68 @@
 <div class="cabeca"><div class="eyebrow" id="tEyebrow"></div><h1 id="tTitulo">Painel</h1><p id="tSub"></p></div>
 
 <section id="painel" class="ativo">
+  <div class="eyebrow">Metas de hoje</div>
+  <div class="card" style="margin-top:12px"><div class="cardTopo"><div><h2>Progresso das metas</h2><p class="sub">Quanto já foi feito hoje em cada área.</p></div><a data-ir="metas">Definir metas</a></div><div id="gMetas"></div></div>
+  <div class="eyebrow" style="margin-bottom:12px">Por área</div>
+  <div class="areas">
+    <div class="card area" data-ir="inicio"><div class="cardTopo"><div class="eyebrow"><svg class="i"><use href="#i-grupos"/></svg> Grupos</div><span class="link">Ver mais</span></div>
+      <div class="mini"><div><b id="gPost">—</b>postados hoje</div><div><b id="gClq">—</b>cliques</div><div><b id="gLidos">—</b>anúncios lidos</div></div></div>
+    <div class="card area" data-ir="instagram"><div class="cardTopo"><div class="eyebrow"><svg class="i"><use href="#i-instagram"/></svg> Instagram</div><span class="link">Ver mais</span></div>
+      <div class="mini"><div><b id="gSeg">—</b>seguidores</div><div><b id="gAlc">—</b>alcance hoje</div><div><b id="gInt">—</b>interações</div></div><p class="sub" id="gIgObs" style="margin:10px 0 0"></p></div>
+    <div class="card area"><div class="cardTopo"><div class="eyebrow"><svg class="i"><use href="#i-leads"/></svg> Comercial</div><span class="tag">em breve</span></div>
+      <div class="mini"><div><b>—</b>leads hoje</div><div><b>—</b>agendamentos</div><div><b>—</b>vendas no mês</div></div><p class="sub" style="margin:10px 0 0">Vem do LeadsOK, com todos os canais: Webmotors, Mercado Livre, Napista, Facebook, Instagram, site e WhatsApp.</p></div>
+  </div>
+</section>
+
+<section id="instagram">
+  <div id="igVazio" class="card" hidden><h2>Nenhum perfil conectado</h2><p class="sub" style="margin:4px 0 14px">Conecte os perfis em Configurações → Integrações (choicecarsbr, reservachoice1, oelyaspereira).</p><button class="btn verde" data-ir="integracoes">Conectar perfis</button></div>
+  <div id="igConteudo" hidden>
+    <div class="eyebrow">Hoje · todos os perfis</div>
+    <div class="kpis">
+      <div class="kpi"><div class="eyebrow">Seguidores</div><b id="igSeg">—</b><small id="igSegVar">soma dos perfis</small></div>
+      <div class="kpi"><div class="eyebrow">Alcance</div><b id="igAlc">—</b><small>contas alcançadas hoje</small></div>
+      <div class="kpi"><div class="eyebrow">Interações</div><b id="igInt">—</b><small>curtidas, comentários, salvos, compart.</small></div>
+      <div class="kpi"><div class="eyebrow">Visualizações</div><b id="igVis">—</b><small id="igLinks">dos posts e reels hoje</small></div>
+    </div>
+    <div class="eyebrow" style="margin-bottom:12px">Por perfil</div>
+    <div class="contas" id="igContas"></div>
+    <div class="card"><div class="cardTopo"><div><h2>Alcance nos últimos 7 dias</h2><p class="sub">Soma dos perfis conectados.</p></div></div><div class="grafico" id="igSemana"></div></div>
+    <div class="card"><h2>Últimos posts</h2><p class="sub">Dos perfis conectados, do mais novo para o mais antigo.</p><div class="postsIg" id="igPosts"></div></div>
+    <p class="sub" id="igAtual"></p>
+  </div>
+</section>
+
+<section id="metas">
+  <div class="card">
+    <h2>Grupos</h2>
+    <div class="linha">
+      <div><label>Posts por dia</label><input type="number" data-c="metas.postsDia"></div>
+      <div><label>Cliques no WhatsApp por dia</label><input type="number" data-c="metas.cliquesDia"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Instagram</h2>
+    <div class="linha">
+      <div><label>Alcance por dia (soma dos perfis)</label><input type="number" data-c="metas.alcanceDia"></div>
+      <div><label>Interações por dia</label><input type="number" data-c="metas.interacoesDia"></div>
+      <div><label>Novos seguidores por dia</label><input type="number" data-c="metas.seguidoresDia"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Comercial</h2>
+    <p class="sub" style="margin:4px 0 0">Passam a contar quando o LeadsOK estiver conectado.</p>
+    <div class="linha">
+      <div><label>Leads por dia</label><input type="number" data-c="metas.leadsDia"></div>
+      <div><label>Agendamentos por dia</label><input type="number" data-c="metas.agendamentosDia"></div>
+      <div><label>Vendas por mês</label><input type="number" data-c="metas.vendasMes"></div>
+    </div>
+  </div>
+  <p class="sub">Deixe 0 para não acompanhar aquela meta.</p>
+  <div class="salvar"><button class="btn verde salvarCfg">Salvar</button></div>
+</section>
+
+<section id="inicio">
+
   <div class="eyebrow">Hoje</div>
   <div class="kpis">
     <div class="kpi"><div class="eyebrow">Postados</div><b><span id="kPost">0</span><span class="de" id="kPostMeta"></span></b><small id="kPostTxt">no grupo hoje</small><div class="meta"><i id="kPostBarra" style="width:0"></i></div></div>
@@ -199,40 +276,12 @@
     <div class="card"><h2>De onde vêm</h2><p class="sub">Posts por grupo de repasse nos últimos 7 dias.</p><div id="pGrupos"></div></div>
     <div class="card"><h2>Mais clicados</h2><p class="sub">Carros que mais geraram conversa.</p><div id="pClicados"></div></div>
   </div>
-  <div class="eyebrow" style="margin:8px 0 12px">Integrações</div>
-  <div class="breves">
-    <div class="card" data-ir="instagram" style="cursor:pointer"><svg class="i"><use href="#i-instagram"/></svg><div><h2>Instagram</h2><p class="sub" style="margin:0" id="pIg">Alcance, seguidores e posts da Choice, da reserva e do Elyas.</p></div></div>
-    <div class="card"><svg class="i"><use href="#i-leads"/></svg><div><h2>Leads</h2><p class="sub" style="margin:0">Mercado Livre, Webmotors, Napista e Facebook num lugar só.</p></div></div>
-    <div class="card"><svg class="i"><use href="#i-metas"/></svg><div><h2>Metas</h2><p class="sub" style="margin:0">Meta do dia por canal, com o quanto falta.</p></div></div>
-  </div>
-</section>
-
-<section id="instagram">
-  <div id="igVazio" class="card" hidden><h2>Nenhum perfil conectado</h2><p class="sub" style="margin:4px 0 14px">Conecte os perfis em Configurações → Instagram (choicecarsbr, reservachoice1, elyaspereira).</p><button class="btn verde" data-ir="config">Conectar perfis</button></div>
-  <div id="igConteudo" hidden>
-    <div class="eyebrow">Hoje · todos os perfis</div>
-    <div class="kpis">
-      <div class="kpi"><div class="eyebrow">Seguidores</div><b id="igSeg">—</b><small id="igSegVar">soma dos perfis</small></div>
-      <div class="kpi"><div class="eyebrow">Alcance</div><b id="igAlc">—</b><small>contas alcançadas hoje</small></div>
-      <div class="kpi"><div class="eyebrow">Interações</div><b id="igInt">—</b><small>curtidas, comentários, salvos, compart.</small></div>
-      <div class="kpi"><div class="eyebrow">Visualizações</div><b id="igVis">—</b><small id="igLinks">dos posts e reels hoje</small></div>
-    </div>
-    <div class="eyebrow" style="margin-bottom:12px">Por perfil</div>
-    <div class="contas" id="igContas"></div>
-    <div class="card"><div class="cardTopo"><div><h2>Alcance nos últimos 7 dias</h2><p class="sub">Soma dos perfis conectados.</p></div></div><div class="grafico" id="igSemana"></div></div>
-    <div class="card"><h2>Últimos posts</h2><p class="sub">Dos perfis conectados, do mais novo para o mais antigo.</p><div class="postsIg" id="igPosts"></div></div>
-    <p class="sub" id="igAtual"></p>
-  </div>
-</section>
-
-<section id="inicio">
   <div class="card" id="cardQr" hidden>
     <h2>Conectar o WhatsApp</h2>
     <p class="sub">No celular que participa dos grupos: WhatsApp → Aparelhos conectados → Conectar aparelho → aponte para o código.</p>
     <img class="qr" id="qr" alt="QR Code">
   </div>
-  <div class="card">
-    <h2>Resumo</h2>
+  <div class="card" hidden>
     <div class="num"><div><span class="sub">Número</span><b id="numero">—</b></div><div><span class="sub">Aguardando aprovação</span><b id="resPend">0</b></div><div><span class="sub">Postados</span><b id="resPost">0</b></div></div>
   </div>
   <div class="card"><h2>O que está acontecendo</h2><div class="eventos" id="eventos"></div></div>
@@ -428,8 +477,9 @@ let cfg = null;
 
 // Abas
 const TITULOS = {
-  painel: ['Painel', 'A operação num olhar: o que chegou dos grupos de repasse, o que foi postado e quem chamou a loja.'],
-  inicio: ['Início', 'Conexão do WhatsApp e o que o robô está fazendo agora.'],
+  painel: ['Painel', 'Visão geral da Choice: metas do dia e o principal de cada área.'],
+  inicio: ['Grupos', 'O que chegou dos grupos de repasse, o que foi postado e quem chamou a loja.'],
+  metas: ['Metas', 'Metas do dia por área. O Painel mostra o quanto já foi feito.'],
   aprovar: ['Aprovar', 'Carros capturados esperando sua decisão.'],
   historico: ['Histórico', 'Tudo que foi postado, com código, origem e cliques.'],
   buscas: ['O que buscamos', 'Regras que decidem quais carros vão para o grupo.'],
@@ -450,7 +500,7 @@ function abrirAba(aba) {
   const [titulo, sub] = TITULOS[aba];
   $('#tEyebrow').textContent = ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarPainel, instagram: carregarInstagram, integracoes: carregarIgCfg, sistema: carregarSistema, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, integracoes: carregarIgCfg, sistema: carregarSistema, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -704,15 +754,40 @@ $('#btnIgToken').onclick = async () => {
   catch (e) { alert(e.message); }
   b.disabled = false; b.textContent = 'Conectar perfil';
 };
-async function resumoIgPainel() {
-  try {
-    const r = await api('/api/instagram');
-    if (r.conectado && r.total.seguidores != null) $('#pIg').textContent = `${num(r.total.seguidores)} seguidores em ${r.contas.length} perfil(is)${r.total.alcance != null ? ` · alcance hoje ${num(r.total.alcance)}` : ''}`;
-  } catch {}
-}
-resumoIgPainel();
 
-setInterval(() => $('#painel').classList.contains('ativo') && carregarPainel().catch(() => {}), 15000);
+
+setInterval(() => {
+  if ($('#painel').classList.contains('ativo')) carregarGeral().catch(() => {});
+  if ($('#inicio').classList.contains('ativo')) carregarPainel().catch(() => {});
+}, 15000);
+
+// Painel geral: metas + resumo de cada área
+async function carregarGeral() {
+  const [g, ig] = await Promise.all([api('/api/painel'), api('/api/instagram').catch(() => ({ conectado: false }))]);
+  if (!cfg) cfg = await api('/api/config');
+  const m = cfg.metas || {};
+  const h = g.hoje;
+  $('#gPost').textContent = num(h.postados); $('#gClq').textContent = num(h.cliques); $('#gLidos').textContent = num(h.lidos);
+  const t = ig.conectado ? ig.total : {};
+  const novos = t.seguidores != null && t.seguidoresOntem != null ? t.seguidores - t.seguidoresOntem : null;
+  $('#gSeg').textContent = t.seguidores == null ? '—' : num(t.seguidores);
+  $('#gAlc').textContent = t.alcance == null ? '—' : num(t.alcance);
+  $('#gInt').textContent = t.interacoes == null ? '—' : num(t.interacoes);
+  $('#gIgObs').textContent = ig.conectado ? `${ig.contas.length} perfil(is) conectado(s)${novos != null ? ` · ${novos >= 0 ? '+' : ''}${num(novos)} seguidores desde ontem` : ''}` : 'Conecte os perfis em Configurações → Integrações.';
+  const linhas = [
+    ['Posts nos grupos', h.postados, m.postsDia || g.limiteDiario],
+    ['Cliques no WhatsApp', h.cliques, m.cliquesDia],
+    ['Alcance no Instagram', t.alcance, m.alcanceDia],
+    ['Interações no Instagram', t.interacoes, m.interacoesDia],
+    ['Novos seguidores', novos, m.seguidoresDia],
+    ['Leads (comercial)', null, m.leadsDia, 'aguardando LeadsOK'],
+    ['Agendamentos', null, m.agendamentosDia, 'aguardando LeadsOK'],
+  ].filter((x) => x[2] > 0);
+  $('#gMetas').innerHTML = linhas.length ? linhas.map(([nome, feito, meta, obs]) => {
+    const pct = feito == null ? 0 : Math.min(100, (feito / meta) * 100);
+    return `<div class="metaLinha ${pct >= 100 ? 'ok' : ''}"><span>${nome}</span><div class="trilho"><i style="width:${pct}%"></i></div><b>${feito == null ? `<span class="sub">${obs || 'sem dados'}</span>` : `${num(feito)} / ${num(meta)}`}</b></div>`;
+  }).join('') : '<div class="vazio">Nenhuma meta definida ainda. Clique em "Definir metas".</div>';
+}
 
 carregarConfig();
 let abaSalva = 'painel'; try { abaSalva = localStorage.getItem('aba') || 'painel'; } catch {}

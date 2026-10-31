@@ -65,6 +65,9 @@ const PADRAO = {
 
   limiteDiario: 10, // máximo de posts por dia (0 = sem limite)
 
+  // metas do dia que o Painel acompanha (0 = não acompanhar)
+  metas: { postsDia: 10, cliquesDia: 0, alcanceDia: 0, interacoesDia: 0, seguidoresDia: 0, leadsDia: 0, agendamentosDia: 0, vendasMes: 0 },
+
   // sigla de cada grupo de origem no código do post (#DR1001). Vazio = automática pelo nome do grupo
   siglas: {},
 
