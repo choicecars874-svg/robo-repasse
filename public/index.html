@@ -120,6 +120,8 @@
   .metaLinha.ok .trilho i { background:var(--verde); } .metaLinha b { text-align:right; font:500 14px var(--mono); } .metaLinha .sub { font-size:12px; }
   @media (max-width:1100px) { .areas { grid-template-columns:1fr; } }
   @media (max-width:820px) { .metaLinha { grid-template-columns:110px minmax(0, 1fr) 90px; gap:10px; } }
+  .toast { position:fixed; right:20px; bottom:20px; z-index:20; max-width:min(420px, calc(100vw - 32px)); background:rgba(20,22,26,.96); border:1px solid rgba(226,179,80,.5); border-radius:14px; padding:14px 18px; font-size:14.5px; box-shadow:0 10px 30px rgba(0,0,0,.4); transition:opacity .5s; white-space:pre-wrap; }
+  .toast.sai { opacity:0; }
   .vazio { color:var(--sub); font-size:14px; padding:18px 0; }
 
   @media (max-width:1100px) { .kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:1fr; } }
@@ -462,6 +464,15 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
+// Avisos no canto da tela em vez de janelas do navegador (que travam a página até alguém clicar em OK)
+window.alert = (msg) => {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = String(msg);
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('sai'), 6000);
+  setTimeout(() => t.remove(), 6600);
+};
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const reais = (v) => v == null ? '—' : 'R$ ' + Math.round(v).toLocaleString('pt-BR');
 const hora = (t) => new Date(t).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
