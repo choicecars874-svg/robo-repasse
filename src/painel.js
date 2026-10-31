@@ -15,6 +15,8 @@ const { completarFipe } = require('./fipe');
 const { aplicarLogo, ARQ_LOGO } = require('./logo');
 const estatisticas = require('./estatisticas');
 const instagram = require('./instagram');
+const leadsok = require('./leadsok/coletor');
+const comercial = require('./leadsok/metricas');
 
 const SENHA = process.env.PAINEL_SENHA;
 let VERSAO = '?';
@@ -202,6 +204,52 @@ function iniciarPainel() {
     gravarSenha(nova);
     res.json({ ok: true });
   });
+
+  // LeadsOK (comercial): a senha nunca volta para o navegador
+  app.get('/api/leadsok/estado', (_, res) => res.json(leadsok.status()));
+  app.post('/api/leadsok/credenciais', async (req, res) => {
+    try {
+      res.json(await leadsok.salvarCredenciais(req.body));
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
+  app.post('/api/leadsok/testar', async (_, res) => {
+    try {
+      res.json(await leadsok.testarConexao());
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
+  app.post('/api/leadsok/sincronizar', (_, res) => {
+    leadsok.ciclo().catch(() => {});
+    res.json({ ok: true });
+  });
+  app.post('/api/leadsok/desligar', (_, res) => {
+    leadsok.desligar();
+    res.json({ ok: true });
+  });
+  app.post('/api/leadsok/horas-parado', (req, res) => {
+    leadsok.definirHorasParado(req.body.horas);
+    res.json({ ok: true });
+  });
+  const periodo = (q) => {
+    const hoje = comercial.diaSP();
+    return { de: q.de || comercial.diaSP(Date.now() - 29 * 86400000), ate: q.ate || hoje, origem: q.origem || null, base: q.base === 'resgate' ? 'resgate' : 'entrada' };
+  };
+  app.get('/api/leads', (req, res) => res.json(comercial.leads(periodo(req.query))));
+  app.get('/api/time', (req, res) => res.json(comercial.time(periodo(req.query), leadsok.horasParado())));
+  app.get('/api/agenda', (req, res) => res.json(comercial.agenda(req.query.dia)));
+  app.post('/api/agenda/visita', (req, res) => {
+    try {
+      const { leadId, data, compareceu } = req.body;
+      res.json(comercial.marcarVisita({ leadId, data, compareceu: compareceu === null ? null : !!compareceu }));
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
+  app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
+  app.get('/api/comercial/hoje', (_, res) => res.json({ ...(comercial.resumoHoje() || {}), estado: { ativo: leadsok.status().ativo, problema: leadsok.status().problema } }));
 
   // Instagram: o token nunca volta para o navegador
   app.get('/api/instagram', async (_, res) => res.json(await instagram.resumo()));

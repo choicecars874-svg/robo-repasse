@@ -6,6 +6,7 @@ const { iniciarPainel } = require('./painel');
 
 iniciarPainel();
 robo.iniciar();
+require('./leadsok/coletor').iniciar(); // só coleta depois que o login do LeadsOK for cadastrado no painel
 
 process.on('unhandledRejection', (e) => console.error('Erro não tratado:', e));
 
