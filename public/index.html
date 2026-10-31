@@ -683,6 +683,7 @@ async function carregarSistema() {
   if (r.oom) avisos.push('O sistema já matou processos por falta de memória:\n' + r.oom);
   $('#saudeAvisos').innerHTML = avisos.map((a) => `<pre class="ruim" style="margin-bottom:10px">${esc(a)}</pre>`).join('') || '<p class="bom" style="margin:0 0 10px">Tudo certo com memória e disco.</p>';
   $('#saudeLog').textContent = r.atualizacoes || 'Sem registros.';
+  $('#saudeAvisos').insertAdjacentHTML('beforeend', `<p class="sub" style="margin:0 0 10px">Proteção contra travamento por falta de memória: <b class="${r.protecao === 'ativa' ? 'bom' : 'ruim'}">${esc(r.protecao)}</b></p>`);
 }
 $('#arqBackup').onchange = async (ev) => {
   const f = ev.target.files[0]; if (!f) return;

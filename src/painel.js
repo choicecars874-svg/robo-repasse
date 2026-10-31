@@ -180,6 +180,9 @@ function iniciarPainel() {
     try { const d = fs.statfsSync('/'); disco = { totalMB: Math.round((d.blocks * d.bsize) / 1048576), livreMB: Math.round((d.bavail * d.bsize) / 1048576) }; } catch {}
     let oom = '';
     try { oom = require('child_process').execSync('dmesg -T 2>/dev/null | grep -iE "out of memory|killed process|oom-kill" | tail -5', { timeout: 3000 }).toString(); } catch {}
+    let protecao = 'não instalada';
+    try { protecao = require('child_process').execSync('systemctl is-active earlyoom 2>/dev/null || true', { timeout: 3000 }).toString().trim() === 'active' ? 'ativa' : 'instalada, mas parada'; } catch {}
+    if (protecao === 'instalada, mas parada' && !fs.existsSync('/usr/bin/earlyoom')) protecao = 'não instalada';
     const ultimas = (t, n) => t.trim().split('\n').slice(-n).join('\n');
     res.json({
       memoria: { totalMB: mem.MemTotal, livreMB: mem.MemAvailable, swapTotalMB: mem.SwapTotal, swapLivreMB: mem.SwapFree },
@@ -187,6 +190,7 @@ function iniciarPainel() {
       servidor: { ligadoHa: Math.round(require('os').uptime()), carga: require('os').loadavg().map((x) => x.toFixed(2)) },
       disco,
       oom: oom.trim(),
+      protecao,
       atualizacoes: ultimas(ler('/var/log/robo-atualizacao.log') + ler('/tmp/robo-atualizacao.log') + ler('/tmp/robo-atualizacao-manual.log'), 12),
     });
   });

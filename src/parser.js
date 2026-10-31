@@ -123,8 +123,18 @@ function palavrasConhecidas() {
 function normalizarSimples(s) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
+// Enfeites de anúncio que vêm antes do carro ("LINDO ESSE", "OPORTUNIDADE ÚNICA"): não são modelo
+const ENFEITES = new Set(['lindo', 'linda', 'lindao', 'lindissimo', 'lindissima', 'esse', 'essa', 'este', 'esta', 'top', 'show', 'oportunidade', 'unica', 'unico', 'imperdivel', 'impecavel', 'novinho', 'novinha', 'otimo', 'otima', 'raridade', 'raro', 'rara', 'barato', 'baratissimo', 'super', 'mega', 'olha', 'confira', 'vendo', 'repasse']);
+const tirarEnfeites = (t) => {
+  const p = t.split(/\s+/);
+  let i = 0;
+  while (i < p.length - 1 && ENFEITES.has(normalizarSimples(p[i]))) i++;
+  return p.slice(i).join(' ');
+};
+
 function corrigirPalavra(w) {
   const n = normalizarSimples(w);
+  if (ENFEITES.has(n)) return w;
   if (n.length < 5 || !/^[a-z]+$/.test(n)) return w;
   const conhecidas = palavrasConhecidas();
   if (conhecidas.has(n)) return w;
@@ -210,7 +220,7 @@ function parseAnuncio(textoOriginal) {
       // linha de preço só se tiver um valor de verdade ("Vendo Onix 2019" é modelo, "venda 140.000" é preço)
       !(LINHA_DE_PRECO.test(t) && /\d[\d.,]{2,}|\d+\s*(mil|k)\b/i.test(t.replace(ANO, ' '))) &&
       !LINHA_DE_CONTATO.test(t) &&
-      !/^(repasse|oportunidade|aten[cç][aã]o|pronta entrega|urgente|baixou|imperd[ií]vel|abaixo da fipe|ipva|blindad|[uú]nico dono|revisad|derret|ano\b|km\b|cor\b|c[aâ]mbio|combust|portas|placa|final\b|\d\s*\/\s*\d|motor|pneus?|laudo|doc\b|documento|marca\s*:)/i.test(t) &&
+      !(/^(repasse|oportunidade|aten[cç][aã]o|pronta entrega|urgente|baixou|imperd[ií]vel|abaixo da fipe|ipva|blindad|[uú]nico dono|revisad|derret|ano\b|km\b|cor\b|c[aâ]mbio|combust|portas|placa|final\b|\d\s*\/\s*\d|motor|pneus?|laudo|doc\b|documento|marca\s*:)/i.test(t) && !acharMarca(tirarEnfeites(t).replace(/^(repasse|oportunidade)\b/i, ''))) &&
       !/\bpe[cç]as?\b/i.test(t) &&
       !/^\d{4}$/.test(t)
     );
@@ -225,7 +235,7 @@ function parseAnuncio(textoOriginal) {
     linhaModelo = `${semEmoji(linhaModelo)} ${candidatas[iCand + 1]}`;
   }
   const modeloBruto = linhaModelo ? semEmoji(limparLinha(linhaModelo)).replace(/^\s*(modelo|ve[ií]culo|carro)\s*[:\-]\s*/i, '').replace(ANO, '').replace(/\b(vendo|vende-se|fipe|tabela|repasse)\b/gi, '').replace(/\s{2,}/g, ' ').trim() || null : null;
-  const modelo = nomePadrao(modeloBruto, texto);
+  const modelo = nomePadrao(modeloBruto && tirarEnfeites(modeloBruto), texto);
 
   // Detalhes = demais linhas úteis (opcionais, observações), sem preço e sem contato
   const detalhes = linhas

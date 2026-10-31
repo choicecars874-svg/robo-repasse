@@ -316,7 +316,12 @@ function siglaGrupo(jid, nome = nomeGrupo(jid)) {
 function codigoOrigem(jid, quando) {
   // discreto, só a equipe entende: sigla + hora sem dois-pontos (#DR1001 = Danilo Repasse, 10:01)
   const hhmm = new Date(quando).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }).replace(':', '');
-  return `#${siglaGrupo(jid)}${hhmm}`;
+  // dois anúncios do mesmo grupo no mesmo minuto: #DR1303, #DR1303B, #DR1303C...
+  const base = `#${siglaGrupo(jid)}${hhmm}`;
+  const usados = new Set([...historico.postados.filter((p) => Date.now() - p.quando < 24 * 3600 * 1000).map((p) => p.codigo), ...[...pendentes.values()].map((p) => p.origem?.codigo)]);
+  let codigo = base;
+  for (let i = 0; usados.has(codigo) && i < 25; i++) codigo = base + String.fromCharCode(66 + i);
+  return codigo;
 }
 
 async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [], t0 = Date.now(), tTexto = null }) {
