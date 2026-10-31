@@ -287,6 +287,7 @@ function iniciarPainel() {
 
   // Instagram: o token nunca volta para o navegador
   app.get('/api/instagram', async (req, res) => res.json(await instagram.resumo(req.query.periodo)));
+  app.get('/api/instagram/posts', async (_, res) => res.json(await instagram.posts()));
   app.get('/api/instagram/estado', (_, res) => res.json(instagram.estado()));
   app.post('/api/instagram/token', async (req, res) => {
     try {

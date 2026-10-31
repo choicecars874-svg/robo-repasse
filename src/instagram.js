@@ -105,12 +105,13 @@ async function direct(token, perfil, { since, until }) {
     const deHoje = (lista.data || []).filter((c) => new Date(c.updated_time).getTime() >= hoje).slice(0, 40);
     const j = { data: [] };
     for (let i = 0; i < deHoje.length; i += 4) {
-      const parte = await Promise.all(deHoje.slice(i, i + 4).map((c) => chamar(`/${c.id}`, { fields: 'updated_time,messages.limit(25){created_time,from}' }, token, 20000).catch(() => null)));
+      const parte = await Promise.all(deHoje.slice(i, i + 4).map((c) => chamar(`/${c.id}`, { fields: 'updated_time,participants,messages.limit(25){created_time,from}' }, token, 20000).catch(() => null)));
       j.data.push(...parte.filter(Boolean));
     }
     const daLoja = (m) => m.from && (m.from.id === perfil.user_id || m.from.id === perfil.id || m.from.username === perfil.username);
     let conversas = 0, novas = 0, aguardando = 0, respondidas = 0;
     const tempos = [];
+    const esperando = []; // quem está esperando resposta agora (o @ do cliente e desde quando)
     for (const c of j.data || []) {
       if (new Date(c.updated_time).getTime() < hoje) continue;
       const msgs = (c.messages?.data || []).map((m) => ({ t: new Date(m.created_time).getTime(), loja: daLoja(m) })).sort((a, b) => a.t - b.t);
@@ -118,14 +119,21 @@ async function direct(token, perfil, { since, until }) {
       if (!doCliente.length) continue;
       conversas++;
       if (msgs.length < 25 && msgs[0].t >= hoje) novas++; // conversa inteira cabe na página e começou hoje
-      if (!msgs[msgs.length - 1].loja) aguardando++;
+      if (!msgs[msgs.length - 1].loja) {
+        aguardando++;
+        const cliente = (c.participants?.data || []).find((p) => p.username !== perfil.username && p.id !== perfil.user_id);
+        // desde a 1ª mensagem do cliente ainda sem resposta
+        let desde = msgs[msgs.length - 1].t;
+        for (let k = msgs.length - 1; k >= 0 && !msgs[k].loja; k--) desde = msgs[k].t;
+        esperando.push({ perfil: perfil.username, cliente: cliente?.username || null, desde });
+      }
       const resposta = msgs.find((m) => m.loja && m.t > doCliente[0].t);
       if (resposta) {
         respondidas++;
         tempos.push((resposta.t - doCliente[0].t) / 60000);
       }
     }
-    return { conversas, novas, aguardando, respondidas, minutos: tempos.length ? tempos.reduce((a, b) => a + b, 0) / tempos.length : null, amostra: (j.data || []).length };
+    return { conversas, novas, aguardando, respondidas, esperando, minutos: tempos.length ? tempos.reduce((a, b) => a + b, 0) / tempos.length : null, amostra: (j.data || []).length };
   } catch (e) {
     return { erro: /permission|scope|\(#10\)|\(#200\)|\(#230\)/i.test(e.message) ? 'O token deste perfil não tem permissão de mensagens. Gere de novo marcando instagram_business_manage_messages.' : e.message };
   }
@@ -221,6 +229,7 @@ async function resumo(periodo = 'hoje') {
           aguardando: somar(d, (x) => x.aguardando),
           respondidas: resp,
           minutos: resp ? d.filter((x) => x.minutos != null).reduce((a, x) => a + x.minutos * x.respondidas, 0) / resp : null,
+          esperando: d.flatMap((x) => x.esperando || []).sort((a, b) => a.desde - b.desde),
         };
       })(),
     },
@@ -230,8 +239,55 @@ async function resumo(periodo = 'hoje') {
   };
 }
 
+// Posts recentes de cada perfil com as métricas de cada post (alcance, salvos, compartilhamentos)
+const cachePosts = { quando: 0, dados: null };
+async function metricasDoPost(token, m) {
+  for (const metricas of ['reach,saved,shares,total_interactions,views', 'reach,saved,shares,total_interactions', 'reach']) {
+    try {
+      const j = await chamar(`/${m.id}/insights`, { metric: metricas }, token, 20000);
+      return Object.fromEntries((j.data || []).map((x) => [x.name, x.values?.[0]?.value ?? x.total_value?.value ?? null]));
+    } catch {}
+  }
+  return {};
+}
+async function posts() {
+  if (cachePosts.dados && Date.now() - cachePosts.quando < 30 * 60 * 1000) return cachePosts.dados;
+  const lista = [];
+  for (const [usuario, c] of Object.entries(dados.contas)) {
+    try {
+      const midia = await chamar('/me/media', { fields: 'id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp,like_count,comments_count', limit: 25 }, c.token, 20000);
+      const itens = midia.data || [];
+      for (let i = 0; i < itens.length; i += 4) {
+        const ms = await Promise.all(itens.slice(i, i + 4).map((m) => metricasDoPost(c.token, m)));
+        itens.slice(i, i + 4).forEach((m, k) => lista.push({
+          id: m.id,
+          usuario,
+          tipo: m.media_product_type === 'REELS' ? 'Reels' : m.media_type === 'CAROUSEL_ALBUM' ? 'Carrossel' : m.media_type === 'VIDEO' ? 'Vídeo' : 'Foto',
+          legenda: (m.caption || '').slice(0, 160),
+          link: m.permalink,
+          imagem: m.thumbnail_url || m.media_url,
+          quando: m.timestamp,
+          curtidas: m.like_count ?? null,
+          comentarios: m.comments_count ?? null,
+          alcance: ms[k].reach ?? null,
+          salvos: ms[k].saved ?? null,
+          compartilhamentos: ms[k].shares ?? null,
+          interacoes: ms[k].total_interactions ?? null,
+          visualizacoes: ms[k].views ?? null,
+        }));
+      }
+    } catch (e) {
+      erros[usuario] = e.message;
+    }
+  }
+  lista.sort((a, b) => String(b.quando).localeCompare(String(a.quando)));
+  cachePosts.dados = { posts: lista, atualizadoEm: Date.now() };
+  cachePosts.quando = Date.now();
+  return cachePosts.dados;
+}
+
 const estado = () => ({
   contas: Object.entries(dados.contas).map(([usuario, c]) => ({ usuario, salvoEm: c.salvoEm, renovadoEm: c.renovadoEm, erro: erros[usuario] || null })),
 });
 
-module.exports = { guardarToken, removerToken, resumo, estado };
+module.exports = { guardarToken, removerToken, resumo, estado, posts };

@@ -112,6 +112,9 @@
   .postsIg { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:14px; }
   .postIg { border:1px solid var(--borda); border-radius:14px; overflow:hidden; background:rgba(255,255,255,.02); text-decoration:none; display:block; }
   .postIg .img { aspect-ratio:1; background:#111 center/cover no-repeat; } .postIg .info { padding:10px 12px; font-size:12.5px; color:var(--sub); } .postIg .info b { color:var(--txt); font-weight:600; }
+  .postsIg.grande { grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); }
+  .postIg .mets { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px 8px; margin-top:8px; } .postIg .mets span { font-size:11.5px; } .postIg .mets b { display:block; color:var(--txt); font-size:15px; font-weight:600; }
+  .postIg .leg { margin-top:8px; font-size:12px; color:var(--sub); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .contasIg div { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--borda); }
   .areas { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; } .areas .card { margin:0; }
   .area[data-ir] { cursor:pointer; } .area[data-ir]:hover { border-color:var(--borda2); } .area .eyebrow { display:flex; align-items:center; gap:8px; } .area .eyebrow svg.i { width:16px; height:16px; }
@@ -181,7 +184,14 @@
       <button data-aba="config">Configurações</button>
     </div>
   </div>
-  <button data-aba="instagram"><svg class="i"><use href="#i-instagram"/></svg>Instagram</button>
+  <div class="grupoMenu fechado" id="menuInstagram">
+    <button class="titulo" data-abre="menuInstagram"><svg class="i"><use href="#i-instagram"/></svg>Instagram <svg class="i seta"><use href="#i-seta"/></svg></button>
+    <div class="sub-itens">
+      <button data-aba="instagram">Início</button>
+      <button data-aba="igPostsSec">Posts</button>
+      <button data-aba="igDirect">Direct</button>
+    </div>
+  </div>
   <div class="grupoMenu fechado" id="menuComercial">
     <button class="titulo" data-abre="menuComercial"><svg class="i"><use href="#i-leads"/></svg>Comercial <svg class="i seta"><use href="#i-seta"/></svg></button>
     <div class="sub-itens">
@@ -227,7 +237,7 @@
 <section id="instagram">
   <div id="igVazio" class="card" hidden><h2>Nenhum perfil conectado</h2><p class="sub" style="margin:4px 0 14px">Conecte os perfis em Configurações → Integrações (choicecarsbr, reservachoice1, oelyaspereira).</p><button class="btn verde" data-ir="integracoes">Conectar perfis</button></div>
   <div id="igConteudo" hidden>
-    <div class="atalhos" id="igPeriodo"><button data-p="hoje" class="ativo">Hoje</button><button data-p="ontem">Ontem</button><button data-p="7">7 dias</button><button data-p="30">30 dias</button></div>
+    <div class="atalhos igPer"><button data-p="hoje" class="ativo">Hoje</button><button data-p="ontem">Ontem</button><button data-p="7">7 dias</button><button data-p="30">30 dias</button></div>
     <div class="eyebrow"><span class="igRotulo">Hoje</span> · todos os perfis</div>
     <div class="kpis">
       <div class="kpi"><div class="eyebrow">Seguidores</div><b id="igSeg">—</b><small id="igSegVar">soma dos perfis</small></div>
@@ -235,18 +245,9 @@
       <div class="kpi"><div class="eyebrow">Interações</div><b id="igInt">—</b><small>curtidas, comentários, salvos, compart.</small></div>
       <div class="kpi"><div class="eyebrow">Visualizações</div><b id="igVis">—</b><small id="igLinks">dos posts e reels no período</small></div>
     </div>
-    <div class="eyebrow">Direct · <span class="igRotulo">hoje</span> · todos os perfis</div>
-    <div class="kpis">
-      <div class="kpi"><div class="eyebrow">Conversas</div><b id="dmConv">—</b><small>com mensagem de cliente no período</small></div>
-      <div class="kpi"><div class="eyebrow">Novas</div><b id="dmNovas">—</b><small>começaram no período</small></div>
-      <div class="kpi"><div class="eyebrow">Esperando resposta</div><b id="dmAguardando">—</b><small>última mensagem é do cliente</small></div>
-      <div class="kpi"><div class="eyebrow">Tempo de resposta</div><b id="dmTempo">—</b><small id="dmTempoObs">média até a 1ª resposta</small></div>
-    </div>
-    <p class="sub" id="dmAviso" style="margin:-6px 0 16px"></p>
     <div class="eyebrow" style="margin-bottom:12px">Por perfil</div>
     <div class="contas" id="igContas"></div>
     <div class="card"><div class="cardTopo"><div><h2>Alcance nos últimos 7 dias</h2><p class="sub">Soma dos perfis conectados.</p></div></div><div class="grafico" id="igSemana"></div></div>
-    <div class="card"><h2>Últimos posts</h2><p class="sub">Dos perfis conectados, do mais novo para o mais antigo.</p><div class="postsIg" id="igPosts"></div></div>
     <p class="sub" id="igAtual"></p>
   </div>
 </section>
@@ -324,6 +325,32 @@
   </div>
   <p class="sub">Deixe 0 para não acompanhar aquela meta.</p>
   <div class="salvar"><button class="btn verde salvarCfg">Salvar</button></div>
+</section>
+
+<section id="igPostsSec">
+  <div class="card filtros">
+    <div><label>Perfil</label><select id="ipPerfil"><option value="">Todos os perfis</option></select></div>
+    <div><label>Tipo</label><select id="ipTipo"><option value="">Todos</option><option>Reels</option><option>Foto</option><option>Carrossel</option><option>Vídeo</option></select></div>
+    <div><label>Ordenar por</label><select id="ipOrdem"><option value="quando">Mais recentes</option><option value="alcance">Mais alcance</option><option value="interacoes">Mais interações</option><option value="curtidas">Mais curtidas</option><option value="salvos">Mais salvos</option><option value="compartilhamentos">Mais compartilhados</option></select></div>
+  </div>
+  <p class="sub" id="ipObs" style="margin:0 0 12px">Os 25 posts mais recentes de cada perfil, com as métricas de cada um.</p>
+  <div class="postsIg grande" id="ipLista"><div class="vazio">Carregando…</div></div>
+</section>
+
+<section id="igDirect">
+  <div class="atalhos igPer"><button data-p="hoje" class="ativo">Hoje</button><button data-p="ontem">Ontem</button><button data-p="7">7 dias</button><button data-p="30">30 dias</button></div>
+    <div class="eyebrow"><span class="igRotulo">Hoje</span> · todos os perfis</div>
+    <div class="kpis">
+      <div class="kpi"><div class="eyebrow">Conversas</div><b id="dmConv">—</b><small>com mensagem de cliente no período</small></div>
+      <div class="kpi"><div class="eyebrow">Novas</div><b id="dmNovas">—</b><small>começaram no período</small></div>
+      <div class="kpi"><div class="eyebrow">Esperando resposta</div><b id="dmAguardando">—</b><small>última mensagem é do cliente</small></div>
+      <div class="kpi"><div class="eyebrow">Tempo de resposta</div><b id="dmTempo">—</b><small id="dmTempoObs">média até a 1ª resposta</small></div>
+    </div>
+    <p class="sub" id="dmAviso" style="margin:-6px 0 16px"></p>
+  <div class="grade">
+    <div class="card"><h2>Por perfil</h2><p class="sub">Conversas e respostas de cada perfil no período.</p><div style="overflow-x:auto"><table><thead><tr><th>Perfil</th><th>Conversas</th><th>Novas</th><th>Esperando</th><th>Respondidas</th><th>Tempo médio</th></tr></thead><tbody id="dmPerfis"></tbody></table></div></div>
+    <div class="card"><h2>Esperando resposta agora</h2><p class="sub">Do mais antigo para o mais novo. Só leitura: responda pela ferramenta de atendimento.</p><div id="dmEsperando"></div></div>
+  </div>
 </section>
 
 <section id="inicio">
@@ -587,7 +614,9 @@ const TITULOS = {
   metas: ['Metas', 'Metas do dia por área. O Painel mostra o quanto já foi feito.'],
   aprovar: ['Aprovar', 'Carros capturados esperando sua decisão.'],
   historico: ['Histórico', 'Tudo que foi postado, com código, origem e cliques.'],
-  instagram: ['Instagram', 'Seguidores, alcance e posts dos perfis da Choice, somados e por perfil.'],
+  instagram: ['Instagram', 'Seguidores, alcance e interações dos perfis da Choice, somados e por perfil.'],
+  igPostsSec: ['Posts', 'Desempenho de cada post: o que dá mais alcance e interação.'],
+  igDirect: ['Direct', 'Conversas do direct, tempo de resposta e quem está esperando.'],
   config: ['Configurações dos grupos', 'Tudo que define o que o robô pega e como ele posta.'],
   integracoes: ['Integrações', 'Contas conectadas ao GESTÃO CHOICE: WhatsApp, Instagram e LeadsOK.'],
   sistema: ['Sistema', 'Versão, atualização e senha do painel.'],
@@ -601,9 +630,9 @@ function abrirAba(aba) {
   document.body.classList.remove('menuAberto'); scrollTo(0, 0);
   try { localStorage.setItem('aba', aba); } catch {}
   const [titulo, sub] = TITULOS[aba];
-  $('#tEyebrow').textContent = aba.startsWith('com') ? 'Comercial' : ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
+  $('#tEyebrow').textContent = aba.startsWith('ig') ? 'Instagram' : aba.startsWith('com') ? 'Comercial' : ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, integracoes: () => { carregarIgCfg(); carregarLkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, sistema: () => { carregarSistema(); carregarDominio(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, sistema: () => { carregarSistema(); carregarDominio(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -804,9 +833,9 @@ async function carregarPainel() {
 // Instagram
 const variacao = (agora, antes) => agora == null || antes == null ? '' : agora - antes === 0 ? 'igual a ontem' : `${agora > antes ? '+' : ''}${num(agora - antes)} desde ontem`;
 let igPeriodo = 'hoje';
-document.querySelectorAll('#igPeriodo button').forEach((b) => b.onclick = () => {
+document.querySelectorAll('.igPer button').forEach((b) => b.onclick = () => {
   igPeriodo = b.dataset.p;
-  document.querySelectorAll('#igPeriodo button').forEach((x) => x.classList.toggle('ativo', x === b));
+  document.querySelectorAll('.igPer button').forEach((x) => x.classList.toggle('ativo', x.dataset.p === b.dataset.p));
   document.querySelectorAll('.igRotulo').forEach((e) => { e.textContent = b.textContent; });
   carregarInstagram();
 });
@@ -831,13 +860,17 @@ async function carregarInstagram() {
   $('#dmNovas').textContent = dm ? num(dm.novas) : '—';
   $('#dmAguardando').textContent = dm ? num(dm.aguardando) : '—';
   $('#dmTempo').textContent = dm ? fmtMin(dm.minutos) : '—';
-  $('#dmTempoObs').textContent = dm && dm.respondidas ? `${num(dm.respondidas)} respondidas hoje` : 'média até a 1ª resposta';
+  $('#dmTempoObs').textContent = dm && dm.respondidas ? `${num(dm.respondidas)} respondidas no período` : 'média até a 1ª resposta';
+  const fmtDesde = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.floor(m / 60)} h ${m % 60} min` : `há ${Math.floor(m / 1440)} d`; };
+  $('#dmPerfis').innerHTML = r.contas.map((c) => c.direct && !c.direct.erro
+    ? `<tr><td><b>@${esc(c.usuario)}</b></td><td>${num(c.direct.conversas)}</td><td>${num(c.direct.novas)}</td><td class="${c.direct.aguardando ? 'ruim' : ''}">${num(c.direct.aguardando)}</td><td>${num(c.direct.respondidas)}</td><td>${fmtMin(c.direct.minutos)}</td></tr>`
+    : `<tr><td><b>@${esc(c.usuario)}</b></td><td colspan="5" class="ruim">${esc(c.direct?.erro || c.erro || 'sem dados')}</td></tr>`).join('');
+  const esp = dm?.esperando || [];
+  $('#dmEsperando').innerHTML = esp.length ? esp.map((e) => `<div class="item"><div class="linhaSup"><span>@${esc(e.perfil)}</span><span class="${Date.now() - e.desde > 3600000 ? 'ruim' : ''}">${fmtDesde(e.desde)}</span></div><div class="titulo"><div>${e.cliente ? '@' + esc(e.cliente) : 'Cliente'}</div></div></div>`).join('') : '<div class="vazio">Ninguém esperando resposta. 👏</div>'.replace(' 👏', '');
   const semDm = r.contas.filter((c) => c.direct?.erro);
   $('#dmAviso').innerHTML = semDm.length ? semDm.map((c) => `<span class="ruim">@${esc(c.usuario)}: ${esc(c.direct.erro)}</span>`).join('<br>') : 'Só leitura: o painel não responde nem marca mensagens como lidas. Chamadas de voz/vídeo do direct não são liberadas pela API do Instagram.';
   const maxA = Math.max(1, ...r.semana.map((d) => d.alcance || 0));
   $('#igSemana').innerHTML = r.semana.length ? r.semana.map((d) => `<div class="col"><div class="barras"><i class="c" style="width:55%;max-width:34px;height:${((d.alcance || 0) / maxA) * 100}%" title="${num(d.alcance)} contas alcançadas"></i></div><span>${d.dia.slice(8)}/${d.dia.slice(5, 7)}</span></div>`).join('') : '<div class="vazio">Sem dados de alcance.</div>';
-  $('#igPosts').innerHTML = r.ultimos.length ? r.ultimos.map((m) => `<a class="postIg" href="${esc(m.link)}" target="_blank" rel="noopener"><div class="img" style="background-image:url('${esc(m.imagem || '')}')"></div>
-    <div class="info"><b>@${esc(m.usuario)}</b> · ${esc(m.tipo)} · ${new Date(m.quando).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })}<br>${num(m.curtidas)} curtidas · ${num(m.comentarios)} comentários</div></a>`).join('') : '<div class="vazio">Nenhum post encontrado.</div>';
   $('#igAtual').textContent = 'Atualizado às ' + new Date(r.atualizadoEm).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) + ' · a Meta libera os números com alguns minutos de atraso.';
 }
 async function carregarDominio() {
@@ -879,6 +912,26 @@ $('#arqBackup').onchange = async (ev) => {
   catch (e) { alert(e.message); }
 };
 $('#btnSaude').onclick = () => carregarSistema();
+let postsIgCache = null;
+async function carregarPostsIg() {
+  if (!postsIgCache) {
+    $('#ipLista').innerHTML = '<div class="vazio">Carregando os posts e as métricas de cada um (pode levar até 1 minuto na primeira vez)…</div>';
+    postsIgCache = await api('/api/instagram/posts');
+    const perfis = [...new Set(postsIgCache.posts.map((x) => x.usuario))];
+    $('#ipPerfil').innerHTML = '<option value="">Todos os perfis</option>' + perfis.map((u) => `<option value="${esc(u)}">@${esc(u)}</option>`).join('');
+  }
+  const perfil = $('#ipPerfil').value, tipo = $('#ipTipo').value, ordem = $('#ipOrdem').value;
+  let lista = postsIgCache.posts.filter((x) => (!perfil || x.usuario === perfil) && (!tipo || x.tipo === tipo));
+  if (ordem !== 'quando') lista = [...lista].sort((a, b) => (b[ordem] ?? -1) - (a[ordem] ?? -1));
+  const n = (v) => (v == null ? '—' : num(v));
+  $('#ipObs').textContent = `${lista.length} posts · atualizado às ${new Date(postsIgCache.atualizadoEm).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })} (renova a cada 30 min).`;
+  $('#ipLista').innerHTML = lista.map((m) => `<a class="postIg" href="${esc(m.link)}" target="_blank" rel="noopener"><div class="img" style="background-image:url('${esc(m.imagem || '')}')"></div>
+    <div class="info"><b>@${esc(m.usuario)}</b> · ${esc(m.tipo)} · ${new Date(m.quando).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })}
+    <div class="mets"><span><b>${n(m.alcance)}</b>alcance</span><span><b>${n(m.curtidas)}</b>curtidas</span><span><b>${n(m.comentarios)}</b>coment.</span><span><b>${n(m.salvos)}</b>salvos</span><span><b>${n(m.compartilhamentos)}</b>compart.</span>${m.visualizacoes != null ? `<span><b>${n(m.visualizacoes)}</b>visualiz.</span>` : ''}</div>
+    ${m.legenda ? `<div class="leg">${esc(m.legenda)}</div>` : ''}</div></a>`).join('') || '<div class="vazio">Nenhum post.</div>';
+}
+['#ipPerfil', '#ipTipo', '#ipOrdem'].forEach((id) => { $(id).onchange = () => carregarPostsIg(); });
+
 async function carregarIgCfg() {
   const e = await api('/api/instagram/estado');
   $('#igContasCfg').innerHTML = e.contas.length ? e.contas.map((c) => `<div><span><b>@${esc(c.usuario)}</b> <span class="sub">· conectado em ${hora(c.salvoEm)}${c.erro ? ' · <span class="ruim">' + esc(c.erro) + '</span>' : ''}</span></span><button class="btn verm" data-rm="${esc(c.usuario)}">Remover</button></div>`).join('')
