@@ -85,6 +85,35 @@ async function alcanceDaSemana(token) {
   return Promise.all(dias.map(async (d) => ({ dia: d.dia, alcance: await metrica(token, 'reach', d.since, d.until) })));
 }
 
+// Direct: só LÊ as conversas para contar (não responde, não marca como lida, não usa webhook —
+// o atendimento continua na ferramenta própria). Precisa da permissão de mensagens no token.
+async function direct(token, perfil) {
+  try {
+    const j = await chamar('/me/conversations', { platform: 'instagram', fields: 'updated_time,messages.limit(25){created_time,from}', limit: 40 }, token);
+    const hoje = inicioDeHoje() * 1000;
+    const daLoja = (m) => m.from && (m.from.id === perfil.user_id || m.from.id === perfil.id || m.from.username === perfil.username);
+    let conversas = 0, novas = 0, aguardando = 0, respondidas = 0;
+    const tempos = [];
+    for (const c of j.data || []) {
+      if (new Date(c.updated_time).getTime() < hoje) continue;
+      const msgs = (c.messages?.data || []).map((m) => ({ t: new Date(m.created_time).getTime(), loja: daLoja(m) })).sort((a, b) => a.t - b.t);
+      const doCliente = msgs.filter((m) => !m.loja && m.t >= hoje);
+      if (!doCliente.length) continue;
+      conversas++;
+      if (msgs.length < 25 && msgs[0].t >= hoje) novas++; // conversa inteira cabe na página e começou hoje
+      if (!msgs[msgs.length - 1].loja) aguardando++;
+      const resposta = msgs.find((m) => m.loja && m.t > doCliente[0].t);
+      if (resposta) {
+        respondidas++;
+        tempos.push((resposta.t - doCliente[0].t) / 60000);
+      }
+    }
+    return { conversas, novas, aguardando, respondidas, minutos: tempos.length ? tempos.reduce((a, b) => a + b, 0) / tempos.length : null, amostra: (j.data || []).length };
+  } catch (e) {
+    return { erro: /permission|scope|\(#10\)|\(#200\)|\(#230\)/i.test(e.message) ? 'O token deste perfil não tem permissão de mensagens. Gere de novo marcando instagram_business_manage_messages.' : e.message };
+  }
+}
+
 async function resumoConta(usuario) {
   const c = dados.contas[usuario];
   const guardado = cache.get(usuario);
@@ -104,6 +133,7 @@ async function resumoConta(usuario) {
       metrica(t, 'profile_links_taps', since, until),
       alcanceDaSemana(t),
     ]);
+    const dm = await direct(t, perfil);
     // seguidores do dia (para mostrar quanto cresceu)
     c.seguidoresPorDia ||= {};
     c.seguidoresPorDia[diaDe()] = perfil.followers_count;
@@ -116,6 +146,7 @@ async function resumoConta(usuario) {
       foto: perfil.profile_picture_url,
       seguidores: perfil.followers_count,
       seguindo: perfil.follows_count,
+      direct: dm,
       posts: perfil.media_count,
       seguidoresOntem: c.seguidoresPorDia[diaDe(Date.now() - DIA)] ?? null,
       hoje: { alcance, interacoes, visualizacoes, engajadas, toquesLink },
@@ -162,6 +193,18 @@ async function resumo() {
       interacoes: somar(ok, (c) => c.hoje.interacoes),
       visualizacoes: somar(ok, (c) => c.hoje.visualizacoes),
       toquesLink: somar(ok, (c) => c.hoje.toquesLink),
+      direct: (() => {
+        const d = ok.map((c) => c.direct).filter((x) => x && !x.erro);
+        if (!d.length) return null;
+        const resp = somar(d, (x) => x.respondidas);
+        return {
+          conversas: somar(d, (x) => x.conversas),
+          novas: somar(d, (x) => x.novas),
+          aguardando: somar(d, (x) => x.aguardando),
+          respondidas: resp,
+          minutos: resp ? d.filter((x) => x.minutos != null).reduce((a, x) => a + x.minutos * x.respondidas, 0) / resp : null,
+        };
+      })(),
     },
     semana,
     ultimos: ok.flatMap((c) => c.ultimos).sort((a, b) => String(b.quando).localeCompare(String(a.quando))).slice(0, 8),

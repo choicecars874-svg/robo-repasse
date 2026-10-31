@@ -220,6 +220,14 @@
       <div class="kpi"><div class="eyebrow">Interações</div><b id="igInt">—</b><small>curtidas, comentários, salvos, compart.</small></div>
       <div class="kpi"><div class="eyebrow">Visualizações</div><b id="igVis">—</b><small id="igLinks">dos posts e reels hoje</small></div>
     </div>
+    <div class="eyebrow">Direct hoje · todos os perfis</div>
+    <div class="kpis">
+      <div class="kpi"><div class="eyebrow">Conversas</div><b id="dmConv">—</b><small>com mensagem de cliente hoje</small></div>
+      <div class="kpi"><div class="eyebrow">Novas</div><b id="dmNovas">—</b><small>começaram hoje</small></div>
+      <div class="kpi"><div class="eyebrow">Esperando resposta</div><b id="dmAguardando">—</b><small>última mensagem é do cliente</small></div>
+      <div class="kpi"><div class="eyebrow">Tempo de resposta</div><b id="dmTempo">—</b><small id="dmTempoObs">média até a 1ª resposta</small></div>
+    </div>
+    <p class="sub" id="dmAviso" style="margin:-6px 0 16px"></p>
     <div class="eyebrow" style="margin-bottom:12px">Por perfil</div>
     <div class="contas" id="igContas"></div>
     <div class="card"><div class="cardTopo"><div><h2>Alcance nos últimos 7 dias</h2><p class="sub">Soma dos perfis conectados.</p></div></div><div class="grafico" id="igSemana"></div></div>
@@ -720,6 +728,15 @@ async function carregarInstagram() {
     ? `<div class="card conta"><div class="quem"><div><b>@${esc(c.usuario)}</b><span class="ruim">${esc(c.erro)}</span></div></div><span class="sub">Gere um token novo para este perfil em Configurações.</span></div>`
     : `<div class="card conta"><div class="quem">${c.foto ? `<img class="av" src="${esc(c.foto)}" alt="">` : ''}<div><b>@${esc(c.usuario)}</b><span>${esc(variacao(c.seguidores, c.seguidoresOntem) || c.nome || '')}</span></div></div>
       <div class="mini"><div><b>${num(c.seguidores)}</b>seguidores</div><div><b>${c.hoje.alcance == null ? '—' : num(c.hoje.alcance)}</b>alcance hoje</div><div><b>${c.hoje.interacoes == null ? '—' : num(c.hoje.interacoes)}</b>interações</div></div></div>`).join('');
+  const dm = t.direct;
+  const fmtMin = (m) => m == null ? '—' : m < 60 ? `${Math.round(m)} min` : `${Math.floor(m / 60)} h ${Math.round(m % 60)} min`;
+  $('#dmConv').textContent = dm ? num(dm.conversas) : '—';
+  $('#dmNovas').textContent = dm ? num(dm.novas) : '—';
+  $('#dmAguardando').textContent = dm ? num(dm.aguardando) : '—';
+  $('#dmTempo').textContent = dm ? fmtMin(dm.minutos) : '—';
+  $('#dmTempoObs').textContent = dm && dm.respondidas ? `${num(dm.respondidas)} respondidas hoje` : 'média até a 1ª resposta';
+  const semDm = r.contas.filter((c) => c.direct?.erro);
+  $('#dmAviso').innerHTML = semDm.length ? semDm.map((c) => `<span class="ruim">@${esc(c.usuario)}: ${esc(c.direct.erro)}</span>`).join('<br>') : 'Só leitura: o painel não responde nem marca mensagens como lidas. Chamadas de voz/vídeo do direct não são liberadas pela API do Instagram.';
   const maxA = Math.max(1, ...r.semana.map((d) => d.alcance || 0));
   $('#igSemana').innerHTML = r.semana.length ? r.semana.map((d) => `<div class="col"><div class="barras"><i class="c" style="width:55%;max-width:34px;height:${((d.alcance || 0) / maxA) * 100}%" title="${num(d.alcance)} contas alcançadas"></i></div><span>${d.dia.slice(8)}/${d.dia.slice(5, 7)}</span></div>`).join('') : '<div class="vazio">Sem dados de alcance.</div>';
   $('#igPosts').innerHTML = r.ultimos.length ? r.ultimos.map((m) => `<a class="postIg" href="${esc(m.link)}" target="_blank" rel="noopener"><div class="img" style="background-image:url('${esc(m.imagem || '')}')"></div>
@@ -784,7 +801,8 @@ async function carregarGeral() {
   $('#gSeg').textContent = t.seguidores == null ? '—' : num(t.seguidores);
   $('#gAlc').textContent = t.alcance == null ? '—' : num(t.alcance);
   $('#gInt').textContent = t.interacoes == null ? '—' : num(t.interacoes);
-  $('#gIgObs').textContent = ig.conectado ? `${ig.contas.length} perfil(is) conectado(s)${novos != null ? ` · ${novos >= 0 ? '+' : ''}${num(novos)} seguidores desde ontem` : ''}` : 'Conecte os perfis em Configurações → Integrações.';
+  const dmG = t.direct;
+  $('#gIgObs').textContent = ig.conectado ? `${ig.contas.length} perfil(is)${novos != null ? ` · ${novos >= 0 ? '+' : ''}${num(novos)} seguidores desde ontem` : ''}${dmG ? ` · direct: ${num(dmG.conversas)} conversas, ${num(dmG.aguardando)} esperando` : ''}` : 'Conecte os perfis em Configurações → Integrações.';
   const linhas = [
     ['Posts nos grupos', h.postados, m.postsDia || g.limiteDiario],
     ['Cliques no WhatsApp', h.cliques, m.cliquesDia],
