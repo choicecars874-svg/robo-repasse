@@ -34,6 +34,13 @@ const diaDe = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { time
 function janela(periodo = 'hoje') {
   const h = inicioDeHoje();
   const agora = Math.floor(Date.now() / 1000);
+  const m = String(periodo).match(/^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/);
+  if (m) {
+    // personalizado: a Meta aceita no máximo 30 dias por consulta
+    const until = Math.min(agora, Math.floor(Date.parse(m[2] + 'T00:00:00-03:00') / 1000) + 86400);
+    const since = Math.max(Math.floor(Date.parse(m[1] + 'T00:00:00-03:00') / 1000), until - 30 * 86400);
+    return { since, until };
+  }
   if (periodo === 'ontem') return { since: h - 86400, until: h };
   if (periodo === '7') return { since: h - 6 * 86400, until: agora };
   if (periodo === '30') return { since: h - 29 * 86400, until: agora };
@@ -202,7 +209,7 @@ const somar = (lista, f) => {
 };
 
 async function resumo(periodo = 'hoje') {
-  if (!['hoje', 'ontem', '7', '30'].includes(periodo)) periodo = 'hoje';
+  if (!['hoje', 'ontem', '7', '30'].includes(periodo) && !/^\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}$/.test(periodo)) periodo = 'hoje';
   const usuarios = Object.keys(dados.contas);
   if (!usuarios.length) return { conectado: false, contas: [] };
   const contas = await Promise.all(usuarios.map((u) => resumoConta(u, periodo)));

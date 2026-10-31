@@ -122,4 +122,18 @@ function resumoHoje() {
   return { leadsHoje, agendamentosHoje: agendHoje, agendamentosFeitosHoje: agendFeitosHoje, vendasMes, visitasHoje, temDados: total > 0 };
 }
 
-module.exports = { leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+// Totais do comercial num período (para o Painel geral): leads de entrada, agendamentos feitos, visitas e vendas
+function resumoPeriodo(de, ate) {
+  const d = banco.abrir();
+  if (!d || !de || !ate) return null;
+  const leads = d.prepare("SELECT COUNT(*) n FROM lk_leads WHERE is_resgate = 0 AND date(created_date, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
+  const naAgenda = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE date(primeira_vez / 1000, 'unixepoch', '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
+  const noHistorico = d.prepare("SELECT COUNT(DISTINCT lead_id) n FROM lk_eventos WHERE tipo = 'scheduled' AND date(ts, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
+  const vendas = d.prepare(`SELECT COUNT(*) n FROM lk_leads l WHERE ${VENDIDO}
+    AND date(COALESCE(datetime(l.vendido_em / 1000, 'unixepoch'), l.ultima_msg_at), '-3 hours') BETWEEN ? AND ?`).get(de, ate).n;
+  const visitas = d.prepare("SELECT COUNT(*) n FROM lk_visitas WHERE compareceu = 1 AND date(data_agendada, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
+  const total = d.prepare('SELECT COUNT(*) n FROM lk_leads').get().n;
+  return { leads, agendamentos: Math.max(naAgenda, noHistorico), vendas, visitas, temDados: total > 0 };
+}
+
+module.exports = { resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

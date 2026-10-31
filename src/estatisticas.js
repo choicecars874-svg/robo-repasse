@@ -90,28 +90,53 @@ function clicar(id, ip) {
 const link = (id) => dados.links[id] || null;
 const cliquesDoLink = (id) => dados.links[id]?.cliques || 0;
 
-function resumo() {
+// Resumo de um período (de/ate = AAAA-MM-DD, Brasília), opcionalmente de um grupo de origem só
+function resumo({ de, ate, grupo } = {}) {
   const hoje = diaDe();
-  const ultimos = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = diaDe(Date.now() - i * 24 * 3600 * 1000);
-    ultimos.push({ dia: d, ...dia(d) });
+  ate = ate || hoje;
+  de = de || ate;
+  const DIA = 24 * 3600 * 1000;
+  const dias = [];
+  for (let t = Date.parse(de + 'T12:00:00Z'); t <= Date.parse(ate + 'T12:00:00Z') && dias.length < 400; t += DIA) dias.push(diaDe(t));
+  // gráfico: os dias do período (no mínimo os últimos 7 até a data final)
+  const grafico = dias.length >= 7 ? dias.slice(-62) : Array.from({ length: 7 }, (_, i) => diaDe(Date.parse(ate + 'T12:00:00Z') - (6 - i) * DIA));
+  const doDia = (d) => {
+    const x = dados.dias[d] || { lidos: 0, postados: 0, cliques: 0, vendidos: 0, ignorados: {}, grupos: {} };
+    if (!grupo) return x;
+    const g = x.grupos?.[grupo] || { lidos: 0, postados: 0 };
+    return { lidos: g.lidos, postados: g.postados, cliques: null, vendidos: null, ignorados: {}, grupos: { [grupo]: g } };
+  };
+  const inicio = Date.parse(de + 'T00:00:00-03:00');
+  const fim = Date.parse(ate + 'T00:00:00-03:00') + DIA;
+  const linksDoPeriodo = Object.entries(dados.links).filter(([, l]) => l.quando >= inicio && l.quando < fim && (!grupo || l.grupo === grupo));
+  const periodo = { de, ate, lidos: 0, postados: 0, cliques: 0, vendidos: 0, ignorados: {}, grupos: {} };
+  for (const d of dias) {
+    const x = doDia(d);
+    periodo.lidos += x.lidos || 0;
+    periodo.postados += x.postados || 0;
+    periodo.cliques += x.cliques || 0;
+    periodo.vendidos += x.vendidos || 0;
+    for (const [k, v] of Object.entries(x.ignorados || {})) periodo.ignorados[k] = (periodo.ignorados[k] || 0) + v;
+    for (const [g, v] of Object.entries(x.grupos || {})) {
+      const a = (periodo.grupos[g] ||= { lidos: 0, postados: 0 });
+      a.lidos += v.lidos;
+      a.postados += v.postados;
+    }
   }
-  const somar = (lista) =>
-    lista.reduce((acc, d) => {
-      for (const [g, v] of Object.entries(d.grupos || {})) {
-        const a = (acc[g] ||= { lidos: 0, postados: 0 });
-        a.lidos += v.lidos;
-        a.postados += v.postados;
-      }
-      return acc;
-    }, {});
-  const maisClicados = Object.entries(dados.links)
+  // com filtro de grupo, os cliques vêm dos links dos posts daquele grupo
+  if (grupo) periodo.cliques = linksDoPeriodo.reduce((a, [, l]) => a + (l.cliques || 0), 0);
+  const maisClicados = linksDoPeriodo
     .map(([id, l]) => ({ id, codigo: l.codigo, modelo: l.modelo, ano: l.ano, grupo: l.grupo, cliques: l.cliques, quando: l.quando }))
     .filter((l) => l.cliques > 0)
     .sort((a, b) => b.cliques - a.cliques)
     .slice(0, 10);
-  return { hoje: { dia: hoje, ...dia(hoje) }, ultimos, grupos7dias: somar(ultimos), maisClicados };
+  const ultimos = grafico.map((d) => {
+    const x = doDia(d);
+    const cl = grupo ? Object.values(dados.links).filter((l) => l.grupo === grupo && diaDe(l.quando) === d).reduce((a, l) => a + (l.cliques || 0), 0) : x.cliques;
+    return { dia: d, ...x, cliques: cl || 0 };
+  });
+  const gruposTodos = [...new Set(Object.values(dados.dias).flatMap((x) => Object.keys(x.grupos || {})))].sort();
+  return { hoje: periodo, periodo, ultimos, grupos7dias: periodo.grupos, maisClicados, gruposTodos, porGrupo: !!grupo };
 }
 
 module.exports = { contar, contarIgnorado, registrarLink, clicar, link, cliquesDoLink, resumo, diaDe };

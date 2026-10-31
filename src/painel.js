@@ -283,10 +283,11 @@ function iniciarPainel() {
     }
   });
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
+  app.get('/api/comercial/periodo', (req, res) => res.json(comercial.resumoPeriodo(req.query.de, req.query.ate) || {}));
   app.get('/api/comercial/hoje', (_, res) => res.json({ ...(comercial.resumoHoje() || {}), estado: { ativo: leadsok.status().ativo, problema: leadsok.status().problema } }));
 
   // Instagram: o token nunca volta para o navegador
-  app.get('/api/instagram', async (req, res) => res.json(await instagram.resumo(req.query.periodo)));
+  app.get('/api/instagram', async (req, res) => res.json(await instagram.resumo(req.query.de && req.query.ate ? `${req.query.de}_${req.query.ate}` : req.query.periodo)));
   app.get('/api/instagram/posts', async (_, res) => res.json(await instagram.posts()));
   app.get('/api/instagram/estado', (_, res) => res.json(instagram.estado()));
   app.post('/api/instagram/token', async (req, res) => {
@@ -303,10 +304,13 @@ function iniciarPainel() {
 
   app.get('/api/historico', (_, res) => res.json(robo.historico.postados.map((h) => (h.idLink ? { ...h, cliques: estatisticas.cliquesDoLink(h.idLink) } : h))));
 
-  app.get('/api/painel', (_, res) => {
+  app.get('/api/painel', (req, res) => {
     const { status, numero } = robo.estado;
-    const ultimosPosts = robo.historico.postados.slice(0, 6).map((h) => ({ codigo: h.codigo, grupo: h.origem?.grupo, modelo: h.modelo, ano: h.ano, venda: h.venda, quando: h.quando, vendido: !!h.vendido, cliques: h.idLink ? estatisticas.cliquesDoLink(h.idLink) : null }));
-    res.json({ ...estatisticas.resumo(), ultimosPosts, limiteDiario: config.get().limiteDiario, conexao: { status, numero }, pendentes: robo.pendentes.size });
+    const { de, ate, grupo } = req.query;
+    const ini = de ? Date.parse(de + 'T00:00:00-03:00') : 0;
+    const fim = ate ? Date.parse(ate + 'T00:00:00-03:00') + 86400000 : Infinity;
+    const ultimosPosts = robo.historico.postados.filter((h) => h.quando >= ini && h.quando < fim && (!grupo || h.origem?.grupo === grupo)).slice(0, 6).map((h) => ({ codigo: h.codigo, grupo: h.origem?.grupo, modelo: h.modelo, ano: h.ano, venda: h.venda, quando: h.quando, vendido: !!h.vendido, cliques: h.idLink ? estatisticas.cliquesDoLink(h.idLink) : null }));
+    res.json({ ...estatisticas.resumo({ de, ate, grupo: grupo || null }), ultimosPosts, limiteDiario: config.get().limiteDiario, conexao: { status, numero }, pendentes: robo.pendentes.size });
   });
 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
