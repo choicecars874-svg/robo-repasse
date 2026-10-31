@@ -819,12 +819,19 @@ function desenharHistorico() {
   $('#tbHist').innerHTML = lista.map((p) => `<tr>
     <td><b>${esc(p.codigo || '—')}</b></td>
     <td>${p.origem?.recebidoEm ? hora(p.origem.recebidoEm) : '—'}<br><span class="sub">postado ${hora(p.quando)}</span></td>
-    <td>${esc(p.modelo)} ${esc(p.ano || '')}${p.vendido ? ' <span class="tag vendido">vendido</span>' : ''}
+    <td>${esc(p.modelo)} ${esc(p.ano || '')}${p.vendido ? ' <span class="tag vendido">vendido</span>' : ''}${p.apagado ? ' <span class="tag erro">apagado</span>' : p.nosso ? ` <a class="link" data-apagar="${p.quando}" data-codigo="${esc(p.codigo || '')}" style="font-size:12.5px;color:var(--verm)">apagar do grupo</a>` : ''}
       ${p.textoOriginal ? `<details><summary class="sub">ver original</summary><pre>${esc(p.textoOriginal)}</pre></details>` : ''}</td>
     <td>${reais(p.custo)}</td><td>${reais(p.venda)}</td><td>${reais(p.fipe)}</td><td>${p.idLink ? '<b>' + (p.cliques || 0) + '</b>' : '<span class="sub" title="Postado antes do contador">—</span>'}</td>
     <td class="sub">${esc(p.origem?.grupo)}<br>${esc(p.origem?.vendedor || '')}</td></tr>`).join('') || '<tr><td colspan="8" class="sub">Nada encontrado.</td></tr>';
 }
 $('#buscaHist').oninput = desenharHistorico;
+$('#tbHist').onclick = async (ev) => {
+  const a = ev.target.closest('[data-apagar]');
+  if (!a) return;
+  if (!confirm('Apagar este post do grupo para todos?')) return;
+  try { await api('/api/historico/apagar', { method:'POST', body: JSON.stringify({ quando: Number(a.dataset.apagar), codigo: a.dataset.codigo || null }) }); alert('Post apagado do grupo.'); carregarHistorico(); }
+  catch (e) { alert(e.message); }
+};
 
 // Barra de período reutilizável: Hoje, Ontem, 7 dias, 30 dias, Este mês, Personalizado
 const diaSP = (n = 0) => new Date(Date.now() - n * 864e5).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });

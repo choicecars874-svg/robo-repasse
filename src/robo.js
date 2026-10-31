@@ -162,6 +162,7 @@ async function iniciar() {
       estado.numero = sock.user?.id?.split(':')[0];
       evento('ok', 'Conectado ao WhatsApp');
       atualizarGrupos().catch(() => {});
+      setTimeout(() => limpezaUnica().catch(() => {}), 15000);
     }
     if (connection === 'close') {
       const codigo = lastDisconnect?.error?.output?.statusCode;
@@ -220,6 +221,27 @@ async function atualizarGrupos() {
 // "fotos e depois o texto" e "texto e depois as fotos". Regra: cada foto fica com o texto mais
 // próximo dela no tempo. Ex.: texto HR-V ... (1 min) ... foto BYD ... (3 s) ... texto BYD
 // -> a foto é do BYD, não do HR-V.
+// Linha do tempo de cada vendedor (textos e fotos dos últimos 10 min): serve para saber se uma foto
+// está no meio de dois anúncios do mesmo vendedor (texto de um carro com foto de outro)
+const linhaDoTempo = new Map();
+function marcarNaLinha(chave, item) {
+  const l = (linhaDoTempo.get(chave) || []).filter((x) => Date.now() - x.visto < 10 * 60 * 1000);
+  l.push({ ...item, visto: Date.now() });
+  linhaDoTempo.set(chave, l);
+}
+// Fica só com as fotos claramente mais perto do texto deste anúncio (3x mais perto que de outro texto do vendedor)
+function separarFotosAmbiguas(chave, b) {
+  if (!b.tTexto || !b.fotos.length) return 0;
+  const outros = (linhaDoTempo.get(chave) || []).filter((x) => x.tipo === 'texto' && !b.ids.includes(x.id)).map((x) => x.t);
+  const antes = b.fotos.length;
+  b.fotos = b.fotos.filter((f) => {
+    const meu = Math.abs(f.t - b.tTexto);
+    const outro = Math.min(Infinity, ...outros.map((t) => Math.abs(f.t - t)));
+    return outro > meu * 3 && outro > meu + 10000;
+  });
+  return antes - b.fotos.length;
+}
+
 async function receber(m) {
   const cfg = config.get();
   const chave = `${m.key.remoteJid}|${m.key.participant || ''}`;
@@ -228,11 +250,18 @@ async function receber(m) {
   const fechar = (b) => {
     clearTimeout(b.timer);
     if (buffers.get(chave) === b) buffers.delete(chave);
-    processar(b).catch((e) => evento('erro', 'Falha no anúncio: ' + e.message));
+    // espera 1 minuto: se o vendedor mandar outro texto logo em seguida, dá para ver de quem são as fotos
+    setTimeout(() => {
+      const tiradas = separarFotosAmbiguas(chave, b);
+      b.ambiguas = tiradas;
+      if (tiradas) evento('aviso', `${nomeGrupo(b.grupo)}: ${tiradas} foto(s) estavam entre dois anúncios do mesmo vendedor e foram descartadas por segurança (fotos ambíguas)`);
+      processar(b).catch((e) => evento('erro', 'Falha no anúncio: ' + e.message));
+    }, (config.get().segundosConferirFotos ?? 60) * 1000);
   };
 
   const ehFoto = !!conteudo(m).imageMessage;
   const t = textoDe(m);
+  if (ehFoto || t) marcarNaLinha(chave, { t: quando, id: m.key.id, tipo: t ? 'texto' : 'foto' });
   let b = buffers.get(chave);
   let herdadas = [];
   // um anúncio que já tem texto não recebe outro texto/legenda: é anúncio novo
@@ -324,7 +353,7 @@ function codigoOrigem(jid, quando) {
   return codigo;
 }
 
-async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [], t0 = Date.now(), tTexto = null }) {
+async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [], t0 = Date.now(), tTexto = null, ambiguas = 0 }) {
   const cfg = config.get();
   // Segurança contra "texto de um carro com foto de outro": só fica a foto que chegou perto do texto
   const distMax = (cfg.segundosMaxFotoTexto || 0) * 1000;
@@ -338,7 +367,7 @@ async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [],
   if (!textos.length) return evento('ignorado', `${nomeGrupo(grupo)} — só fotos, sem texto do anúncio`);
   if (!fotos.length && cfg.filtros.exigirFoto) {
     const inicio = textos[0].split('\n').find((l) => l.trim()) || '';
-    const porque = descartadas ? ' (a foto chegou longe do texto — descartada por segurança)' : falharam ? ' (a foto não baixou)' : ' (o vendedor não mandou foto)';
+    const porque = ambiguas ? ' (as fotos estavam entre dois anúncios do mesmo vendedor — descartadas por segurança)' : descartadas ? ' (a foto chegou longe do texto — descartada por segurança)' : falharam ? ' (a foto não baixou)' : ' (o vendedor não mandou foto)';
     return evento('ignorado', `${inicio.slice(0, 50)} — sem foto${porque}`);
   }
   const carro = parseAnuncio(textos.join('\n'));
@@ -556,12 +585,49 @@ async function tratarVendido(m) {
   return true;
 }
 
+// Apaga "para todos" um post nosso no grupo (precisa ser admin; o robô postou, então pode apagar)
+async function apagarPost(quando, codigo) {
+  const post = historico.postados.find((p) => p.quando === Number(quando) && (p.codigo || null) === (codigo || null));
+  if (!post) throw new Error('Post não encontrado no histórico');
+  if (!post.nosso?.key) throw new Error('Este post é antigo e não guardou a referência da mensagem: apague pelo WhatsApp');
+  if (!sock || estado.status !== 'conectado') throw new Error('WhatsApp do robô não está conectado');
+  await sock.sendMessage(post.nosso.grupo, { delete: post.nosso.key });
+  post.apagado = Date.now();
+  salvarHist();
+  evento('aviso', `Post apagado do grupo: ${post.modelo} ${post.ano || ''} ${post.codigo || ''}`);
+  return { ok: true };
+}
+
+// Limpeza única pedida em 31/10: dois posts com foto de outro carro (Gol Last Edition 11:56 e BMW X5 12:04)
+const ARQ_LIMPEZA = path.join(DATA_DIR, 'limpeza-31-10.feita');
+async function limpezaUnica() {
+  if (fs.existsSync(ARQ_LIMPEZA)) return;
+  const alvos = [
+    { re: /gol.*last edition/i, hora: Date.parse('2026-10-31T11:56:00-03:00') },
+    { re: /bmw.*x5/i, hora: Date.parse('2026-10-31T12:04:00-03:00') },
+  ];
+  for (const a of alvos) {
+    const post = historico.postados.find((p) => !p.apagado && a.re.test(p.modelo || '') && Math.abs(p.quando - a.hora) < 5 * 60 * 1000);
+    if (!post) {
+      evento('aviso', `Limpeza 31/10: não achei o post (${a.re.source}) no histórico`);
+      continue;
+    }
+    try {
+      await apagarPost(post.quando, post.codigo);
+    } catch (e) {
+      evento('erro', `Limpeza 31/10: não apagou ${post.modelo}: ${e.message}`);
+    }
+  }
+  fs.writeFileSync(ARQ_LIMPEZA, new Date().toISOString());
+}
+
 async function enviarTeste(jid) {
   await enviar(jid, [], '✅ Teste do Robô de Repasse da Choice Cars. Pode apagar esta mensagem.');
   evento('ok', `Mensagem de teste enviada para ${nomeGrupo(jid)}`);
 }
 
 module.exports = {
+  apagarPost,
   receber, // usado nos testes
   _teste: { usarSocket: (s) => (sock = s), tratarVendido, siglaGrupo },
   diagnostico,

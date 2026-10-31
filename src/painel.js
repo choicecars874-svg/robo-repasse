@@ -321,6 +321,13 @@ function iniciarPainel() {
     res.json({ ok: true });
   });
 
+  app.post('/api/historico/apagar', async (req, res) => {
+    try {
+      res.json(await robo.apagarPost(req.body.quando, req.body.codigo));
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
   app.get('/api/historico', (_, res) => res.json(robo.historico.postados.map((h) => (h.idLink ? { ...h, cliques: estatisticas.cliquesDoLink(h.idLink) } : h))));
 
   app.get('/api/painel', (req, res) => {
