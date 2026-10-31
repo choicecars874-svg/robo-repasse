@@ -16,6 +16,7 @@ const { aplicarLogo, ARQ_LOGO } = require('./logo');
 const estatisticas = require('./estatisticas');
 const instagram = require('./instagram');
 const leadsok = require('./leadsok/coletor');
+const cockpit = require('./cockpit');
 const comercial = require('./leadsok/metricas');
 
 const SENHA = process.env.PAINEL_SENHA;
@@ -236,6 +237,24 @@ function iniciarPainel() {
     if (!senhaConfere(atual)) return res.status(400).json({ erro: 'Senha atual incorreta' });
     if (!nova || nova.length < 8) return res.status(400).json({ erro: 'A nova senha precisa ter pelo menos 8 caracteres' });
     gravarSenha(nova);
+    res.json({ ok: true });
+  });
+
+  // Cockpit (Webmotors): a senha nunca volta para o navegador
+  app.get('/api/cockpit', (_, res) => res.json(cockpit.resumo()));
+  app.post('/api/cockpit/credenciais', async (req, res) => {
+    try {
+      res.json(await cockpit.salvarCredenciais(req.body));
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
+  app.post('/api/cockpit/sincronizar', (_, res) => {
+    cockpit.sincronizar(true).catch(() => {});
+    res.json({ ok: true });
+  });
+  app.post('/api/cockpit/desligar', (_, res) => {
+    cockpit.desligar();
     res.json({ ok: true });
   });
 

@@ -204,6 +204,7 @@
       <button data-aba="comTime">Time</button>
       <button data-aba="comAgenda">Agenda do dia</button>
       <button data-aba="comEstoque">Estoque</button>
+      <button data-aba="comCockpit">Webmotors (Cockpit)</button>
     </div>
   </div>
   <button data-aba="metas"><svg class="i"><use href="#i-metas"/></svg>Metas</button>
@@ -301,6 +302,23 @@
   </div>
   <div class="card"><h2>Em estoque</h2><p class="sub">Do mais antigo para o mais novo. "Dias" conta a partir de quando o painel começou a acompanhar.</p><div style="overflow-x:auto"><table><thead><tr><th>Placa</th><th>Carro</th><th>Ano</th><th>KM</th><th>Preço</th><th>Dias</th></tr></thead><tbody id="esLista"></tbody></table></div></div>
   <div class="card"><h2>Saídas dos últimos 30 dias</h2><div style="overflow-x:auto"><table><thead><tr><th>Placa</th><th>Carro</th><th>Ano</th><th>Preço</th><th>Ficou</th></tr></thead><tbody id="esSaiu"></tbody></table></div></div>
+</section>
+
+<section id="comCockpit">
+  <div class="lkAviso" id="ckAviso" hidden></div>
+  <div class="eyebrow">Este mês · Cockpit</div>
+  <div class="kpis">
+    <div class="kpi"><div class="eyebrow">Leads recebidos</div><b id="ckLeads">—</b><small id="ckLeadsObs"></small></div>
+    <div class="kpi"><div class="eyebrow">Sem resposta</div><b id="ckSemResp">—</b><small>leads esperando no CRM do Cockpit</small></div>
+    <div class="kpi"><div class="eyebrow">Última fatura</div><b id="ckFatura" style="font-size:30px">—</b><small id="ckFaturaObs"></small></div>
+    <div class="kpi"><div class="eyebrow">Custo por lead Webmotors</div><b id="ckCpl" style="font-size:30px">—</b><small>última fatura ÷ leads Webmotors do mês</small></div>
+  </div>
+  <div class="grade">
+    <div class="card"><h2>Relatórios do Cockpit</h2><p class="sub">Loja e canais no mês, como o Cockpit calcula.</p><div id="ckRelatorios"></div></div>
+    <div class="card"><h2>Fatura detalhada</h2><p class="sub" id="ckDetObs">O que compõe a fatura mais recente.</p><div id="ckDetalhe"></div></div>
+  </div>
+  <div class="card"><h2>Desempenho dos anúncios</h2><p class="sub">Este mês, do mais visto para o menos visto.</p><div style="overflow-x:auto"><table><thead><tr><th>Carro</th><th>Placa</th><th>Preço</th><th>Dias</th><th>Visualizações</th><th>Cliques tel.</th><th>E-mails</th><th>Propostas</th></tr></thead><tbody id="ckAnuncios"></tbody></table></div></div>
+  <div class="card"><h2>Estoque no Cockpit</h2><p class="sub" id="ckEstObs"></p><div style="overflow-x:auto"><table><thead><tr><th>Placa</th><th>Carro</th><th>Ano</th><th>Preço</th><th>Dias em estoque</th><th>Fotos</th><th>Publicado em</th></tr></thead><tbody id="ckEstoque"></tbody></table></div></div>
 </section>
 
 <section id="metas">
@@ -539,6 +557,15 @@
     <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn verde" id="btnLkSalvar">Salvar e conectar</button><button class="btn" id="btnLkTestar">Testar conexão</button><button class="btn" id="btnLkSync">Sincronizar agora</button><button class="btn verm" id="btnLkDesligar">Desligar</button></p>
     <details><summary class="sub">Últimas sincronizações</summary><pre id="lkLog" style="max-height:220px;overflow:auto;margin-top:10px"></pre></details>
   </div>
+  <div class="card">
+    <div class="cardTopo"><div><h2>Cockpit (Webmotors)</h2><p class="sub">Lê o resumo do mês, relatórios, faturas, estoque e desempenho dos anúncios a cada 30 minutos. Só leitura e sem dados de clientes. O Cockpit tem proteção anti-robô: se bloquear, o aviso aparece aqui.</p></div><span class="status"><span class="dot" id="ckDot"></span><span id="ckStatus">…</span></span></div>
+    <div id="ckInfo" class="sub" style="margin-bottom:10px"></div>
+    <div class="linha">
+      <div><label>E-mail de acesso do Cockpit</label><input id="ckEmail" autocomplete="off"></div>
+      <div><label>Senha (fica criptografada no servidor)</label><input type="password" id="ckSenha" autocomplete="new-password" placeholder="deixe vazio para manter a atual"></div>
+    </div>
+    <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn verde" id="btnCkSalvar">Salvar e conectar</button><button class="btn" id="btnCkSync">Sincronizar agora</button><button class="btn verm" id="btnCkDesligar">Desligar</button></p>
+  </div>
 </section>
 
 <section id="sistema">
@@ -616,6 +643,7 @@ const TITULOS = {
   comLeads: ['Leads e canais', 'Funil comercial do LeadsOK por período e canal de entrada.'],
   comTime: ['Time', 'Desempenho de cada vendedor no período.'],
   comAgenda: ['Agenda do dia', 'Agendamentos do LeadsOK. Marque quem compareceu.'],
+  comCockpit: ['Webmotors (Cockpit)', 'Leads, anúncios, estoque e faturas da Webmotors.'],
   comEstoque: ['Estoque', 'Carros do LeadsOK: quantidade, valor e dias parados.'],
   metas: ['Metas', 'Metas do dia por área. O Painel mostra o quanto já foi feito.'],
   aprovar: ['Aprovar', 'Carros capturados esperando sua decisão.'],
@@ -638,7 +666,7 @@ function abrirAba(aba) {
   const [titulo, sub] = TITULOS[aba];
   $('#tEyebrow').textContent = aba.startsWith('ig') ? 'Instagram' : aba.startsWith('com') ? 'Comercial' : ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, sistema: () => { carregarSistema(); carregarDominio(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, sistema: () => { carregarSistema(); carregarDominio(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -1160,6 +1188,51 @@ async function carregarEstoque() {
   $('#esLista').innerHTML = r.ativos.map((c) => `<tr><td class="sub">${esc(c.placa)}</td><td><b>${esc(c.marca || '')} ${esc(c.modelo || '')}</b> <span class="sub">${esc(c.versao || '')}</span></td><td>${esc(c.ano)}</td><td>${kmF(c.km)}</td><td>${reais(c.preco)}</td><td class="${c.dias > 60 ? 'ruim' : ''}"><b>${num(c.dias)}</b></td></tr>`).join('') || '<tr><td colspan="6" class="sub">Sem carros.</td></tr>';
   $('#esSaiu').innerHTML = r.saidas.map((c) => `<tr><td class="sub">${esc(c.placa)}</td><td>${esc(c.marca || '')} ${esc(c.modelo || '')}</td><td>${esc(c.ano)}</td><td>${reais(c.preco)}</td><td>${num(c.dias)} dias</td></tr>`).join('') || '<tr><td colspan="5" class="sub">Nenhuma saída registrada.</td></tr>';
 }
+// ---------- Cockpit (Webmotors) ----------
+function relatorioCockpit(lista) {
+  // formato do Cockpit: [{ title, lines: [{ dashboards: [{ title, value, metric, items: [{ title, value }] }] }] }]
+  return (lista || []).map((r) => `<div style="margin-bottom:14px"><div class="eyebrow" style="margin-bottom:8px">${esc(r.title || '')}</div>
+    ${(r.lines || []).flatMap((l) => l.dashboards || []).map((d) => `<div class="barra" style="--c:var(--ouro)"><span>${esc(d.title || '')}${d.metric ? ' <span class="sub">' + esc(d.metric) + '</span>' : ''}</span><b>${esc(d.value ?? '—')}</b></div>
+      ${(d.items || []).length ? `<div class="sub" style="margin:-4px 0 10px">${d.items.map((i) => `${esc(i.title)}: <b style="color:var(--txt)">${esc(i.value)}</b>`).join(' · ')}</div>` : ''}`).join('')}</div>`).join('') || '<div class="vazio">Sem dados ainda.</div>';
+}
+async function carregarCockpit() {
+  const r = await api('/api/cockpit');
+  const msg = !r.configurado ? 'Cockpit ainda não conectado. Configure em Configurações → Integrações.' : r.problema || (r.ultimoErro ? 'Aviso: ' + r.ultimoErro : '');
+  $('#ckAviso').hidden = !msg; $('#ckAviso').textContent = msg;
+  const n = r.numeros;
+  $('#ckLeads').textContent = n.leads == null ? '—' : num(n.leads);
+  $('#ckLeadsObs').textContent = n.leads == null ? '' : `Webmotors ${num(n.leadsWebmotors)} · Parceria Certa ${num(n.leadsParceria)} · outros ${num(n.leadsOutros)}`;
+  $('#ckSemResp').textContent = n.semResposta == null ? '—' : num(n.semResposta);
+  $('#ckSemResp').className = n.semResposta ? 'ruim' : '';
+  const f = r.faturas?.faturas?.[0];
+  $('#ckFatura').textContent = f ? reais(f.valor) : '—';
+  $('#ckFaturaObs').textContent = f ? `vence ${String(f.vencimento || '').slice(0, 10).split('-').reverse().join('/')} · ${f.status || ''}` : '';
+  $('#ckCpl').textContent = f && n.leadsWebmotors ? reais(f.valor / n.leadsWebmotors) : '—';
+  $('#ckRelatorios').innerHTML = relatorioCockpit([...(r.loja || []), ...(r.canais || [])]);
+  const det = r.faturas?.detalhe;
+  $('#ckDetObs').textContent = det ? `Mês ${det.mes || ''} · total ${reais(det.comDesconto ?? det.total)}` : 'O que compõe a fatura mais recente.';
+  $('#ckDetalhe').innerHTML = det?.itens?.length ? det.itens.map((i) => `<div class="barra" style="--c:var(--azul)"><span>${esc(i.produto || '—')}${i.quantidade > 1 ? ' <span class="sub">× ' + i.quantidade + '</span>' : ''}</span><b>${reais(i.valor)}</b></div>`).join('') : '<div class="vazio">Sem detalhamento ainda.</div>';
+  $('#ckAnuncios').innerHTML = [...(r.anuncios || [])].sort((a, b) => (b.visualizacoes || 0) - (a.visualizacoes || 0)).map((a) => `<tr><td><b>${esc(a.carro || '')}</b> <span class="sub">${esc(a.ano || '')}</span></td><td class="sub">${esc(a.placa || '')}</td><td>${reais(a.preco)}</td><td>${num(a.dias)}</td><td><b>${num(a.visualizacoes)}</b></td><td>${num(a.cliquesTelefone)}</td><td>${num(a.emails)}</td><td>${num(a.propostas)}</td></tr>`).join('') || '<tr><td colspan="8" class="sub">Sem dados ainda.</td></tr>';
+  const est = r.estoque || [];
+  $('#ckEstObs').textContent = est.length ? `${est.length} carros · ${reais(est.reduce((a, c) => a + (c.preco || 0), 0))} em estoque · do mais parado para o mais novo` : '';
+  $('#ckEstoque').innerHTML = [...est].sort((a, b) => (b.dias || 0) - (a.dias || 0)).map((c) => `<tr><td class="sub">${esc(c.placa || '')}</td><td><b>${esc(c.marca || '')} ${esc(c.modelo || '')}</b> <span class="sub">${esc(c.versao || '')}</span></td><td>${esc(c.ano || '')}</td><td>${reais(c.preco)}</td><td class="${c.dias > 60 ? 'ruim' : ''}"><b>${num(c.dias)}</b></td><td>${num(c.fotos)}</td><td class="sub">${esc((c.canais || []).join(', ') || (c.publicado ? 'publicado' : 'não publicado'))}</td></tr>`).join('') || '<tr><td colspan="7" class="sub">Sem dados ainda.</td></tr>';
+}
+async function carregarCkCfg() {
+  const r = await api('/api/cockpit');
+  $('#ckDot').className = 'dot ' + (r.configurado && r.ativo && !r.problema ? 'on' : r.configurado ? 'off' : '');
+  $('#ckStatus').textContent = !r.configurado ? 'Não conectado' : !r.ativo ? 'Desligado' : r.rodando ? 'Sincronizando…' : r.problema ? 'Com problema' : 'Conectado';
+  if (document.activeElement !== $('#ckEmail')) $('#ckEmail').value = r.email || '';
+  $('#ckInfo').innerHTML = [r.ultimoOk ? 'Última sincronização ok: ' + hora(r.ultimoOk) : '', ...(r.avisos || []).map((a) => `<span class="ruim">${esc(a)}</span>`)].filter(Boolean).join('<br>');
+}
+$('#btnCkSalvar').onclick = async () => {
+  const b = $('#btnCkSalvar'); b.disabled = true; b.textContent = 'Conectando…';
+  try { await api('/api/cockpit/credenciais', { method:'POST', body: JSON.stringify({ email: $('#ckEmail').value, senha: $('#ckSenha').value }) }); $('#ckSenha').value = ''; alert('Cockpit conectado! Os dados aparecem em Comercial → Webmotors em alguns minutos.'); }
+  catch (e) { alert(e.message); }
+  b.disabled = false; b.textContent = 'Salvar e conectar'; carregarCkCfg();
+};
+$('#btnCkSync').onclick = async () => { await api('/api/cockpit/sincronizar', { method:'POST' }); alert('Sincronização do Cockpit iniciada.'); setTimeout(carregarCkCfg, 3000); };
+$('#btnCkDesligar').onclick = async () => { if (confirm('Desligar a leitura do Cockpit?')) { await api('/api/cockpit/desligar', { method:'POST' }); carregarCkCfg(); } };
+
 async function carregarLkCfg() {
   const e = await api('/api/leadsok/estado');
   const ok = e.configurado && e.ativo && !e.problema && !e.erroBanco;
