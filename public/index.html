@@ -123,6 +123,9 @@
   @media (max-width:820px) { .metaLinha { grid-template-columns:110px minmax(0, 1fr) 90px; gap:10px; } }
   .toast { position:fixed; right:20px; bottom:20px; z-index:20; max-width:min(420px, calc(100vw - 32px)); background:rgba(20,22,26,.96); border:1px solid rgba(226,179,80,.5); border-radius:14px; padding:14px 18px; font-size:14.5px; box-shadow:0 10px 30px rgba(0,0,0,.4); transition:opacity .5s; white-space:pre-wrap; }
   .toast.sai { opacity:0; }
+  .atalhos { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .atalhos button { background:var(--card); border:1px solid var(--borda); color:var(--sub); font:inherit; font-size:14px; padding:7px 14px; border-radius:99px; cursor:pointer; }
+  .atalhos button.ativo { color:var(--txt); background:var(--ouro2); border-color:rgba(226,179,80,.5); }
   .filtros { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; } .filtros > div { min-width:150px; flex:1; } .filtros label { margin-top:0; }
   .lkAviso { background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.4); color:var(--verm); border-radius:14px; padding:12px 16px; margin-bottom:16px; font-size:14px; }
   .funilLk .etapa { grid-template-columns:150px minmax(0, 1fr) 70px 70px; } .funilLk .taxa { text-align:right; font:12px var(--mono); color:var(--sub); }
@@ -207,8 +210,9 @@
 <div class="cabeca"><div class="eyebrow" id="tEyebrow"></div><h1 id="tTitulo">Painel</h1><p id="tSub"></p></div>
 
 <section id="painel" class="ativo">
-  <div class="eyebrow">Metas de hoje</div>
-  <div class="card" style="margin-top:12px"><div class="cardTopo"><div><h2>Progresso das metas</h2><p class="sub">Quanto já foi feito hoje em cada área.</p></div><a data-ir="metas">Definir metas</a></div><div id="gMetas"></div></div>
+  <div class="eyebrow">Metas principais</div>
+  <div class="kpis" id="gPrincipais"></div>
+  <div class="card" id="gOutras" style="margin-top:12px"><div class="cardTopo"><div><h2>Outras metas de hoje</h2><p class="sub">Grupos, Instagram e leads.</p></div><a data-ir="metas">Definir metas</a></div><div id="gMetas"></div></div>
   <div class="eyebrow" style="margin-bottom:12px">Por área</div>
   <div class="areas">
     <div class="card area" data-ir="inicio"><div class="cardTopo"><div class="eyebrow"><svg class="i"><use href="#i-grupos"/></svg> Grupos</div><span class="link">Ver mais</span></div>
@@ -223,17 +227,18 @@
 <section id="instagram">
   <div id="igVazio" class="card" hidden><h2>Nenhum perfil conectado</h2><p class="sub" style="margin:4px 0 14px">Conecte os perfis em Configurações → Integrações (choicecarsbr, reservachoice1, oelyaspereira).</p><button class="btn verde" data-ir="integracoes">Conectar perfis</button></div>
   <div id="igConteudo" hidden>
-    <div class="eyebrow">Hoje · todos os perfis</div>
+    <div class="atalhos" id="igPeriodo"><button data-p="hoje" class="ativo">Hoje</button><button data-p="ontem">Ontem</button><button data-p="7">7 dias</button><button data-p="30">30 dias</button></div>
+    <div class="eyebrow"><span class="igRotulo">Hoje</span> · todos os perfis</div>
     <div class="kpis">
       <div class="kpi"><div class="eyebrow">Seguidores</div><b id="igSeg">—</b><small id="igSegVar">soma dos perfis</small></div>
-      <div class="kpi"><div class="eyebrow">Alcance</div><b id="igAlc">—</b><small>contas alcançadas hoje</small></div>
+      <div class="kpi"><div class="eyebrow">Alcance</div><b id="igAlc">—</b><small>contas alcançadas no período</small></div>
       <div class="kpi"><div class="eyebrow">Interações</div><b id="igInt">—</b><small>curtidas, comentários, salvos, compart.</small></div>
-      <div class="kpi"><div class="eyebrow">Visualizações</div><b id="igVis">—</b><small id="igLinks">dos posts e reels hoje</small></div>
+      <div class="kpi"><div class="eyebrow">Visualizações</div><b id="igVis">—</b><small id="igLinks">dos posts e reels no período</small></div>
     </div>
-    <div class="eyebrow">Direct hoje · todos os perfis</div>
+    <div class="eyebrow">Direct · <span class="igRotulo">hoje</span> · todos os perfis</div>
     <div class="kpis">
-      <div class="kpi"><div class="eyebrow">Conversas</div><b id="dmConv">—</b><small>com mensagem de cliente hoje</small></div>
-      <div class="kpi"><div class="eyebrow">Novas</div><b id="dmNovas">—</b><small>começaram hoje</small></div>
+      <div class="kpi"><div class="eyebrow">Conversas</div><b id="dmConv">—</b><small>com mensagem de cliente no período</small></div>
+      <div class="kpi"><div class="eyebrow">Novas</div><b id="dmNovas">—</b><small>começaram no período</small></div>
       <div class="kpi"><div class="eyebrow">Esperando resposta</div><b id="dmAguardando">—</b><small>última mensagem é do cliente</small></div>
       <div class="kpi"><div class="eyebrow">Tempo de resposta</div><b id="dmTempo">—</b><small id="dmTempoObs">média até a 1ª resposta</small></div>
     </div>
@@ -248,6 +253,7 @@
 
 <section id="comLeads">
   <div class="lkAviso" hidden></div>
+  <div class="atalhos"><button data-periodo="hoje">Hoje</button><button data-periodo="ontem">Ontem</button><button data-periodo="7">7 dias</button><button data-periodo="30" class="ativo">30 dias</button><button data-periodo="mes">Este mês</button><button data-periodo="mesPassado">Mês passado</button></div>
   <div class="card filtros">
     <div><label>De</label><input type="date" id="fDe"></div>
     <div><label>Até</label><input type="date" id="fAte"></div>
@@ -260,6 +266,9 @@
     <div class="card"><div class="cardTopo"><div><h2>Leads por dia</h2><p class="sub">Empilhado por canal.</p></div></div><div class="grafico" id="lkDias"></div><div class="legenda" id="lkLegenda" style="flex-wrap:wrap;margin-top:10px"></div></div>
     <div class="card"><h2>Por canal</h2><p class="sub">Leads, resposta, fichas, agendamentos e vendas de cada canal.</p><div style="overflow-x:auto"><table><thead><tr><th>Canal</th><th>Leads</th><th>Resp.</th><th>Fichas</th><th>Agend.</th><th>Vendas</th></tr></thead><tbody id="lkOrigens"></tbody></table></div></div>
   </div>
+  <div class="card"><div class="cardTopo"><div><h2>Custo por canal</h2><p class="sub" id="lkCustoObs">Quanto custa cada lead, agendamento e venda. Informe o investimento mensal de cada canal (ex.: plano/destaques da Webmotors, anúncios no Facebook).</p></div><a id="btnInvest">Editar investimento</a></div>
+    <div id="lkInvest" hidden style="margin-bottom:14px"><div class="linha" id="lkInvestCampos"></div><p><button class="btn verde" id="btnInvestSalvar">Salvar investimento</button></p></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Canal</th><th>Investido no período</th><th>Custo por lead</th><th>Custo por agendamento</th><th>Custo por venda</th></tr></thead><tbody id="lkCustos"></tbody></table></div></div>
   <div class="card"><h2>Fichas de financiamento</h2><p class="sub">Leads com ficha por banco e situação.</p><div style="overflow-x:auto"><table><thead><tr><th>Banco</th><th>Pré-aprovado</th><th>Em análise</th><th>Pré-reprovado</th><th>Erro</th><th>Outros</th></tr></thead><tbody id="lkFichas"></tbody></table></div></div>
 </section>
 
@@ -288,28 +297,29 @@
 </section>
 
 <section id="metas">
+  <div class="card" style="border-color:rgba(226,179,80,.45)">
+    <h2>Metas principais · Comercial</h2>
+    <p class="sub" style="margin:4px 0 0">As que mais importam. Aparecem em destaque no Painel. Vêm do LeadsOK; visitas vêm do botão "Compareceu" da Agenda do dia.</p>
+    <div class="linha">
+      <div><label>Agendamentos por dia</label><input type="number" data-c="metas.agendamentosDia"></div>
+      <div><label>Visitas por dia</label><input type="number" data-c="metas.visitasDia"></div>
+      <div><label>Vendas por mês</label><input type="number" data-c="metas.vendasMes"></div>
+      <div><label>Leads por dia</label><input type="number" data-c="metas.leadsDia"></div>
+    </div>
+  </div>
   <div class="card">
-    <h2>Grupos</h2>
+    <h2>Outras metas · Grupos</h2>
     <div class="linha">
       <div><label>Posts por dia</label><input type="number" data-c="metas.postsDia"></div>
       <div><label>Cliques no WhatsApp por dia</label><input type="number" data-c="metas.cliquesDia"></div>
     </div>
   </div>
   <div class="card">
-    <h2>Instagram</h2>
+    <h2>Outras metas · Instagram</h2>
     <div class="linha">
       <div><label>Alcance por dia (soma dos perfis)</label><input type="number" data-c="metas.alcanceDia"></div>
       <div><label>Interações por dia</label><input type="number" data-c="metas.interacoesDia"></div>
       <div><label>Novos seguidores por dia</label><input type="number" data-c="metas.seguidoresDia"></div>
-    </div>
-  </div>
-  <div class="card">
-    <h2>Comercial</h2>
-    <p class="sub" style="margin:4px 0 0">Passam a contar quando o LeadsOK estiver conectado.</p>
-    <div class="linha">
-      <div><label>Leads por dia</label><input type="number" data-c="metas.leadsDia"></div>
-      <div><label>Agendamentos por dia</label><input type="number" data-c="metas.agendamentosDia"></div>
-      <div><label>Vendas por mês</label><input type="number" data-c="metas.vendasMes"></div>
     </div>
   </div>
   <p class="sub">Deixe 0 para não acompanhar aquela meta.</p>
@@ -491,7 +501,7 @@
     <div class="linha">
       <div><label>E-mail de acesso (gerente)</label><input id="lkEmail" autocomplete="off"></div>
       <div><label>Senha (fica criptografada no servidor)</label><input type="password" id="lkSenha" autocomplete="new-password" placeholder="deixe vazio para manter a atual"></div>
-      <div><label>"Lead parado" depois de (horas)</label><input type="number" id="lkHoras" step="0.5" min="0.5"></div>
+      <div><label>Considerar cliente sem resposta depois de (horas)</label><input type="number" id="lkHoras" step="0.5" min="0.5"></div>
     </div>
     <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn verde" id="btnLkSalvar">Salvar e conectar</button><button class="btn" id="btnLkTestar">Testar conexão</button><button class="btn" id="btnLkSync">Sincronizar agora</button><button class="btn verm" id="btnLkDesligar">Desligar</button></p>
     <details><summary class="sub">Últimas sincronizações</summary><pre id="lkLog" style="max-height:220px;overflow:auto;margin-top:10px"></pre></details>
@@ -787,8 +797,15 @@ async function carregarPainel() {
 }
 // Instagram
 const variacao = (agora, antes) => agora == null || antes == null ? '' : agora - antes === 0 ? 'igual a ontem' : `${agora > antes ? '+' : ''}${num(agora - antes)} desde ontem`;
+let igPeriodo = 'hoje';
+document.querySelectorAll('#igPeriodo button').forEach((b) => b.onclick = () => {
+  igPeriodo = b.dataset.p;
+  document.querySelectorAll('#igPeriodo button').forEach((x) => x.classList.toggle('ativo', x === b));
+  document.querySelectorAll('.igRotulo').forEach((e) => { e.textContent = b.textContent; });
+  carregarInstagram();
+});
 async function carregarInstagram() {
-  const r = await api('/api/instagram');
+  const r = await api('/api/instagram?periodo=' + igPeriodo);
   $('#igVazio').hidden = r.conectado; $('#igConteudo').hidden = !r.conectado;
   if (!r.conectado) return;
   const t = r.total;
@@ -801,7 +818,7 @@ async function carregarInstagram() {
   $('#igContas').innerHTML = r.contas.map((c) => c.erro
     ? `<div class="card conta"><div class="quem"><div><b>@${esc(c.usuario)}</b><span class="ruim">${esc(c.erro)}</span></div></div><span class="sub">Gere um token novo para este perfil em Configurações.</span></div>`
     : `<div class="card conta"><div class="quem">${c.foto ? `<img class="av" src="${esc(c.foto)}" alt="">` : ''}<div><b>@${esc(c.usuario)}</b><span>${esc(variacao(c.seguidores, c.seguidoresOntem) || c.nome || '')}</span></div></div>
-      <div class="mini"><div><b>${num(c.seguidores)}</b>seguidores</div><div><b>${c.hoje.alcance == null ? '—' : num(c.hoje.alcance)}</b>alcance hoje</div><div><b>${c.hoje.interacoes == null ? '—' : num(c.hoje.interacoes)}</b>interações</div></div></div>`).join('');
+      <div class="mini"><div><b>${num(c.seguidores)}</b>seguidores</div><div><b>${c.hoje.alcance == null ? '—' : num(c.hoje.alcance)}</b>alcance</div><div><b>${c.hoje.interacoes == null ? '—' : num(c.hoje.interacoes)}</b>interações</div></div></div>`).join('');
   const dm = t.direct;
   const fmtMin = (m) => m == null ? '—' : m < 60 ? `${Math.round(m)} min` : `${Math.floor(m / 60)} h ${Math.round(m % 60)} min`;
   $('#dmConv').textContent = dm ? num(dm.conversas) : '—';
@@ -890,8 +907,18 @@ async function carregarGeral() {
     ['Interações no Instagram', t.interacoes, m.interacoesDia],
     ['Novos seguidores', novos, m.seguidoresDia],
     ['Leads (comercial)', temCom ? com.leadsHoje : null, m.leadsDia, 'aguardando LeadsOK'],
-    ['Agendamentos feitos hoje', temCom ? com.agendamentosFeitosHoje : null, m.agendamentosDia, 'aguardando LeadsOK'],
   ].filter((x) => x[2] > 0);
+  const principais = [
+    ['Agendamentos hoje', temCom ? com.agendamentosFeitosHoje : null, m.agendamentosDia, 'feitos hoje no LeadsOK'],
+    ['Visitas hoje', temCom ? com.visitasHoje : null, m.visitasDia, 'marcadas na Agenda do dia'],
+    ['Vendas no mês', temCom ? com.vendasMes : null, m.vendasMes, 'arquivados como vendido'],
+  ];
+  $('#gPrincipais').innerHTML = principais.map(([nome, feito, meta, obs]) => {
+    const p = feito == null || !meta ? 0 : Math.min(100, (feito / meta) * 100);
+    return `<div class="kpi"><div class="eyebrow">${nome}</div><b>${feito == null ? '—' : num(feito)}${meta ? `<span class="de"> / ${num(meta)}</span>` : ''}</b><small>${feito == null ? 'conecte o LeadsOK' : meta ? (feito >= meta ? 'meta batida' : `faltam ${num(meta - feito)}`) : 'sem meta definida'} · ${obs}</small><div class="meta"><i style="width:${p}%;${p >= 100 ? 'background:var(--verde)' : ''}"></i></div></div>`;
+  }).join('');
+  $('#gPrincipais').style.gridTemplateColumns = 'repeat(auto-fit, minmax(220px, 1fr))';
+  $('#gOutras').hidden = !linhas.length; // sem meta definida (ex.: conteúdo), o cartão nem aparece
   $('#gMetas').innerHTML = linhas.length ? linhas.map(([nome, feito, meta, obs]) => {
     const pct = feito == null ? 0 : Math.min(100, (feito / meta) * 100);
     return `<div class="metaLinha ${pct >= 100 ? 'ok' : ''}"><span>${nome}</span><div class="trilho"><i style="width:${pct}%"></i></div><b>${feito == null ? `<span class="sub">${obs || 'sem dados'}</span>` : `${num(feito)} / ${num(meta)}`}</b></div>`;
@@ -938,11 +965,43 @@ async function carregarLeads() {
   $('#lkDias').querySelectorAll('.empilhada').forEach((e) => { e.style.display = 'flex'; });
   $('#lkLegenda').innerHTML = origens.map((o) => `<span style="--c:${cor(o)}">${esc(canal(o))}</span>`).join('');
   $('#lkOrigens').innerHTML = r.porOrigem.map((o) => `<tr><td>${esc(canal(o.origem))}</td><td><b>${num(o.demanda)}</b></td><td>${pct(o.responderam, o.demanda)}</td><td>${num(o.fichas)}</td><td>${num(o.agendados)}</td><td>${num(o.vendas)}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Sem dados.</td></tr>';
+  // custo: investimento mensal proporcional aos dias do período escolhido
+  const diasPeriodo = Math.max(1, Math.round((Date.parse($('#fAte').value) - Date.parse($('#fDe').value)) / 864e5) + 1);
+  if (!cfg) cfg = await api('/api/config');
+  const inv = cfg.investimento || {};
+  const canaisInv = r.origens.filter((o) => o !== 'resgate');
+  $('#lkInvestCampos').innerHTML = canaisInv.map((o) => `<div><label>${esc(canal(o))} (R$ por mês)</label><input type="number" min="0" data-inv="${esc(o)}" value="${inv[o] || ''}"></div>`).join('');
+  const reaisOu = (v) => (v == null || !isFinite(v) ? '—' : reais(v));
+  const linhasCusto = r.porOrigem.filter((o) => inv[o.origem] > 0).map((o) => { const gasto = (inv[o.origem] * diasPeriodo) / 30; return `<tr><td>${esc(canal(o.origem))}</td><td>${reais(gasto)}</td><td><b>${reaisOu(o.demanda ? gasto / o.demanda : null)}</b></td><td>${reaisOu(o.agendados ? gasto / o.agendados : null)}</td><td>${reaisOu(o.vendas ? gasto / o.vendas : null)}</td></tr>`; });
+  const totInv = r.porOrigem.reduce((a, o) => a + ((inv[o.origem] || 0) * diasPeriodo) / 30, 0);
+  const comInv = r.porOrigem.filter((o) => inv[o.origem] > 0);
+  const somaC = (k) => comInv.reduce((a, o) => a + (o[k] || 0), 0);
+  if (linhasCusto.length) linhasCusto.push(`<tr><td><b>Total (canais com investimento)</b></td><td><b>${reais(totInv)}</b></td><td><b>${reaisOu(somaC('demanda') ? totInv / somaC('demanda') : null)}</b></td><td><b>${reaisOu(somaC('agendados') ? totInv / somaC('agendados') : null)}</b></td><td><b>${reaisOu(somaC('vendas') ? totInv / somaC('vendas') : null)}</b></td></tr>`);
+  $('#lkCustos').innerHTML = linhasCusto.join('') || '<tr><td colspan="5" class="sub">Nenhum investimento informado. Clique em "Editar investimento".</td></tr>';
+  $('#lkCustoObs').textContent = `Período de ${diasPeriodo} dia(s): o investimento mensal é dividido por 30 e multiplicado pelos dias. Informe quanto vai em cada canal por mês (plano, destaques, anúncios).`;
   const bancos = [...new Set(r.fichas.map((f) => f.banco))];
   const cel = (b, st) => num(r.fichas.filter((f) => f.banco === b && f.statusNome === st).reduce((a, f) => a + f.n, 0));
   $('#lkFichas').innerHTML = bancos.map((b) => `<tr><td>${esc(b.toUpperCase())}</td><td class="bom">${cel(b, 'Pré-aprovado')}</td><td>${cel(b, 'Em análise')}</td><td class="ruim">${cel(b, 'Pré-reprovado')}</td><td>${cel(b, 'Erro')}</td><td class="sub">${cel(b, 'Outros')}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Nenhuma ficha no período.</td></tr>';
 }
-$('#btnFiltrar').onclick = () => carregarLeads();
+$('#btnInvest').onclick = () => { $('#lkInvest').hidden = !$('#lkInvest').hidden; };
+$('#btnInvestSalvar').onclick = async () => {
+  if (!cfg) cfg = await api('/api/config');
+  cfg.investimento = { ...(cfg.investimento || {}) };
+  document.querySelectorAll('[data-inv]').forEach((i) => { cfg.investimento[i.dataset.inv] = Number(i.value) || 0; });
+  cfg = await api('/api/config', { method:'POST', body: JSON.stringify(cfg) });
+  $('#lkInvest').hidden = true; alert('Investimento salvo.'); carregarLeads();
+};
+$('#btnFiltrar').onclick = () => { document.querySelectorAll('#comLeads .atalhos button').forEach((x) => x.classList.remove('ativo')); carregarLeads(); };
+document.querySelectorAll('#comLeads .atalhos button').forEach((b) => b.onclick = () => {
+  const d = (n) => new Date(Date.now() - n * 864e5).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+  const hoje = d(0); const mes = hoje.slice(0, 7);
+  const [a, m] = mes.split('-').map(Number); const ant = m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`;
+  const fimAnt = new Date(Date.UTC(a, m - 1, 0)).toISOString().slice(0, 10);
+  const p = { hoje: [hoje, hoje], ontem: [d(1), d(1)], 7: [d(6), hoje], 30: [d(29), hoje], mes: [mes + '-01', hoje], mesPassado: [ant + '-01', fimAnt] }[b.dataset.periodo];
+  $('#fDe').value = p[0]; $('#fAte').value = p[1];
+  document.querySelectorAll('#comLeads .atalhos button').forEach((x) => x.classList.toggle('ativo', x === b));
+  carregarLeads();
+});
 async function carregarTime() {
   iniciarFiltros(); avisoLk();
   const r = await api('/api/time?' + filtroLk());

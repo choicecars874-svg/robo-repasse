@@ -43,23 +43,36 @@ function criarCliente({ email, senha }) {
   const foiParaLogin = (r) => r.status === 401 || ((r.status === 307 || r.status === 303 || r.status === 302) && /\/login/.test(r.headers.get('location') || ''));
 
   // ---------- Descoberta dos IDs das server actions (mudam a cada deploy do LeadsOK) ----------
+  // Lê as páginas do menu do LeadsOK (links internos) e guarda nome -> id de cada ação
+  // e em qual página ela apareceu (a ação é chamada nessa página)
+  let paginaDaAcao = {};
   async function descobrirAcoes() {
     const mapa = {};
-    const scripts = new Set();
-    for (const pag of ['/login', '/atendimentos']) {
+    const ondeEsta = {};
+    const vistos = new Set();
+    const fila = ['/atendimentos', '/login'];
+    const res = [/createServerReference\)\("([0-9a-f]{40,42})"[^)]*?"(\w+)"/g, /createServerReference\("([0-9a-f]{40,42})",[^)]*?"(\w+)"\)/g];
+    for (let k = 0; k < fila.length && k < 16; k++) {
+      const pag = fila[k];
       const r = await req(pag, { seguir: true });
       const html = await r.text();
-      for (const m of html.matchAll(/<script[^>]+src="([^"]*\/_next\/static\/chunks\/[^"]+\.js)"/g)) scripts.add(m[1]);
-    }
-    const res = [/createServerReference\)\("([0-9a-f]{40,42})"[^)]*?"(\w+)"/g, /createServerReference\("([0-9a-f]{40,42})",[^)]*?"(\w+)"\)/g];
-    for (const src of scripts) {
-      const r = await req(src.startsWith('http') ? new URL(src).pathname : src, { seguir: true });
-      const js = await r.text();
-      for (const re of res) for (const m of js.matchAll(re)) mapa[m[2]] = m[1];
-      await esperar(80);
+      // links do menu (só caminhos internos simples, sem sair, sem arquivos)
+      for (const m of html.matchAll(/href="(\/[a-z][\w-]*)"/g)) if (!fila.includes(m[1]) && !/sair|logout|_next|api/i.test(m[1])) fila.push(m[1]);
+      for (const m of html.matchAll(/<script[^>]+src="([^"]*\/_next\/static\/chunks\/[^"]+\.js)"/g)) {
+        const src = m[1].startsWith('http') ? new URL(m[1]).pathname : m[1];
+        if (vistos.has(src)) continue;
+        vistos.add(src);
+        const js = await (await req(src, { seguir: true })).text();
+        for (const re of res) for (const a of js.matchAll(re)) {
+          mapa[a[2]] = a[1];
+          ondeEsta[a[2]] ||= pag === '/login' ? '/atendimentos' : pag;
+        }
+        await esperar(80);
+      }
     }
     if (!Object.keys(mapa).length) throw new Error('Não achei as ações do LeadsOK (o site pode ter mudado)');
     acoes = mapa;
+    paginaDaAcao = ondeEsta;
     return mapa;
   }
 
@@ -117,7 +130,7 @@ function criarCliente({ email, senha }) {
       await descobrirAcoes();
       return acao(nome, args, 1);
     }
-    const r = await req('/atendimentos', {
+    const r = await req(paginaDaAcao[nome] || '/atendimentos', {
       metodo: 'POST',
       corpo: JSON.stringify(args),
       headers: { 'Next-Action': id, Accept: 'text/x-component', 'Content-Type': 'text/plain;charset=UTF-8' },

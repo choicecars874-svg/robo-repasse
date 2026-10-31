@@ -111,10 +111,15 @@ function resumoHoje() {
   const mes = hoje.slice(0, 7);
   const leadsHoje = d.prepare("SELECT COUNT(*) n FROM lk_leads WHERE is_resgate = 0 AND date(created_date, '-3 hours') = ?").get(hoje).n;
   const agendHoje = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE date(data, '-3 hours') = ?").get(hoje).n;
-  const agendFeitosHoje = d.prepare("SELECT COUNT(*) n FROM lk_eventos WHERE tipo = 'scheduled' AND date(ts, '-3 hours') = ?").get(hoje).n;
-  const vendasMes = d.prepare(`SELECT COUNT(*) n FROM lk_leads l WHERE ${VENDIDO} AND strftime('%Y-%m', l.ultima_msg_at, '-3 hours') = ?`).get(mes).n;
+  // agendamentos FEITOS hoje: os que apareceram hoje na agenda + os do histórico com data de hoje (o maior dos dois)
+  const naAgenda = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE date(primeira_vez / 1000, 'unixepoch', '-3 hours') = ?").get(hoje).n;
+  const noHistorico = d.prepare("SELECT COUNT(DISTINCT lead_id) n FROM lk_eventos WHERE tipo = 'scheduled' AND date(ts, '-3 hours') = ?").get(hoje).n;
+  const agendFeitosHoje = Math.max(naAgenda, noHistorico);
+  const vendasMes = d.prepare(`SELECT COUNT(*) n FROM lk_leads l WHERE ${VENDIDO}
+    AND strftime('%Y-%m', COALESCE(datetime(l.vendido_em / 1000, 'unixepoch'), l.ultima_msg_at), '-3 hours') = ?`).get(mes).n;
+  const visitasHoje = d.prepare('SELECT COUNT(*) n FROM lk_visitas WHERE compareceu = 1 AND date(data_agendada, \'-3 hours\') = ?').get(hoje).n;
   const total = d.prepare('SELECT COUNT(*) n FROM lk_leads').get().n;
-  return { leadsHoje, agendamentosHoje: agendHoje, agendamentosFeitosHoje: agendFeitosHoje, vendasMes, temDados: total > 0 };
+  return { leadsHoje, agendamentosHoje: agendHoje, agendamentosFeitosHoje: agendFeitosHoje, vendasMes, visitasHoje, temDados: total > 0 };
 }
 
 module.exports = { leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

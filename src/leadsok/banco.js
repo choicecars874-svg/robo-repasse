@@ -32,6 +32,12 @@ function abrir() {
       CREATE TABLE IF NOT EXISTS lk_visitas (lead_id TEXT, data_agendada TEXT, compareceu INTEGER, marcado_por TEXT, marcado_em INTEGER, PRIMARY KEY (lead_id, data_agendada));
       CREATE TABLE IF NOT EXISTS lk_sync_log (inicio INTEGER, fim INTEGER, tipo TEXT, ok INTEGER, erro TEXT, contagens TEXT);
     `);
+    // colunas novas em bancos já criados: quando o agendamento apareceu e quando o lead virou venda
+    for (const sql of ['ALTER TABLE lk_agenda ADD COLUMN primeira_vez INTEGER', 'ALTER TABLE lk_leads ADD COLUMN vendido_em INTEGER']) {
+      try {
+        db.exec(sql);
+      } catch {}
+    }
   } catch (e) {
     erroBanco = `Banco do LeadsOK indisponível (${e.message}). É preciso Node 22.13 ou mais novo.`;
   }

@@ -77,8 +77,11 @@ function registrar(tipo, inicio, ok, erro, contagens) {
 
 // ---------- Gravação ----------
 const bool = (v) => (v === true || v === 'true' || v === 1 ? 1 : 0);
+const ehVenda = (motivo) => /^vendido/i.test(String(motivo || '').trim());
 function gravarLeads(d, aba, leads) {
   const agora = Date.now();
+  // depois da 1ª carga, sabemos o momento em que o lead virou venda; na 1ª carga usa a última mensagem
+  const marcaVenda = d.prepare('UPDATE lk_leads SET vendido_em = ? WHERE id = ? AND vendido_em IS NULL');
   const sel = d.prepare('SELECT agendado_alguma_vez FROM lk_leads WHERE id = ?');
   const up = d.prepare(`INSERT INTO lk_leads (id, conversa_id, nome, whatsapp, origem, vendedor, vendedor_is_ia, aba_atual, agendado_alguma_vez,
       archive_reason, tem_financiamento, created_date, ultima_msg_owner, ultima_msg_at, is_resgate, first_seen_at, updated_at, assinatura)
@@ -99,6 +102,7 @@ function gravarLeads(d, aba, leads) {
       l.ultima_msg_owner || null, l.ultima_msg_at || null, origem === 'resgate' || bool(l.em_resgate) ? 1 : 0, agora, agora,
       [l.ultima_msg_at || '', aba, arquivo || ''].join('|')
     );
+    if (ehVenda(arquivo) && cfg.cargaInicialFeita) marcaVenda.run(agora, l.id);
   }
   return novos;
 }
@@ -108,13 +112,14 @@ const idDoLead = (a) => a.customer_id || a.customerId || a.customers_id || a.lea
 function gravarAgenda(d, agenda) {
   if (!Array.isArray(agenda)) return 0;
   estado.chavesAgenda = agenda[0] ? Object.keys(agenda[0]) : estado.chavesAgenda;
-  const up = d.prepare(`INSERT INTO lk_agenda (id, lead_id, data, modalidade, concluido, pela_ia, visto_em) VALUES (?, ?, ?, ?, ?, ?, ?)
+  const up = d.prepare(`INSERT INTO lk_agenda (id, lead_id, data, modalidade, concluido, pela_ia, visto_em, primeira_vez) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET lead_id = excluded.lead_id, data = excluded.data, modalidade = excluded.modalidade, concluido = excluded.concluido, pela_ia = excluded.pela_ia, visto_em = excluded.visto_em`);
   const marca = d.prepare('UPDATE lk_leads SET agendado_alguma_vez = 1 WHERE id = ?');
   const agora = Date.now();
   for (const a of agenda) {
     const lead = idDoLead(a);
-    up.run(String(a.id), lead, a.date_scheduled || null, a.modality || null, bool(a.is_concluido), bool(a.scheduled_by_ia), agora);
+    // primeira_vez = quando o agendamento apareceu (só depois da 1ª carga; antes não dá para saber quando foi feito)
+    up.run(String(a.id), lead, a.date_scheduled || null, a.modality || null, bool(a.is_concluido), bool(a.scheduled_by_ia), agora, cfg.cargaInicialFeita ? agora : null);
     if (lead) marca.run(lead);
   }
   return agenda.length;
@@ -195,14 +200,17 @@ async function detalharPendentes(limite) {
   const fila = d.prepare(`SELECT id, chat_completo FROM lk_leads WHERE detalhe_assinatura IS NULL OR detalhe_assinatura != assinatura
     ORDER BY is_resgate ASC, ultima_msg_at DESC LIMIT ?`).all(limite);
   let feitos = 0;
+  let erros = 0;
   for (const lead of fila) {
     if (memoriaLivreMB() < 120) break;
     estado.fase = `detalhes ${feitos + 1}/${fila.length}`;
     try {
       await detalharLead(c, d, lead);
       feitos++;
+      erros = 0;
     } catch (e) {
       estado.ultimoErro = `detalhe de um lead: ${e.message}`;
+      if (++erros >= 3) throw new Error(`3 leads seguidos com erro (${e.message})`);
     }
     await esperar(PAUSA_MS);
   }
@@ -256,14 +264,27 @@ async function ciclo(tipo = 'incremental') {
       cfg.cargaInicialFeita = true;
       salvarCfg();
     }
+    // cada etapa falha sozinha: estoque com problema não impede conversas e fichas
+    const avisos = [];
     if (Date.now() - ultimaEstoque > 60 * MIN) {
-      Object.assign(cont, await sincronizarEstoque());
-      ultimaEstoque = Date.now();
+      try {
+        Object.assign(cont, await sincronizarEstoque());
+        ultimaEstoque = Date.now();
+      } catch (e) {
+        avisos.push(`estoque: ${e.message}`);
+      }
     }
-    Object.assign(cont, await detalharPendentes(DETALHES_POR_CICLO));
+    // com memória sobrando, detalha mais leads por ciclo (o funil completa mais rápido)
+    const lote = memoriaLivreMB() > 300 ? 200 : DETALHES_POR_CICLO;
+    try {
+      Object.assign(cont, await detalharPendentes(lote));
+    } catch (e) {
+      avisos.push(`detalhes: ${e.message}`);
+    }
+    if (avisos.length) cont.avisos = avisos;
     estado.ultimoOk = Date.now();
     estado.falhasSeguidas = 0;
-    estado.ultimoErro = null;
+    estado.ultimoErro = cont.avisos ? cont.avisos.join(' · ') : null;
     registrar(completo ? 'completo' : 'incremental', inicio, true, null, cont);
   } catch (e) {
     estado.falhasSeguidas++;

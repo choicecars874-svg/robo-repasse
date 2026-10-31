@@ -19,10 +19,10 @@ const salvar = () => fs.writeFileSync(ARQ, JSON.stringify(dados), { mode: 0o600 
 const cache = new Map(); // usuario -> { quando, resumo }
 const erros = {};
 
-async function chamar(caminho, params, token) {
+async function chamar(caminho, params, token, tempo = 15000) {
   const url = new URL(caminho.startsWith('http') ? caminho : API + caminho);
   for (const [k, v] of Object.entries({ ...params, access_token: token })) url.searchParams.set(k, v);
-  const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  const r = await fetch(url, { signal: AbortSignal.timeout(tempo) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.error) throw new Error(j.error?.message || `Instagram respondeu ${r.status}`);
   return j;
@@ -30,6 +30,15 @@ async function chamar(caminho, params, token) {
 
 const diaDe = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 // meia-noite de hoje em Brasília, em segundos
+// janela do período em segundos: hoje, ontem, últimos 7 ou 30 dias (fuso de Brasília)
+function janela(periodo = 'hoje') {
+  const h = inicioDeHoje();
+  const agora = Math.floor(Date.now() / 1000);
+  if (periodo === 'ontem') return { since: h - 86400, until: h };
+  if (periodo === '7') return { since: h - 6 * 86400, until: agora };
+  if (periodo === '30') return { since: h - 29 * 86400, until: agora };
+  return { since: h, until: agora };
+}
 const inicioDeHoje = () => Math.floor(new Date(`${diaDe()}T00:00:00-03:00`).getTime() / 1000);
 
 async function guardarToken(token) {
@@ -39,7 +48,7 @@ async function guardarToken(token) {
   const antes = dados.contas[perfil.username] || {};
   dados.contas[perfil.username] = { seguidoresPorDia: {}, ...antes, token, salvoEm: Date.now(), renovadoEm: Date.now() };
   salvar();
-  cache.delete(perfil.username);
+  for (const k of [...cache.keys()]) if (k.startsWith(perfil.username + '|')) cache.delete(k);
   delete erros[perfil.username];
   return { usuario: perfil.username };
 }
@@ -47,7 +56,7 @@ async function guardarToken(token) {
 function removerToken(usuario) {
   delete dados.contas[usuario];
   salvar();
-  cache.delete(usuario);
+  for (const k of [...cache.keys()]) if (k.startsWith(usuario + '|')) cache.delete(k);
 }
 
 // O token vale 60 dias; renova sozinho a cada ~20 dias para nunca vencer
@@ -87,17 +96,25 @@ async function alcanceDaSemana(token) {
 
 // Direct: só LÊ as conversas para contar (não responde, não marca como lida, não usa webhook —
 // o atendimento continua na ferramenta própria). Precisa da permissão de mensagens no token.
-async function direct(token, perfil) {
+async function direct(token, perfil, { since, until }) {
   try {
-    const j = await chamar('/me/conversations', { platform: 'instagram', fields: 'updated_time,messages.limit(25){created_time,from}', limit: 40 }, token);
-    const hoje = inicioDeHoje() * 1000;
+    // 1) só a lista (rápido); 2) mensagens apenas das conversas que mexeram hoje, poucas por vez
+    const hoje = since * 1000;
+    const fim = until * 1000;
+    const lista = await chamar('/me/conversations', { platform: 'instagram', fields: 'updated_time', limit: 50 }, token, 30000);
+    const deHoje = (lista.data || []).filter((c) => new Date(c.updated_time).getTime() >= hoje).slice(0, 40);
+    const j = { data: [] };
+    for (let i = 0; i < deHoje.length; i += 4) {
+      const parte = await Promise.all(deHoje.slice(i, i + 4).map((c) => chamar(`/${c.id}`, { fields: 'updated_time,messages.limit(25){created_time,from}' }, token, 20000).catch(() => null)));
+      j.data.push(...parte.filter(Boolean));
+    }
     const daLoja = (m) => m.from && (m.from.id === perfil.user_id || m.from.id === perfil.id || m.from.username === perfil.username);
     let conversas = 0, novas = 0, aguardando = 0, respondidas = 0;
     const tempos = [];
     for (const c of j.data || []) {
       if (new Date(c.updated_time).getTime() < hoje) continue;
       const msgs = (c.messages?.data || []).map((m) => ({ t: new Date(m.created_time).getTime(), loja: daLoja(m) })).sort((a, b) => a.t - b.t);
-      const doCliente = msgs.filter((m) => !m.loja && m.t >= hoje);
+      const doCliente = msgs.filter((m) => !m.loja && m.t >= hoje && m.t < fim);
       if (!doCliente.length) continue;
       conversas++;
       if (msgs.length < 25 && msgs[0].t >= hoje) novas++; // conversa inteira cabe na página e começou hoje
@@ -114,15 +131,14 @@ async function direct(token, perfil) {
   }
 }
 
-async function resumoConta(usuario) {
+async function resumoConta(usuario, periodo = 'hoje') {
   const c = dados.contas[usuario];
-  const guardado = cache.get(usuario);
+  const guardado = cache.get(usuario + '|' + periodo);
   if (guardado && Date.now() - guardado.quando < 10 * 60 * 1000) return guardado.resumo;
   await renovarSePreciso(usuario, c);
   const t = c.token;
   try {
-    const since = inicioDeHoje();
-    const until = Math.floor(Date.now() / 1000);
+    const { since, until } = janela(periodo);
     const [perfil, midia, alcance, interacoes, visualizacoes, engajadas, toquesLink, semana] = await Promise.all([
       chamar('/me', { fields: 'user_id,username,name,profile_picture_url,followers_count,follows_count,media_count' }, t),
       chamar('/me/media', { fields: 'id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp,like_count,comments_count', limit: 8 }, t).catch(() => ({ data: [] })),
@@ -133,7 +149,7 @@ async function resumoConta(usuario) {
       metrica(t, 'profile_links_taps', since, until),
       alcanceDaSemana(t),
     ]);
-    const dm = await direct(t, perfil);
+    const dm = await direct(t, perfil, { since, until });
     // seguidores do dia (para mostrar quanto cresceu)
     c.seguidoresPorDia ||= {};
     c.seguidoresPorDia[diaDe()] = perfil.followers_count;
@@ -163,7 +179,7 @@ async function resumoConta(usuario) {
         comentarios: m.comments_count ?? null,
       })),
     };
-    cache.set(usuario, { quando: Date.now(), resumo: r });
+    cache.set(usuario + '|' + periodo, { quando: Date.now(), resumo: r });
     delete erros[usuario];
     return r;
   } catch (e) {
@@ -177,14 +193,16 @@ const somar = (lista, f) => {
   return v.length ? v.reduce((a, b) => a + b, 0) : null;
 };
 
-async function resumo() {
+async function resumo(periodo = 'hoje') {
+  if (!['hoje', 'ontem', '7', '30'].includes(periodo)) periodo = 'hoje';
   const usuarios = Object.keys(dados.contas);
   if (!usuarios.length) return { conectado: false, contas: [] };
-  const contas = await Promise.all(usuarios.map(resumoConta));
+  const contas = await Promise.all(usuarios.map((u) => resumoConta(u, periodo)));
   const ok = contas.filter((c) => !c.erro);
   const semana = (ok[0]?.semana || []).map((d, i) => ({ dia: d.dia, alcance: somar(ok, (c) => c.semana[i]?.alcance) }));
   return {
     conectado: true,
+    periodo,
     contas,
     total: {
       seguidores: somar(ok, (c) => c.seguidores),
