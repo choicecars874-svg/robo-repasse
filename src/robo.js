@@ -237,9 +237,13 @@ const pareceAnuncio = (t) => String(t || '').length >= 25 && /\b(19|20)\d{2}\b|r
 // Fica com o bloco se ele estiver claramente mais perto do texto deste anúncio (2x e pelo menos 5 s).
 function separarFotosAmbiguas(chave, b) {
   if (!b.tTexto || !b.fotos.length) return 0;
+  // foto que veio com o texto na legenda é deste anúncio; só as fotos soltas passam pela checagem
+  const comLegenda = b.fotos.filter((f) => f.legenda);
+  const soltas = b.fotos.filter((f) => !f.legenda);
+  if (!soltas.length) return 0;
   const outros = (linhaDoTempo.get(chave) || []).filter((x) => x.tipo === 'texto' && x.anuncio && !b.ids.includes(x.id)).map((x) => x.t);
   if (!outros.length) return 0;
-  const fotos = [...b.fotos].sort((a, c) => a.t - c.t);
+  const fotos = [...soltas].sort((a, c) => a.t - c.t);
   // blocos: fotos seguidas sem texto de anúncio (deste ou de outro) no meio
   const textos = [b.tTexto, ...outros];
   const blocos = [];
@@ -270,8 +274,8 @@ function separarFotosAmbiguas(chave, b) {
     // 1) claramente mais perto do texto deste anúncio; 2) se não, decide pela ordem em que o vendedor manda
     if ((outro > meu * 2 && outro >= meu + 5000) || donoPelaOrdem(bloco) === b.tTexto) ficam.push(...bloco);
   }
-  const tiradas = b.fotos.length - ficam.length;
-  b.fotos = b.fotos.filter((f) => ficam.includes(f));
+  const tiradas = soltas.length - ficam.length;
+  b.fotos = b.fotos.filter((f) => comLegenda.includes(f) || ficam.includes(f));
   return tiradas;
 }
 
@@ -318,6 +322,7 @@ async function receber(m) {
     b.fotos.push({
       t: quando,
       id: m.key.id,
+      legenda: !!t, // foto com o texto na legenda: é deste anúncio, sem dúvida
       p: downloadMediaMessage(m, 'buffer', {}, { logger, reuploadRequest: sock?.updateMediaMessage }).catch((e) => {
         evento('aviso', `Não consegui baixar uma foto de ${nomeGrupo(m.key.remoteJid)}: ${e.message}`);
         return null;
