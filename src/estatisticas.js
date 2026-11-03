@@ -45,6 +45,7 @@ const CATEGORIAS = [
   [/suspeito/i, 'Desconto suspeito (erro de leitura)'],
   [/abaixo (da fipe|do pre)|m[ií]nimo agora/i, 'Desconto abaixo do mínimo'],
   [/fipe n[aã]o encontrada/i, 'FIPE não encontrada'],
+  [/fotos amb[ií]guas/i, 'Fotos ambíguas (entre dois anúncios)'],
   [/sem foto/i, 'Sem foto'],
   [/s[oó] fotos/i, 'Só fotos, sem texto'],
   [/sem pre[cç]o/i, 'Sem preço'],

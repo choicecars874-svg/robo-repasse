@@ -250,11 +250,25 @@ function separarFotosAmbiguas(chave, b) {
     else blocos.push([f]);
   }
   const distancia = (bloco, t) => (t < bloco[0].t ? bloco[0].t - t : t > bloco[bloco.length - 1].t ? t - bloco[bloco.length - 1].t : 0);
+  // Jeito do vendedor mandar: olha como começou a sequência atual dele (mensagens com menos de 3 min
+  // entre uma e outra). Começou com foto = "fotos e depois texto"; começou com texto = "texto e depois fotos".
+  const linha = (linhaDoTempo.get(chave) || []).filter((x) => x.tipo === 'foto' || x.anuncio).sort((a, c) => a.t - c.t);
+  let inicio = linha.findIndex((x) => x.t >= fotos[0].t - 1);
+  while (inicio > 0 && linha[inicio].t - linha[inicio - 1].t < 180000) inicio--;
+  let comecouCom = linha[Math.max(0, inicio)]?.tipo; // 'foto' | 'texto'
+  // só confia no jeito do vendedor se ele se repetiu pelo menos 2 vezes na sequência (foto→texto ou texto→foto)
+  const seq = linha.slice(Math.max(0, inicio));
+  const repeticoes = seq.filter((x, k) => k > 0 && seq[k - 1].tipo === comecouCom && x.tipo !== comecouCom).length;
+  if (repeticoes < 2) comecouCom = undefined;
+  const todosTextos = [...textos].sort((a, c) => a - c);
+  const donoPelaOrdem = (bloco) =>
+    comecouCom === 'foto' ? todosTextos.find((t) => t >= bloco[bloco.length - 1].t) : comecouCom === 'texto' ? [...todosTextos].reverse().find((t) => t <= bloco[0].t) : undefined;
   const ficam = [];
   for (const bloco of blocos) {
     const meu = distancia(bloco, b.tTexto);
     const outro = Math.min(...outros.map((t) => distancia(bloco, t)));
-    if (outro > meu * 2 && outro >= meu + 5000) ficam.push(...bloco);
+    // 1) claramente mais perto do texto deste anúncio; 2) se não, decide pela ordem em que o vendedor manda
+    if ((outro > meu * 2 && outro >= meu + 5000) || donoPelaOrdem(bloco) === b.tTexto) ficam.push(...bloco);
   }
   const tiradas = b.fotos.length - ficam.length;
   b.fotos = b.fotos.filter((f) => ficam.includes(f));
@@ -386,7 +400,7 @@ async function processar({ grupo, vendedor, fotos: todasFotos, textos, ids = [],
   if (!textos.length) return evento('ignorado', `${nomeGrupo(grupo)} — só fotos, sem texto do anúncio`);
   if (!fotos.length && cfg.filtros.exigirFoto) {
     const inicio = textos[0].split('\n').find((l) => l.trim()) || '';
-    const porque = ambiguas ? ' (as fotos estavam entre dois anúncios do mesmo vendedor — descartadas por segurança)' : descartadas ? ' (a foto chegou longe do texto — descartada por segurança)' : falharam ? ' (a foto não baixou)' : ' (o vendedor não mandou foto)';
+    const porque = ambiguas ? ' (fotos ambíguas: estavam entre dois anúncios do mesmo vendedor, descartadas por segurança)' : descartadas ? ' (a foto chegou longe do texto — descartada por segurança)' : falharam ? ' (a foto não baixou)' : ' (o vendedor não mandou foto)';
     return evento('ignorado', `${inicio.slice(0, 50)} — sem foto${porque}`);
   }
   const carro = parseAnuncio(textos.join('\n'));
