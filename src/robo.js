@@ -229,17 +229,36 @@ function marcarNaLinha(chave, item) {
   l.push({ ...item, visto: Date.now() });
   linhaDoTempo.set(chave, l);
 }
-// Fica só com as fotos claramente mais perto do texto deste anúncio (3x mais perto que de outro texto do vendedor)
+// Texto que parece anúncio de carro (ano, preço ou km). Conversa ("bom dia", "vendido", "chama no pv") não conta.
+const pareceAnuncio = (t) => String(t || '').length >= 25 && /\b(19|20)\d{2}\b|r\$|\d{1,3}\.\d{3}|\d+\s*mil\b|\bkm\b|fipe/i.test(t);
+
+// Fotos que estão no meio de dois anúncios do mesmo vendedor: decide por bloco de fotos (álbum),
+// comparando a distância do bloco até o texto deste anúncio com a distância até o outro anúncio.
+// Fica com o bloco se ele estiver claramente mais perto do texto deste anúncio (2x e pelo menos 5 s).
 function separarFotosAmbiguas(chave, b) {
   if (!b.tTexto || !b.fotos.length) return 0;
-  const outros = (linhaDoTempo.get(chave) || []).filter((x) => x.tipo === 'texto' && !b.ids.includes(x.id)).map((x) => x.t);
-  const antes = b.fotos.length;
-  b.fotos = b.fotos.filter((f) => {
-    const meu = Math.abs(f.t - b.tTexto);
-    const outro = Math.min(Infinity, ...outros.map((t) => Math.abs(f.t - t)));
-    return outro > meu * 3 && outro > meu + 10000;
-  });
-  return antes - b.fotos.length;
+  const outros = (linhaDoTempo.get(chave) || []).filter((x) => x.tipo === 'texto' && x.anuncio && !b.ids.includes(x.id)).map((x) => x.t);
+  if (!outros.length) return 0;
+  const fotos = [...b.fotos].sort((a, c) => a.t - c.t);
+  // blocos: fotos seguidas sem texto de anúncio (deste ou de outro) no meio
+  const textos = [b.tTexto, ...outros];
+  const blocos = [];
+  for (const f of fotos) {
+    const ult = blocos[blocos.length - 1];
+    const anterior = ult && ult[ult.length - 1];
+    if (anterior && !textos.some((t) => t > anterior.t && t < f.t)) ult.push(f);
+    else blocos.push([f]);
+  }
+  const distancia = (bloco, t) => (t < bloco[0].t ? bloco[0].t - t : t > bloco[bloco.length - 1].t ? t - bloco[bloco.length - 1].t : 0);
+  const ficam = [];
+  for (const bloco of blocos) {
+    const meu = distancia(bloco, b.tTexto);
+    const outro = Math.min(...outros.map((t) => distancia(bloco, t)));
+    if (outro > meu * 2 && outro >= meu + 5000) ficam.push(...bloco);
+  }
+  const tiradas = b.fotos.length - ficam.length;
+  b.fotos = b.fotos.filter((f) => ficam.includes(f));
+  return tiradas;
 }
 
 async function receber(m) {
@@ -261,7 +280,7 @@ async function receber(m) {
 
   const ehFoto = !!conteudo(m).imageMessage;
   const t = textoDe(m);
-  if (ehFoto || t) marcarNaLinha(chave, { t: quando, id: m.key.id, tipo: t ? 'texto' : 'foto' });
+  if (ehFoto || t) marcarNaLinha(chave, { t: quando, id: m.key.id, tipo: t ? 'texto' : 'foto', anuncio: pareceAnuncio(t) });
   let b = buffers.get(chave);
   let herdadas = [];
   // um anúncio que já tem texto não recebe outro texto/legenda: é anúncio novo
