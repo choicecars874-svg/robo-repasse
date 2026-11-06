@@ -45,7 +45,7 @@ const logger = pino(
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const aleatorio = ([min, max]) => (min + Math.random() * (max - min)) * 1000;
 
-const estado = { status: 'iniciando', qr: null, numero: null, grupos: [], eventos: [] };
+const estado = { status: 'iniciando', qr: null, numero: null, grupos: [], eventos: [], desde: Date.now(), ultimaLida: null, ultimaRecebida: null, reconexoesSemLer: 0 };
 const historico = fs.existsSync(ARQ_HIST) ? JSON.parse(fs.readFileSync(ARQ_HIST, 'utf8')) : { chaves: [], postados: [] };
 const salvarHist = () => fs.writeFileSync(ARQ_HIST, JSON.stringify(historico));
 
@@ -153,10 +153,12 @@ async function iniciar() {
 
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
+      if (estado.status !== 'aguardando-qr') estado.desde = Date.now();
       estado.status = 'aguardando-qr';
       estado.qr = await QRCode.toDataURL(qr);
     }
     if (connection === 'open') {
+      if (estado.status !== 'conectado') estado.desde = Date.now();
       estado.status = 'conectado';
       estado.qr = null;
       estado.numero = sock.user?.id?.split(':')[0];
@@ -166,6 +168,7 @@ async function iniciar() {
     }
     if (connection === 'close') {
       const codigo = lastDisconnect?.error?.output?.statusCode;
+      if (estado.status === 'conectado') estado.desde = Date.now(); // começa a contar o tempo sem conexão
       estado.status = 'desconectado';
       if (codigo === DisconnectReason.loggedOut) {
         evento('erro', 'WhatsApp desconectado. Gere um novo QR no painel.');
@@ -185,10 +188,13 @@ async function iniciar() {
         // 'append' = histórico/sincronização: só aceita se for mensagem dos últimos 2 minutos
         if (type !== 'notify' && Date.now() / 1000 - Number(m.messageTimestamp || 0) > 120) continue;
         if (config.get().gruposOrigem.includes(jid) && jid !== config.get().grupoDestino) {
+          estado.ultimaRecebida = Date.now();
           if (!m.message) {
             if (m.messageStubType === 2) evento('aviso', `Não consegui ler uma mensagem de ${nomeGrupo(jid)}: a criptografia do aparelho conectado ainda está sincronizando. Reenvie em alguns minutos.`);
             continue;
           }
+          estado.ultimaLida = Date.now();
+          estado.reconexoesSemLer = 0;
           if (await tratarVendido(m)) continue;
           await receber(m);
         }
@@ -658,6 +664,40 @@ async function limpezaUnica() {
   }
   fs.writeFileSync(ARQ_LIMPEZA, new Date().toISOString());
 }
+
+// Vigia: o WhatsApp às vezes volta "conectado" mas sem receber nada dos grupos (fica surdo), ou fica
+// preso reconectando. Das 8h às 21h, se passar 2 h sem ler nenhuma mensagem dos grupos de repasse,
+// reconecta; se continuar surdo, reinicia o robô (o pm2 liga de novo). QR pendente não dá para resolver
+// sozinho: o painel mostra o aviso em vermelho.
+const HORA = 3600 * 1000;
+setInterval(() => {
+  const h = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }));
+  const agora = Date.now();
+  if (!config.get().gruposOrigem.length) return;
+  if (estado.status === 'desconectado' || estado.status === 'iniciando') {
+    if (agora - estado.desde > 15 * 60 * 1000) {
+      evento('erro', 'WhatsApp há mais de 15 min sem conectar: reiniciando o robô');
+      setTimeout(() => process.exit(1), 2000);
+    }
+    return;
+  }
+  if (estado.status !== 'conectado' || h < 8 || h >= 21) return;
+  const ultima = Math.max(estado.ultimaLida || 0, estado.desde || 0);
+  if (agora - ultima < 2 * HORA) return;
+  estado.reconexoesSemLer++;
+  if (estado.reconexoesSemLer >= 3) {
+    evento('erro', 'Robô continua sem receber mensagens dos grupos: reiniciando');
+    setTimeout(() => process.exit(1), 2000);
+    return;
+  }
+  evento('aviso', `Há ${Math.round((agora - ultima) / HORA)} h sem receber mensagens dos grupos de repasse: reconectando o WhatsApp`);
+  estado.desde = agora;
+  try {
+    sock?.end?.(new Error('vigia: sem mensagens dos grupos'));
+  } catch {
+    setTimeout(iniciar, 3000);
+  }
+}, 10 * 60 * 1000).unref();
 
 async function enviarTeste(jid) {
   await enviar(jid, [], '✅ Teste do Robô de Repasse da Choice Cars. Pode apagar esta mensagem.');

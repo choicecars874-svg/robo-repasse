@@ -100,8 +100,8 @@ function iniciarPainel() {
   app.get('/api/diagnostico', (_, res) => res.type('text').send(robo.diagnostico.join('\n') || 'Nenhum aviso interno.'));
 
   app.get('/api/estado', (_, res) => {
-    const { status, qr, numero, eventos } = robo.estado;
-    res.json({ versao: VERSAO, status, qr, numero, eventos: eventos.slice(0, 60), pendentes: robo.pendentes.size, postados: robo.historico.postados.length });
+    const { status, qr, numero, eventos, desde, ultimaLida, ultimaRecebida } = robo.estado;
+    res.json({ versao: VERSAO, status, qr, numero, desde, ultimaLida, ultimaRecebida, eventos: eventos.slice(0, 60), pendentes: robo.pendentes.size, postados: robo.historico.postados.length });
   });
 
   app.get('/api/grupos', async (req, res) => {

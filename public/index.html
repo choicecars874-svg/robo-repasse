@@ -223,6 +223,7 @@
   <span class="status"><span class="dot" id="dot"></span><span id="statusTxt">…</span></span>
 </div>
 <main>
+<div class="lkAviso" id="alertaRobo" hidden style="font-size:15px"></div>
 <div class="cabeca"><div class="eyebrow" id="tEyebrow"></div><h1 id="tTitulo">Painel</h1><p id="tSub"></p></div>
 
 <section id="painel" class="ativo">
@@ -687,6 +688,13 @@ async function atualizarEstado() {
   $('#dot').className = 'dot ' + (e.status === 'conectado' ? 'on' : e.status === 'desconectado' ? 'off' : '');
   $('#cardQr').hidden = !e.qr; if (e.qr) $('#qr').src = e.qr;
   $('#numero').textContent = $('#cfgNumero').textContent = e.numero || '—';
+  // alerta em todas as telas: robô sem WhatsApp ou sem ler os grupos há horas
+  const horas = (t) => Math.floor((Date.now() - t) / 3600000);
+  const alerta = e.status === 'aguardando-qr' ? 'WhatsApp do robô DESCONECTADO: os anúncios não estão sendo lidos nem postados. Abra Configurações → Integrações e escaneie o QR Code com o celular do robô.'
+    : e.status !== 'conectado' && e.desde && Date.now() - e.desde > 10 * 60000 ? `WhatsApp do robô sem conexão há ${Math.max(1, Math.round((Date.now() - e.desde) / 60000))} min. Ele tenta reconectar sozinho; se passar de 30 min, reinicie a máquina pela Oracle.`
+    : e.status === 'conectado' && e.ultimaLida && horas(e.ultimaLida) >= 3 ? `O robô está conectado, mas não recebe mensagens dos grupos de repasse há ${horas(e.ultimaLida)} h. Ele tenta se recuperar sozinho; se continuar, desconecte e escaneie o QR de novo em Configurações → Integrações.`
+    : '';
+  $('#alertaRobo').hidden = !alerta; $('#alertaRobo').textContent = alerta;
   $('#cfgVersao').textContent = e.versao || '?';
   $('#statusTxt2').textContent = nomes[e.status] || e.status; $('#dot2').className = $('#dot').className;
   $('#cardQr2').hidden = !e.qr; if (e.qr) $('#qr2').src = e.qr;
