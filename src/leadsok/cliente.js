@@ -119,7 +119,7 @@ function criarCliente({ email, senha }) {
       await login();
       return pagina(aba, n, 1);
     }
-    return { leads: extrairLeads(texto), agenda: aba === 'agendados' ? extrairArray(texto, 'agenda') : null, total: +total[1], pageSize: +total[2], page: +total[3] };
+    return { leads: extrairLeads(texto), agenda: aba === 'agendados' ? resolverRefs(texto, extrairArray(texto, 'agenda')) : null, total: +total[1], pageSize: +total[2], page: +total[3] };
   }
 
   // ---------- Server actions (só leitura) ----------
@@ -193,6 +193,38 @@ function camposDoFormulario(html) {
   return campos;
 }
 
+// O RSC não repete objetos: no lugar põe uma referência "$<linha>" ou "$<linha>:caminho:até:o:campo",
+// apontando para outra linha da resposta ("<linha>:<json>"). Troca cada referência pelo objeto real.
+function linhasRsc(texto) {
+  const mapa = {};
+  for (const linha of texto.split('\n')) {
+    const m = linha.match(/^([0-9a-f]+):([\[{"].*)$/);
+    if (!m) continue;
+    try {
+      mapa[m[1]] = JSON.parse(m[2]);
+    } catch {}
+  }
+  return mapa;
+}
+function resolverRefs(texto, valor) {
+  if (valor == null) return valor;
+  let mapa = null;
+  const seguir = (v, prof) => {
+    if (prof > 8) return v;
+    if (typeof v === 'string' && /^\$[0-9a-f]+(:|$)/.test(v)) {
+      mapa ||= linhasRsc(texto);
+      const [id, ...caminho] = v.slice(1).split(':');
+      let alvo = mapa[id];
+      for (const k of caminho) alvo = alvo == null ? undefined : alvo[k];
+      return alvo === undefined ? v : seguir(alvo, prof + 1);
+    }
+    if (Array.isArray(v)) return v.map((x) => seguir(x, prof + 1));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, seguir(x, prof + 1)]));
+    return v;
+  };
+  return seguir(valor, 0);
+}
+
 // Primeiro array "chave":[...] do texto RSC, casando colchetes fora de strings
 function extrairArray(texto, chave) {
   const i = texto.indexOf(`"${chave}":[`);
@@ -218,4 +250,4 @@ function extrairArray(texto, chave) {
   return null;
 }
 
-module.exports = { criarCliente, extrairLeads, extrairArray, camposDoFormulario, SessaoExpirada };
+module.exports = { criarCliente, extrairLeads, extrairArray, resolverRefs, camposDoFormulario, SessaoExpirada };
