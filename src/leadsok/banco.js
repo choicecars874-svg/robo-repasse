@@ -32,10 +32,11 @@ function abrir() {
       CREATE TABLE IF NOT EXISTS lk_visitas (lead_id TEXT, data_agendada TEXT, compareceu INTEGER, marcado_por TEXT, marcado_em INTEGER, PRIMARY KEY (lead_id, data_agendada));
       CREATE TABLE IF NOT EXISTS lk_contatos (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id TEXT, dia TEXT, tipo TEXT, resultado TEXT, em INTEGER);
       CREATE INDEX IF NOT EXISTS lk_contatos_dia ON lk_contatos(dia, lead_id);
+      CREATE TABLE IF NOT EXISTS lk_notas_backup (lead_id TEXT, em INTEGER, texto TEXT);
       CREATE TABLE IF NOT EXISTS lk_sync_log (inicio INTEGER, fim INTEGER, tipo TEXT, ok INTEGER, erro TEXT, contagens TEXT);
     `);
     // colunas novas em bancos já criados: quando o agendamento apareceu e quando o lead virou venda
-    for (const sql of ['ALTER TABLE lk_agenda ADD COLUMN primeira_vez INTEGER', 'ALTER TABLE lk_leads ADD COLUMN vendido_em INTEGER', 'ALTER TABLE lk_contatos ADD COLUMN por TEXT', 'ALTER TABLE lk_contatos ADD COLUMN nota TEXT', 'ALTER TABLE lk_contatos ADD COLUMN interesse TEXT', 'ALTER TABLE lk_contatos ADD COLUMN proximo_em INTEGER']) {
+    for (const sql of ['ALTER TABLE lk_agenda ADD COLUMN primeira_vez INTEGER', 'ALTER TABLE lk_leads ADD COLUMN vendido_em INTEGER', 'ALTER TABLE lk_contatos ADD COLUMN por TEXT', 'ALTER TABLE lk_contatos ADD COLUMN nota TEXT', 'ALTER TABLE lk_contatos ADD COLUMN interesse TEXT', 'ALTER TABLE lk_contatos ADD COLUMN proximo_em INTEGER', 'ALTER TABLE lk_contatos ADD COLUMN no_leadsok TEXT']) {
       try {
         db.exec(sql);
       } catch {}

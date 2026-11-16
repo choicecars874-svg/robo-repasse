@@ -328,6 +328,10 @@ function iniciarPainel() {
     leadsok.desligar();
     res.json({ ok: true });
   });
+  app.post('/api/leadsok/gravar-notas', (req, res) => {
+    leadsok.definirGravarNotas(req.body.ativo);
+    res.json({ ok: true });
+  });
   app.post('/api/leadsok/horas-parado', (req, res) => {
     leadsok.definirHorasParado(req.body.horas);
     res.json({ ok: true });
@@ -353,7 +357,16 @@ function iniciarPainel() {
   app.get('/api/sdr/buscar', (req, res) => res.json(comercial.buscarLead(req.query.q)));
   app.post('/api/sdr/contato', (req, res) => {
     try {
-      res.json(comercial.registrarContato({ ...req.body, por: req.usuario.nome }));
+      const r = comercial.registrarContato({ ...req.body, por: req.usuario.nome });
+      // briefing também nas Notas internas do lead no LeadsOK (se estiver ligado)
+      if (req.body.nota && leadsok.gravarNotasAtivo()) {
+        const RES = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem', agendou: 'AGENDOU', ja_comprou: 'JÁ COMPROU', sem_interesse: 'SEM INTERESSE' };
+        const quando = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const retorno = req.body.proximoEm ? ` · retorno ${new Date(Number(req.body.proximoEm)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
+        const linha = `[${quando} · ${req.usuario.nome} · ${req.body.tipo === 'mensagem' ? 'mensagem' : 'ligação'} · ${RES[req.body.resultado] || ''}${req.body.interesse ? ' · ' + req.body.interesse : ''}] ${String(req.body.nota).slice(0, 1500)}${retorno}`;
+        leadsok.gravarNotaLeadsOK(String(req.body.leadId), linha).then(() => comercial.marcarNoLeadsOK(r.id, 'ok')).catch((e) => comercial.marcarNoLeadsOK(r.id, 'erro: ' + e.message));
+      }
+      res.json(r);
     } catch (e) {
       res.status(400).json({ erro: e.message });
     }

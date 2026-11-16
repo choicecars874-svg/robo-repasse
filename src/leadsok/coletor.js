@@ -309,6 +309,58 @@ function iniciar() {
   }, 15 * MIN);
 }
 
+// ---------- Briefing do SDR nas Notas internas do lead (o cliente não vê) ----------
+// Lê a nota atual, guarda uma cópia, grava a nota antiga + a linha nova no topo e confere lendo de volta.
+// O formato do argumento de updateCustomerNotes não é documentado: tenta os prováveis, sempre enviando
+// o texto completo (nota antiga + nova), e fica com o primeiro que a leitura de volta confirmar.
+const textoDaNota = (r) => {
+  if (r == null) return '';
+  if (typeof r === 'string') return r;
+  const v = r.notes ?? r.note ?? r.content ?? r.text ?? r.internalNotes ?? r.data?.notes ?? r.data?.content ?? r.customer?.notes ?? '';
+  return typeof v === 'string' ? v : '';
+};
+const FORMATOS_NOTA = {
+  obj_notes: (id, t) => [{ customerId: id, notes: t }],
+  obj_content: (id, t) => [{ customerId: id, content: t }],
+  obj_note: (id, t) => [{ customerId: id, note: t }],
+  pos: (id, t) => [id, t],
+};
+let filaNotas = Promise.resolve();
+function gravarNotaLeadsOK(leadId, linha) {
+  // uma gravação por vez, para não atropelar a nota do mesmo lead
+  const tarefa = filaNotas.then(async () => {
+    const c = obterCliente();
+    const lerNota = async () => textoDaNota(await c.acao('getCustomerNotes', [{ customerId: leadId }]));
+    const atual = await lerNota();
+    banco.abrir().prepare('INSERT INTO lk_notas_backup (lead_id, em, texto) VALUES (?, ?, ?)').run(leadId, Date.now(), atual);
+    const novo = (linha + (atual ? '\n\n' + atual : '')).slice(0, 5000);
+    const formatos = cfg.formatoNotas ? [cfg.formatoNotas] : Object.keys(FORMATOS_NOTA);
+    for (const f of formatos) {
+      try {
+        await c.acao('updateCustomerNotes', FORMATOS_NOTA[f](leadId, novo));
+      } catch {
+        continue;
+      }
+      const lido = await lerNota();
+      if (lido.includes(linha.slice(0, 60))) {
+        if (cfg.formatoNotas !== f) {
+          cfg.formatoNotas = f;
+          salvarCfg();
+        }
+        return 'ok';
+      }
+    }
+    throw new Error('o LeadsOK não confirmou a gravação da nota');
+  });
+  filaNotas = tarefa.catch(() => {});
+  return tarefa;
+}
+const gravarNotasAtivo = () => !!(cfg.ativo && cfg.gravarNotas);
+function definirGravarNotas(v) {
+  cfg.gravarNotas = !!v;
+  salvarCfg();
+}
+
 // ---------- Para o painel ----------
 async function salvarCredenciais({ email, senha }) {
   email = String(email || '').trim();
@@ -347,6 +399,8 @@ function status() {
     ativo: !!cfg.ativo,
     cargaInicialFeita: !!cfg.cargaInicialFeita,
     horasParado: cfg.horasParado,
+    gravarNotas: !!cfg.gravarNotas,
+    formatoNotas: cfg.formatoNotas || null,
     erroBanco: banco.erro(),
     problema: estado.falhasSeguidas >= 2 ? `Integração LeadsOK com problema: ${estado.ultimoErro}` : null,
     ...estado,
@@ -358,4 +412,4 @@ function definirHorasParado(h) {
   salvarCfg();
 }
 
-module.exports = { iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado };
+module.exports = { iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };

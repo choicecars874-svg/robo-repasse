@@ -233,9 +233,12 @@ function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proxi
   if (interesse && !['quente', 'morno', 'frio'].includes(interesse)) throw new Error('Interesse inválido');
   const proximo = proximoEm ? Number(proximoEm) : null;
   if (proximo && !(proximo > Date.now() - 3600000)) throw new Error('Data de retorno inválida');
-  d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em, por, nota, interesse, proximo_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+  const r = d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em, por, nota, interesse, proximo_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(String(leadId), diaSP(), tipo, resultado || null, Date.now(), por || null, nota ? String(nota).slice(0, 2000) : null, interesse || null, proximo);
-  return { ok: true };
+  return { ok: true, id: Number(r.lastInsertRowid) };
+}
+function marcarNoLeadsOK(id, situacao) {
+  banco.abrir()?.prepare('UPDATE lk_contatos SET no_leadsok = ? WHERE id = ?').run(String(situacao).slice(0, 200), id);
 }
 
 // Histórico de contatos registrados (para acompanhar o SDR): por dia e por pessoa
@@ -249,7 +252,7 @@ function historicoContatos({ dia, por } = {}) {
     filtro = ' AND c.por = ?';
     args.push(por);
   }
-  const contatos = d.prepare(`SELECT c.em, c.tipo, c.resultado, c.por, c.nota, c.interesse, c.proximo_em, c.lead_id, l.nome, l.whatsapp, l.origem, l.vendedor, l.created_date
+  const contatos = d.prepare(`SELECT c.em, c.tipo, c.resultado, c.por, c.nota, c.interesse, c.proximo_em, c.no_leadsok, c.lead_id, l.nome, l.whatsapp, l.origem, l.vendedor, l.created_date
     FROM lk_contatos c LEFT JOIN lk_leads l ON l.id = c.lead_id WHERE c.dia = ?${filtro} ORDER BY c.em DESC LIMIT 500`).all(...args);
   const pessoas = d.prepare('SELECT DISTINCT por FROM lk_contatos WHERE por IS NOT NULL ORDER BY por').all().map((x) => x.por);
   return { dia, contatos, pessoas };
@@ -270,4 +273,4 @@ function buscarLead(q) {
   return { leads: leads.map((l) => ({ ...l, contatos: cont.all(l.id), agenda: ag.all(l.id) })) };
 }
 
-module.exports = { filaSdr, registrarContato, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+module.exports = { filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

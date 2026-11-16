@@ -4,7 +4,9 @@ const BASE = process.env.LEADSOK_URL || 'https://crm.atendeleads.app.br';
 
 // Ações que alteram dados no LeadsOK: nunca chamar, nem por engano
 const PROIBIDAS = /send|mark|archive|transfer|schedule(?!d)|registrar|bulk|update|delete|create|save|set[A-Z]|toggle|assign|remove|edit/i;
-const PERMITIDAS = new Set(['getCustomerJourneyLog', 'getChatMessages', 'getCustomerFinancing', 'listStoreInventory', 'listStoreSalesmen', 'getPendingSchedule']);
+const PERMITIDAS = new Set(['getCustomerJourneyLog', 'getChatMessages', 'getCustomerFinancing', 'listStoreInventory', 'listStoreSalesmen', 'getPendingSchedule', 'getCustomerNotes']);
+// A ÚNICA escrita permitida: as Notas internas do lead (o cliente não vê). Nada que envie, arquive ou transfira.
+const ESCRITAS = new Set(['updateCustomerNotes']);
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -122,7 +124,7 @@ function criarCliente({ email, senha }) {
 
   // ---------- Server actions (só leitura) ----------
   async function acao(nome, args = [], tentativa = 0) {
-    if (!PERMITIDAS.has(nome) || PROIBIDAS.test(nome.replace(/^get|^list/, ''))) throw new Error(`Ação ${nome} não é permitida (só leitura)`);
+    if (!ESCRITAS.has(nome) && (!PERMITIDAS.has(nome) || PROIBIDAS.test(nome.replace(/^get|^list/, '')))) throw new Error(`Ação ${nome} não é permitida (só leitura)`);
     if (!acoes) await descobrirAcoes();
     const id = acoes[nome];
     if (!id) {
