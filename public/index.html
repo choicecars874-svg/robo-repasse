@@ -138,6 +138,10 @@
   .lkAviso { background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.4); color:var(--verm); border-radius:14px; padding:12px 16px; margin-bottom:16px; font-size:14px; }
   .funilLk .etapa { grid-template-columns:150px minmax(0, 1fr) 70px 70px; } .funilLk .taxa { text-align:right; font:12px var(--mono); color:var(--sub); }
   .empilhada { display:flex; flex-direction:column-reverse; width:60%; max-width:30px; border-radius:6px 6px 2px 2px; overflow:hidden; min-height:2px; } .empilhada i { display:block; width:100%; }
+  .tmGraf { display:flex; align-items:flex-end; gap:4px; height:190px; padding-top:18px; overflow:hidden; } .tmGraf .col { flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; height:100%; }
+  .tmGraf .gr { flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center; gap:2px; position:relative; } .tmGraf .gr i { flex:1; min-width:0; max-width:22px; border-radius:4px 4px 0 0; min-height:2px; }
+  .tmGraf .gr em { position:absolute; top:-16px; font:600 10.5px var(--mono); font-style:normal; color:var(--sub); white-space:nowrap; } .tmGraf span { font-size:11px; color:var(--sub); white-space:nowrap; }
+  .tmGraf.linha { gap:1px; flex-wrap:wrap; height:auto; } .tmGraf.linha .col { height:160px; } .tmEixo { flex:0 0 100%; display:flex; justify-content:space-between; margin-top:6px; } .tmGraf.linha .gr i { max-width:none; border-radius:2px 2px 0 0; }
   .funilExtra { display:flex; gap:24px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--borda); font-size:14px; } .funilExtra b { font-size:20px; margin-right:4px; }
   .agItem { display:grid; grid-template-columns:70px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--borda); } .agItem:last-child { border:0; }
   .kpis.kpis5 { grid-template-columns:repeat(5, minmax(0, 1fr)); } .kpi.ok b { color:var(--verde); } .kpi.mau b { color:var(--verm); } .kpi.ouro b { color:var(--ouro); }
@@ -318,7 +322,22 @@
 
 <section id="comTime">
   <div class="lkAviso" hidden></div>
-  <p class="sub" id="tmObs" style="margin-top:0">Últimos 30 dias (mesmo filtro da tela de Leads).</p>
+  <div class="periodoBar" id="perTime"></div>
+  <div class="kpis" id="tmKpis"></div>
+  <div class="grade">
+    <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Tempo da 1ª resposta por dia</h2><p class="sub">Média do tempo entre a 1ª mensagem do cliente e a 1ª resposta de um vendedor (sem a IA), pelo dia em que o lead chegou.</p></div><div class="legenda"><span style="--c:var(--verde)">até 15 min</span><span style="--c:var(--ouro)">até 1 h</span><span style="--c:var(--verm)">mais de 1 h</span></div></div><div class="tmGraf" id="tmResp"></div></div>
+    <div class="card"><h2>Como o time responde</h2><p class="sub">Quantos leads foram respondidos em cada faixa de tempo.</p><div id="tmFaixas"></div></div>
+  </div>
+  <div class="grade">
+    <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Leads esperando · últimas 24 h</h2><p class="sub" id="tmEspObs">Cliente mandou a última mensagem e ninguém respondeu. Uma foto a cada coleta (15 min).</p></div></div><div class="tmGraf linha" id="tmEsp24"></div></div>
+    <div class="card"><h2>Esperando agora, por vendedor</h2><p class="sub">Quem está devendo resposta neste momento.</p><div id="tmEspVend"></div></div>
+  </div>
+  <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Agendamentos e visitas por dia</h2><p class="sub">Agendamentos feitos no dia e visitas que aconteceram (marcadas na Agenda).</p></div><div class="legenda"><span style="--c:var(--ouro)">Agendamentos feitos</span><span style="--c:var(--verde)">Vieram</span><span style="--c:var(--verm)">Não vieram</span></div></div><div class="tmGraf" id="tmAgDia"></div></div>
+  <div class="grade">
+    <div class="card"><h2>Agendamentos feitos por vendedor</h2><p class="sub">No período, pela data em que o agendamento foi feito.</p><div id="tmAgVend"></div></div>
+    <div class="card"><h2>1ª resposta por vendedor</h2><p class="sub">Média no período. Quanto menor, melhor.</p><div id="tmRespVend"></div></div>
+  </div>
+  <p class="sub" id="tmObs"></p>
   <div class="contas" id="tmCartoes"></div>
 </section>
 
@@ -1220,17 +1239,57 @@ document.querySelectorAll('#comLeads .atalhos button').forEach((b) => b.onclick 
   document.querySelectorAll('#comLeads .atalhos button').forEach((x) => x.classList.toggle('ativo', x === b));
   carregarLeads();
 });
+const fmtMin = (m) => m == null ? '—' : m < 60 ? `${Math.round(m)} min` : `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}`;
+const rotDia = (dd, n) => n > 16 ? (Number(dd.slice(8)) % 5 === 0 ? dd.slice(8) : '') : dd.slice(8) + '/' + dd.slice(5, 7);
+const diasEntre = (de, ate) => { const out = []; for (let t = Date.parse(de + 'T12:00:00Z'); t <= Date.parse(ate + 'T12:00:00Z'); t += 864e5) out.push(new Date(t).toISOString().slice(0, 10)); return out; };
 async function carregarTime() {
-  iniciarFiltros(); avisoLk();
-  const r = await api('/api/time?' + filtroLk());
+  avisoLk();
+  const per = $('#perTime').per || { de: diaSP(6), ate: diaSP(0), rotulo: 'últimos 7 dias' };
+  const r = await api(`/api/time?de=${per.de}&ate=${per.ate}`);
   if (r.erro) return;
-  const fmtMin = (m) => m == null ? '—' : m < 60 ? `${Math.round(m)} min` : `${Math.floor(m / 60)} h ${Math.round(m % 60)} min`;
-  $('#tmObs').textContent = `Leads criados entre ${$('#fDe').value.split('-').reverse().join('/')} e ${$('#fAte').value.split('-').reverse().join('/')} (filtro da tela Leads). "Esperando agora" = cliente mandou a última mensagem há mais de ${String(r.horasParado).replace('.', ',')} h. ${num(r.esperandoTotal)} leads esperando no total.`;
+  const humanos = r.vendedores.filter((v) => !v.ia);
+  const somaRec = humanos.reduce((a, v) => a + (v.resposta_min != null ? v.recebidos : 0), 0);
+  const mediaResp = somaRec ? humanos.reduce((a, v) => a + (v.resposta_min != null ? v.resposta_min * v.recebidos : 0), 0) / somaRec : null;
+  const tot = (k) => r.vendedores.reduce((a, v) => a + (v[k] || 0), 0);
+  const corResp = (m) => m == null ? 'var(--borda2)' : m <= 15 ? 'var(--verde)' : m <= 60 ? 'var(--ouro)' : 'var(--verm)';
+  $('#tmKpis').innerHTML = [
+    ['1ª resposta (média)', fmtMin(mediaResp), 'vendedores, sem a IA', mediaResp == null ? '' : mediaResp <= 15 ? 'ok' : mediaResp <= 60 ? 'ouro' : 'mau'],
+    ['Esperando agora', num(r.esperandoTotal), `sem resposta há mais de ${String(r.horasParado).replace('.', ',')} h`, r.esperandoTotal ? 'mau' : 'ok'],
+    ['Agendamentos feitos', num(tot('agendamentosFeitos')), rotuloCap(per.rotulo), 'ouro'],
+    ['Visitas', num(tot('vieram')), `${num(tot('naoVieram'))} não vieram`, 'ok'],
+  ].map(([n, v, txt, c]) => `<div class="kpi ${c}"><div class="eyebrow">${n}</div><b>${v}</b><small>${txt}</small></div>`).join('');
+  const dias = diasEntre(per.de, per.ate);
+  const pd = Object.fromEntries(r.porDia.map((x) => [x.dia, x]));
+  // tempo de resposta por dia
+  const maxR = Math.max(1, ...r.porDia.map((x) => x.resposta_min || 0));
+  $('#tmResp').innerHTML = dias.map((dd) => { const x = pd[dd] || {}; const m = x.resposta_min; return `<div class="col" title="${dd.split('-').reverse().join('/')}: ${fmtMin(m)} em média · ${x.leads || 0} leads"><div class="gr">${dias.length <= 10 && m != null ? `<em>${fmtMin(m)}</em>` : ''}<i style="height:${((m || 0) / maxR) * 100}%;background:${corResp(m)}"></i></div><span>${rotDia(dd, dias.length)}</span></div>`; }).join('');
+  // faixas
+  const f = r.faixasResposta || {};
+  $('#tmFaixas').innerHTML = barras([['Até 5 min', f.ate5 || 0], ['5 a 15 min', f.ate15 || 0], ['15 min a 1 h', f.ate60 || 0], ['1 a 3 h', f.ate180 || 0], ['Mais de 3 h', f.mais || 0]], 'var(--azul)');
+  // esperando 24 h
+  const e24 = r.esperando24h || [];
+  const maxE = Math.max(1, ...e24.map((x) => x.total));
+  $('#tmEsp24').innerHTML = e24.length ? e24.map((x, i) => { const h = new Date(x.em).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }); const nomes = Object.entries(x.porVendedor).filter(([v, n]) => v !== '—' && n).map(([v, n]) => `${v}: ${n}`).join(', '); return `<div class="col" title="${h}: ${x.total} esperando${nomes ? ' (' + nomes + ')' : ''}"><div class="gr"><i style="height:${(x.total / maxE) * 100}%;background:${x.total ? 'var(--verm)' : 'var(--verde)'}"></i></div></div>`; }).join('') + `<div class="tmEixo">${[0, 0.25, 0.5, 0.75, 1].map((q) => e24[Math.min(e24.length - 1, Math.round(q * (e24.length - 1)))]).map((x) => `<span>${new Date(x.em).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}</span>`).join('')}</div>`
+    : '<div class="vazio">O histórico começa a ser gravado a partir desta versão: a cada coleta do LeadsOK (15 min) entra uma barra.</div>';
+  $('#tmEspVend').innerHTML = r.esperandoPorVendedor.length ? barras(r.esperandoPorVendedor.map((x) => [x.vendedor, x.n]), 'var(--verm)') : '<div class="vazio">Ninguém esperando agora.</div>';
+  // agendamentos e visitas por dia
+  const maxA = Math.max(1, ...r.porDia.map((x) => Math.max(x.agendamentos, x.vieram, x.naoVieram)));
+  $('#tmAgDia').innerHTML = dias.map((dd) => { const x = pd[dd] || {}; return `<div class="col" title="${dd.split('-').reverse().join('/')}: ${x.agendamentos || 0} agendamentos feitos, ${x.vieram || 0} vieram, ${x.naoVieram || 0} não vieram"><div class="gr">${[['agendamentos', 'var(--ouro)'], ['vieram', 'var(--verde)'], ['naoVieram', 'var(--verm)']].map(([k, c]) => `<i style="height:${((x[k] || 0) / maxA) * 100}%;background:${c}"></i>`).join('')}</div><span>${rotDia(dd, dias.length)}</span></div>`; }).join('');
+  // por vendedor
+  const comAg = r.vendedores.filter((v) => v.agendamentosFeitos).sort((a, b) => b.agendamentosFeitos - a.agendamentosFeitos);
+  $('#tmAgVend').innerHTML = comAg.length ? barras(comAg.map((v) => [v.vendedor + (v.ia ? ' (IA)' : ''), v.agendamentosFeitos, `${v.vieram} vieram`]), 'var(--ouro)') : '<div class="vazio">Nenhum agendamento no período.</div>';
+  const comResp = humanos.filter((v) => v.resposta_min != null).sort((a, b) => a.resposta_min - b.resposta_min);
+  $('#tmRespVend').innerHTML = comResp.map((v) => { const max = Math.max(...comResp.map((x) => x.resposta_min)); return `<div class="barra" style="--c:${corResp(v.resposta_min)}"><span>${esc(v.vendedor)} <span class="sub">${num(v.recebidos)} leads</span></span><b>${fmtMin(v.resposta_min)}</b><div class="trilho"><i style="width:${(v.resposta_min / max) * 100}%"></i></div></div>`; }).join('') || '<div class="vazio">Sem respostas de vendedores no período.</div>';
+  $('#tmObs').textContent = `Leads que chegaram ${per.rotulo}. "Esperando agora" = cliente mandou a última mensagem há mais de ${String(r.horasParado).replace('.', ',')} h (últimos 30 dias).`;
   $('#tmCartoes').innerHTML = r.vendedores.map((v) => `<div class="card conta"><div class="quem"><div><b>${esc(v.vendedor)}${v.ia ? ' <span class="tag">IA</span>' : ''}</b><span>${num(v.recebidos)} leads recebidos</span></div></div>
     <div class="mini"><div><b>${v.ia ? '—' : fmtMin(v.resposta_min)}</b>1ª resposta</div><div><b>${pct(v.responderam, v.recebidos)}</b>responderam</div><div><b class="${v.esperandoAgora ? 'ruim' : ''}">${num(v.esperandoAgora)}</b>esperando agora</div></div>
-    <div class="mini"><div><b>${num(v.fichas)}</b>fichas</div><div><b>${num(v.agendados)}</b>agendados</div><div><b>${num(v.visitas)}</b>visitas</div></div>
-    <div class="mini"><div><b>${num(v.vendas)}</b>vendas</div><div><b>${pct(v.vendas, v.recebidos)}</b>conversão</div><div></div></div></div>`).join('') || '<div class="vazio">Sem dados no período.</div>';
+    <div class="mini"><div><b>${num(v.agendamentosFeitos)}</b>agendou no período</div><div><b>${num(v.vieram)}</b>visitas</div><div><b>${num(v.naoVieram)}</b>não vieram</div></div>
+    <div class="mini"><div><b>${num(v.fichas)}</b>fichas</div><div><b>${num(v.vendas)}</b>vendas</div><div><b>${pct(v.vendas, v.recebidos)}</b>conversão</div></div></div>`).join('') || '<div class="vazio">Sem dados no período.</div>';
 }
+barraPeriodo($('#perTime'), () => carregarTime());
+// o Time abre nos últimos 7 dias (um dia só diz pouco sobre o time)
+$('#perTime').querySelectorAll('[data-p]').forEach((x) => x.classList.toggle('ativo', x.dataset.p === '7'));
+$('#perTime').per = { de: diaSP(6), ate: diaSP(0), rotulo: 'últimos 7 dias', chave: '7' };
 const VISITA_BTNS = [['comprou', 'Veio e comprou', 'verde'], ['nao_comprou', 'Veio e não comprou', ''], ['nao_veio', 'Não veio', 'verm']];
 async function carregarAgenda() {
   avisoLk();

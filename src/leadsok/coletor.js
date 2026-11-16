@@ -282,6 +282,11 @@ async function ciclo(tipo = 'incremental') {
       avisos.push(`detalhes: ${e.message}`);
     }
     if (avisos.length) cont.avisos = avisos;
+    try {
+      require('./metricas').registrarEsperando(cfg.horasParado);
+    } catch (e) {
+      avisos.push(`esperando: ${e.message}`);
+    }
     estado.ultimoOk = Date.now();
     estado.falhasSeguidas = 0;
     estado.ultimoErro = cont.avisos ? cont.avisos.join(' · ') : null;
