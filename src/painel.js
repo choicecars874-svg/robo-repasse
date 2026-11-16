@@ -342,11 +342,11 @@ function iniciarPainel() {
   };
   app.get('/api/leads', (req, res) => res.json(comercial.leads(periodo(req.query))));
   app.get('/api/time', (req, res) => res.json(comercial.time(periodo(req.query), leadsok.horasParado())));
-  app.get('/api/agenda', (req, res) => res.json(comercial.agenda(req.query.dia)));
+  app.get('/api/agenda', (req, res) => res.json(comercial.agenda({ de: req.query.de || req.query.dia, ate: req.query.ate || req.query.dia })));
   app.post('/api/agenda/visita', (req, res) => {
     try {
-      const { leadId, data, compareceu } = req.body;
-      res.json(comercial.marcarVisita({ leadId, data, compareceu: compareceu === null ? null : !!compareceu }));
+      const { leadId, data, resultado, compareceu } = req.body;
+      res.json(comercial.marcarVisita({ leadId, data, resultado, compareceu: compareceu === undefined || compareceu === null ? compareceu : !!compareceu, por: req.usuario?.nome || req.usuario?.usuario }));
     } catch (e) {
       res.status(400).json({ erro: e.message });
     }

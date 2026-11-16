@@ -138,8 +138,13 @@
   .lkAviso { background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.4); color:var(--verm); border-radius:14px; padding:12px 16px; margin-bottom:16px; font-size:14px; }
   .funilLk .etapa { grid-template-columns:150px minmax(0, 1fr) 70px 70px; } .funilLk .taxa { text-align:right; font:12px var(--mono); color:var(--sub); }
   .empilhada { display:flex; flex-direction:column-reverse; width:60%; max-width:30px; border-radius:6px 6px 2px 2px; overflow:hidden; min-height:2px; } .empilhada i { display:block; width:100%; }
+  .funilExtra { display:flex; gap:24px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--borda); font-size:14px; } .funilExtra b { font-size:20px; margin-right:4px; }
   .agItem { display:grid; grid-template-columns:70px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--borda); } .agItem:last-child { border:0; }
-  .agItem .hora { font:600 18px var(--mono); } .agItem .acoes { display:flex; gap:6px; flex-wrap:wrap; } .agItem .btn.marcado { outline:2px solid var(--ouro); }
+  .kpis.kpis5 { grid-template-columns:repeat(5, minmax(0, 1fr)); } .kpi.ok b { color:var(--verde); } .kpi.mau b { color:var(--verm); } .kpi.ouro b { color:var(--ouro); }
+  .agGraf { display:flex; align-items:flex-end; gap:4px; overflow:hidden; height:180px; padding-top:8px; } .agGraf .col { flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; height:100%; }
+  .agGraf .gr { flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center; gap:2px; } .agGraf .gr i { flex:1; min-width:0; max-width:16px; border-radius:4px 4px 0 0; min-height:2px; } .agGraf span { font-size:11px; color:var(--sub); }
+  .agDiaTit { font-weight:600; margin:14px 0 2px; color:var(--sub); font-size:13px; text-transform:capitalize; } .agDiaTit:first-child { margin-top:0; }
+  .agItem .estado { font-size:12px; } .agItem .hora { font:600 18px var(--mono); } .agItem .acoes { display:flex; gap:6px; flex-wrap:wrap; } .agItem .btn.marcado { outline:2px solid var(--ouro); }
   @media (max-width:820px) { .funilLk .etapa { grid-template-columns:96px minmax(0, 1fr) 44px 48px; } .agItem { grid-template-columns:56px minmax(0, 1fr); } .agItem .acoes { grid-column:1 / -1; } }
   .subabas { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; padding:6px; border:1px solid var(--borda); border-radius:14px; background:var(--card); width:fit-content; max-width:100%; }
   .subabas button { background:none; border:0; color:var(--sub); font:inherit; font-size:14px; padding:8px 14px; border-radius:10px; cursor:pointer; }
@@ -156,9 +161,9 @@
   .opcoes { display:flex; gap:16px; flex-wrap:wrap; } .opcoes.coluna { flex-direction:column; gap:8px; } .opcoes label { display:flex; align-items:center; gap:6px; color:var(--txt); margin:0; font-size:14px; } .opcoes input[type=radio] { width:auto; }
   .vazio { color:var(--sub); font-size:14px; padding:18px 0; }
 
-  @media (max-width:1100px) { .kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:1fr; } }
+  @media (max-width:1100px) { .kpis, .kpis.kpis5 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:minmax(0, 1fr); } }
   @media (max-width:820px) {
-    .layout { grid-template-columns:1fr; } #menu { display:inline-flex; }
+    .layout { grid-template-columns:minmax(0, 1fr); } .card table { display:block; overflow-x:auto; } #menu { display:inline-flex; }
     nav { position:fixed; inset:0 auto 0 0; width:270px; transform:translateX(-100%); transition:transform .2s; background:rgba(10,11,14,.92); }
     body.menuAberto nav { transform:none; box-shadow:0 0 0 100vmax rgba(0,0,0,.5); }
     .barraTopo { padding:12px 16px; } main { padding:20px 16px 40px; } .cabeca h1 { font-size:30px; }
@@ -212,7 +217,7 @@
       <button data-aba="comSdr">Fila do SDR</button>
       <button data-aba="comLeads">Leads e canais</button>
       <button data-aba="comTime">Time</button>
-      <button data-aba="comAgenda">Agenda do dia</button>
+      <button data-aba="comAgenda">Agenda</button>
       <button data-aba="comEstoque">Estoque</button>
       <button data-aba="comCockpit">Webmotors (Cockpit)</button>
     </div>
@@ -319,8 +324,10 @@
 
 <section id="comAgenda">
   <div class="lkAviso" hidden></div>
-  <div class="card filtros"><div><label>Dia</label><input type="date" id="agDia"></div><div style="align-self:end"><button class="btn" id="agHoje">Hoje</button></div></div>
-  <div class="card"><h2 id="agTitulo">Agendamentos</h2><p class="sub">Marque se o cliente compareceu. O LeadsOK não registra visita: é daqui que sai o número de visitas do funil.</p><div id="agLista"></div></div>
+  <div class="periodoBar" id="perAgenda"></div>
+  <div class="kpis kpis5" id="agKpis"></div>
+  <div class="card" id="agGrafCard" hidden><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Visitas por dia</h2><p class="sub">Agendados, quem veio e quem comprou em cada dia do período.</p></div><div class="legenda" id="agLeg"></div></div><div class="agGraf" id="agGraf"></div></div>
+  <div class="card"><h2 id="agTitulo">Agendamentos</h2><p class="sub">Depois do horário, marque o que aconteceu. O LeadsOK não registra visita: é daqui que sai o funil de comparecimento. Quem não veio, ou veio e não comprou, vai para o "Follow-up pós-visita" da Fila do SDR.</p><div id="agLista"></div></div>
 </section>
 
 <section id="comEstoque">
@@ -683,7 +690,7 @@ const TITULOS = {
   comSdr: ['Fila do SDR', 'Quem ligar ou chamar hoje, em ordem de urgência.'],
   comLeads: ['Leads e canais', 'Funil comercial do LeadsOK por período e canal de entrada.'],
   comTime: ['Time', 'Desempenho de cada vendedor no período.'],
-  comAgenda: ['Agenda do dia', 'Agendamentos do LeadsOK. Marque quem compareceu.'],
+  comAgenda: ['Agenda', 'Agendamentos por dia, semana ou mês. Marque quem veio, quem comprou e quem não veio.'],
   comCockpit: ['Webmotors (Cockpit)', 'Leads, anúncios, estoque e faturas da Webmotors.'],
   comEstoque: ['Estoque', 'Carros do LeadsOK: quantidade, valor e dias parados.'],
   metas: ['Metas', 'Metas do dia por área. O Painel mostra o quanto já foi feito.'],
@@ -883,9 +890,10 @@ $('#tbHist').onclick = async (ev) => {
 
 // Barra de período reutilizável: Hoje, Ontem, 7 dias, 30 dias, Este mês, Personalizado
 const diaSP = (n = 0) => new Date(Date.now() - n * 864e5).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
-function barraPeriodo(el, aoMudar) {
+function barraPeriodo(el, aoMudar, futuro = false) {
   const extra = el.innerHTML;
-  el.innerHTML = `<button data-p="hoje" class="ativo">Hoje</button><button data-p="ontem">Ontem</button><button data-p="7">7 dias</button><button data-p="30">30 dias</button><button data-p="mes">Este mês</button><button data-p="perso">Personalizado</button>
+  el.innerHTML = (futuro ? `<button data-p="hoje" class="ativo">Hoje</button><button data-p="amanha">Amanhã</button><button data-p="semana">Esta semana</button><button data-p="prox7">Próximos 7 dias</button><button data-p="mesTodo">Este mês</button><button data-p="ontem">Ontem</button><button data-p="7">Últimos 7 dias</button><button data-p="perso">Personalizado</button>`
+    : `<button data-p="hoje" class="ativo">Hoje</button><button data-p="ontem">Ontem</button><button data-p="7">7 dias</button><button data-p="30">30 dias</button><button data-p="mes">Este mês</button><button data-p="perso">Personalizado</button>`) + `
     <span class="perso" hidden><input type="date" class="pDe"><span class="sub">até</span><input type="date" class="pAte"><button class="pOk">Aplicar</button></span>` + extra;
   el.per = { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje', chave: 'hoje' };
   const fixar = (de, ate, rotulo, chave) => { el.per = { de, ate, rotulo, chave }; aoMudar(el.per); };
@@ -895,7 +903,9 @@ function barraPeriodo(el, aoMudar) {
     perso.hidden = b.dataset.p !== 'perso';
     const h = diaSP(0);
     if (b.dataset.p === 'perso') { el.querySelector('.pDe').value ||= el.per.de; el.querySelector('.pAte').value ||= el.per.ate; return; }
-    const p = { hoje: [h, h, 'hoje'], ontem: [diaSP(1), diaSP(1), 'ontem'], 7: [diaSP(6), h, 'últimos 7 dias'], 30: [diaSP(29), h, 'últimos 30 dias'], mes: [h.slice(0, 8) + '01', h, 'este mês'] }[b.dataset.p];
+    const sem = new Date(h + 'T12:00:00Z').getUTCDay(); // 0 = domingo
+    const fimMes = new Date(Date.UTC(+h.slice(0, 4), +h.slice(5, 7), 0)).toISOString().slice(0, 10);
+    const p = { hoje: [h, h, 'hoje'], amanha: [diaSP(-1), diaSP(-1), 'amanhã'], semana: [diaSP(sem === 0 ? 6 : sem - 1), diaSP(sem === 0 ? 0 : sem - 7), 'esta semana'], prox7: [h, diaSP(-6), 'próximos 7 dias'], mesTodo: [h.slice(0, 8) + '01', fimMes, 'este mês'], ontem: [diaSP(1), diaSP(1), 'ontem'], 7: [diaSP(6), h, 'últimos 7 dias'], 30: [diaSP(29), h, 'últimos 30 dias'], mes: [h.slice(0, 8) + '01', h, 'este mês'] }[b.dataset.p];
     fixar(p[0], p[1], p[2], b.dataset.p);
   });
   el.querySelector('.pOk').onclick = () => {
@@ -1148,7 +1158,7 @@ const filtroLk = () => new URLSearchParams({ de: $('#fDe').value, ate: $('#fAte'
 function iniciarFiltros() {
   if ($('#fDe').value) return;
   const d = (n) => new Date(Date.now() - n * 864e5).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
-  $('#fDe').value = d(29); $('#fAte').value = d(0); $('#agDia').value = d(0);
+  $('#fDe').value = d(29); $('#fAte').value = d(0)
 }
 async function carregarLeads() {
   iniciarFiltros(); avisoLk();
@@ -1157,17 +1167,18 @@ async function carregarLeads() {
   const t = r.total;
   const sel = $('#fOrigem').value;
   $('#fOrigem').innerHTML = '<option value="">Todos os canais</option>' + r.origens.filter((o) => o !== 'resgate').map((o) => `<option value="${esc(o)}" ${o === sel ? 'selected' : ''}>${esc(canal(o))}</option>`).join('');
-  const etapas = [['Demanda', t.demanda, 'var(--azul)'], ['Atendidos', t.atendidos, '#93c5fd'], ['Responderam', t.responderam, 'var(--verde)'], ['Fichas', t.fichas, '#a78bfa'], ['Agendamentos', t.agendados, 'var(--ouro)'], ['Visitas', t.visitas, 'var(--amar)'], ['Vendas', t.vendas, '#f472b6']];
+  const etapas = [['Demanda', t.demanda, 'var(--azul)'], ['Atendidos', t.atendidos, '#93c5fd'], ['Responderam', t.responderam, 'var(--verde)'], ['Fichas', t.fichas, '#a78bfa'], ['Agendaram', t.agendados, 'var(--ouro)'], ['Compareceram', t.visitas, 'var(--amar)'], ['Compraram', t.vendas, '#f472b6']];
   const max = Math.max(1, t.demanda);
   $('#lkFunil').className = 'funilLk';
   $('#lkFunil').innerHTML = etapas.map(([n, v, c], i) => `<div class="etapa" style="--c:${c}"><span class="nome">${n}</span><div class="trilho"><i style="width:${(v / max) * 100}%"></i></div><b>${num(v)}</b><span class="taxa">${i ? pct(v, t.demanda) : ''}</span></div>`).join('');
+  $('#lkFunil').innerHTML += `<div class="funilExtra"><div><b class="ruim">${num(t.naoVieram)}</b> não vieram (no-show)${t.agendados ? ` · ${pct(t.naoVieram, t.agendados)} dos agendados` : ''}</div><div><b>${num(t.vieramNaoCompraram)}</b> vieram e não compraram${t.visitas ? ` · ${pct(t.vieramNaoCompraram, t.visitas)} de quem veio` : ''}</div></div>`;
   $('#lkCobertura').textContent = `Leads criados entre ${$('#fDe').value.split('-').reverse().join('/')} e ${$('#fAte').value.split('-').reverse().join('/')}. ${num(t.agendamentos)} agendamentos no total. Conversas e fichas carregadas para ${pct(t.detalhados, t.demanda)} dos leads. % = parte da demanda que chegou em cada etapa.`;
   const origens = [...new Set(r.porDia.map((x) => x.origem))];
   const cor = (o) => CORES_CANAL[origens.indexOf(o) % CORES_CANAL.length];
   const dias = [...new Set(r.porDia.map((x) => x.dia))];
   const porDia = Object.fromEntries(dias.map((d) => [d, r.porDia.filter((x) => x.dia === d)]));
   const maxD = Math.max(1, ...dias.map((d) => porDia[d].reduce((a, x) => a + x.n, 0)));
-  $('#lkDias').style.gridTemplateColumns = `repeat(${Math.max(dias.length, 1)}, 1fr)`;
+  $('#lkDias').style.gridTemplateColumns = `repeat(${Math.max(dias.length, 1)}, minmax(0, 1fr))`;
   $('#lkDias').innerHTML = dias.map((d) => { const tot = porDia[d].reduce((a, x) => a + x.n, 0); return `<div class="col" title="${d.split('-').reverse().join('/')}: ${tot} leads"><div class="barras"><div class="empilhada" style="height:${(tot / maxD) * 100}%">${porDia[d].map((x) => `<i style="flex:${x.n};background:${cor(x.origem)}"></i>`).join('')}</div></div><span>${dias.length > 16 ? (Number(d.slice(8)) % 5 === 0 ? d.slice(8) : '') : d.slice(8) + '/' + d.slice(5, 7)}</span></div>`; }).join('') || '<div class="vazio">Sem leads no período.</div>';
   $('#lkDias').querySelectorAll('.empilhada').forEach((e) => { e.style.display = 'flex'; });
   $('#lkLegenda').innerHTML = origens.map((o) => `<span style="--c:${cor(o)}">${esc(canal(o))}</span>`).join('');
@@ -1220,28 +1231,58 @@ async function carregarTime() {
     <div class="mini"><div><b>${num(v.fichas)}</b>fichas</div><div><b>${num(v.agendados)}</b>agendados</div><div><b>${num(v.visitas)}</b>visitas</div></div>
     <div class="mini"><div><b>${num(v.vendas)}</b>vendas</div><div><b>${pct(v.vendas, v.recebidos)}</b>conversão</div><div></div></div></div>`).join('') || '<div class="vazio">Sem dados no período.</div>';
 }
+const VISITA_BTNS = [['comprou', 'Veio e comprou', 'verde'], ['nao_comprou', 'Veio e não comprou', ''], ['nao_veio', 'Não veio', 'verm']];
 async function carregarAgenda() {
-  iniciarFiltros(); avisoLk();
-  const r = await api('/api/agenda?dia=' + $('#agDia').value);
+  avisoLk();
+  const per = $('#perAgenda').per || { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje' };
+  const r = await api(`/api/agenda?de=${per.de}&ate=${per.ate}`);
   if (r.erro) return;
-  $('#agTitulo').textContent = `Agendamentos de ${r.dia.split('-').reverse().join('/')} (${r.itens.length})`;
+  const z = r.resumo;
+  const umDia = r.de === r.ate;
+  $('#agKpis').innerHTML = [
+    ['Agendados', z.agendados, '', umDia ? rotuloCap(per.rotulo) : rotuloCap(per.rotulo), 'ouro'],
+    ['Vieram', z.vieram, pct(z.vieram, z.vieram + z.naoVieram), 'dos que já foram marcados', 'ok'],
+    ['Compraram', z.compraram, pct(z.compraram, z.vieram), 'de quem veio', 'ok'],
+    ['Não vieram', z.naoVieram, pct(z.naoVieram, z.vieram + z.naoVieram), 'no-show', 'mau'],
+    ['Vieram e não compraram', z.vieramNaoCompraram, pct(z.vieramNaoCompraram, z.vieram), 'de quem veio', ''],
+  ].map(([n, v, p, txt, c]) => `<div class="kpi ${c}"><div class="eyebrow">${n}</div><b>${num(v)}</b><small>${p && p !== '—' ? p + ' · ' : ''}${txt}</small></div>`).join('')
+    + (z.aMarcar ? `<p class="sub" style="grid-column:1/-1;margin:0"><span class="ruim">${num(z.aMarcar)} visita(s) já passaram do horário e ainda não foram marcadas.</span>${z.futuros ? ` ${num(z.futuros)} ainda vão acontecer.` : ''}</p>` : z.futuros ? `<p class="sub" style="grid-column:1/-1;margin:0">${num(z.futuros)} visita(s) ainda vão acontecer.</p>` : '');
+  // gráfico por dia (só quando o período tem mais de um dia)
+  $('#agGrafCard').hidden = umDia;
+  if (!umDia) {
+    const dias = []; for (let t = Date.parse(r.de + 'T12:00:00Z'); t <= Date.parse(r.ate + 'T12:00:00Z'); t += 864e5) dias.push(new Date(t).toISOString().slice(0, 10));
+    const pd = Object.fromEntries(r.porDia.map((x) => [x.dia, x]));
+    const max = Math.max(1, ...r.porDia.map((x) => x.agendados));
+    const CR = [['agendados', 'var(--ouro)', 'Agendados'], ['vieram', 'var(--verde)', 'Vieram'], ['compraram', '#f472b6', 'Compraram'], ['naoVieram', 'var(--verm)', 'Não vieram']];
+    $('#agLeg').innerHTML = CR.map(([, c, n]) => `<span style="--c:${c}">${n}</span>`).join('');
+    $('#agGraf').innerHTML = dias.map((dd) => { const x = pd[dd] || {}; return `<div class="col" title="${dd.split('-').reverse().join('/')}: ${x.agendados || 0} agendados, ${x.vieram || 0} vieram, ${x.compraram || 0} compraram, ${x.naoVieram || 0} não vieram"><div class="gr">${CR.map(([k, c]) => `<i style="height:${((x[k] || 0) / max) * 100}%;background:${c}"></i>`).join('')}</div><span>${dias.length > 16 ? (Number(dd.slice(8)) % 5 === 0 ? dd.slice(8) : '') : dd.slice(8) + '/' + dd.slice(5, 7)}</span></div>`; }).join('');
+  }
+  $('#agTitulo').textContent = `Agendamentos · ${rotuloCap(per.rotulo)} (${r.itens.length})`;
   const MOD = { presencial: 'Presencial', online: 'Online', ligacao: 'Ligação' };
+  const agora = Date.now();
+  let diaAnt = '';
   $('#agLista').innerHTML = r.itens.map((a) => {
-    const hora = new Date(a.data).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-    const st = a.compareceu === 1 ? 'sim' : a.compareceu === 0 ? 'nao' : '';
-    return `<div class="agItem" data-lead="${esc(a.lead_id || '')}" data-data="${esc(a.data)}"><span class="hora">${hora}</span>
-      <div><b>${esc(a.nome || 'Lead sem nome')}</b> <span class="sub">· ${esc(MOD[a.modalidade] || a.modalidade || '')} · ${esc(a.vendedor || 'sem vendedor')} · ${esc(canal(a.origem))}${a.pela_ia ? ' · agendado pela IA' : ''}</span>${a.lead_id ? '' : '<br><span class="ruim">Lead não identificado neste agendamento.</span>'}</div>
-      <div class="acoes"><button class="btn ${st === 'sim' ? 'verde marcado' : ''}" data-v="1">Compareceu</button><button class="btn ${st === 'nao' ? 'verm marcado' : ''}" data-v="0">Não compareceu</button>${st ? '<button class="btn" data-v="">Limpar</button>' : ''}</div></div>`;
-  }).join('') || '<div class="vazio">Nenhum agendamento neste dia.</div>';
+    const dt = new Date(a.data);
+    const hora = dt.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    const diaTxt = dt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: '2-digit' });
+    const cab = !umDia && diaTxt !== diaAnt ? `<div class="agDiaTit">${diaTxt}</div>` : ''; diaAnt = diaTxt;
+    const st = a.compareceu === 1 ? (a.comprou === 1 ? 'comprou' : 'nao_comprou') : a.compareceu === 0 ? 'nao_veio' : '';
+    const passou = dt.getTime() < agora;
+    const tel = soDigitos(a.whatsapp);
+    return `${cab}<div class="agItem" data-lead="${esc(a.lead_id || '')}" data-data="${esc(a.data)}"><span class="hora">${hora}</span>
+      <div><b>${esc(a.nome || 'Lead sem nome')}</b> <span class="sub">· ${esc(MOD[a.modalidade] || a.modalidade || '')} · ${esc(a.vendedor || 'sem vendedor')} · ${esc(canal(a.origem))}${a.pela_ia ? ' · agendado pela IA' : ''}</span>
+        <div class="estado sub">${tel ? '+' + tel : ''}${!st && passou ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}${!st && !passou ? ' · ainda vai acontecer' : ''}${st && a.marcado_por ? ` · marcado por ${esc(a.marcado_por)}` : ''}</div>
+        ${a.lead_id ? '' : '<span class="ruim">Lead não identificado neste agendamento.</span>'}</div>
+      <div class="acoes">${VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('')}${st ? '<button class="btn" data-v="">Limpar</button>' : ''}</div></div>`;
+  }).join('') || '<div class="vazio">Nenhum agendamento no período.</div>';
   document.querySelectorAll('.agItem .acoes button').forEach((b) => b.onclick = async () => {
     const item = b.closest('.agItem');
     if (!item.dataset.lead) return alert('Este agendamento não tem o lead identificado.');
-    await api('/api/agenda/visita', { method:'POST', body: JSON.stringify({ leadId: item.dataset.lead, data: item.dataset.data, compareceu: b.dataset.v === '' ? null : b.dataset.v === '1' }) });
+    await api('/api/agenda/visita', { method:'POST', body: JSON.stringify({ leadId: item.dataset.lead, data: item.dataset.data, resultado: b.dataset.v || null }) });
     carregarAgenda();
   });
 }
-$('#agDia').onchange = () => carregarAgenda();
-$('#agHoje').onclick = () => { $('#agDia').value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }); carregarAgenda(); };
+barraPeriodo($('#perAgenda'), () => carregarAgenda(), true);
 async function carregarEstoque() {
   avisoLk();
   const r = await api('/api/estoque');
@@ -1302,6 +1343,7 @@ const LISTAS_SDR = [
   ['retornar', 'Retornar hoje', 'Retornos marcados para hoje e quem não atendeu há mais de 3 h. Leia o último briefing antes de ligar.'],
   ['responder', 'Responder agora', 'Cliente mandou mensagem e está sem resposta. Prioridade máxima.'],
   ['confirmar', 'Confirmar agendamentos', 'Visitas de hoje e de amanhã: ligar ou mandar mensagem confirmando.'],
+  ['posVisita', 'Follow-up pós-visita', 'Não veio, ou veio e não comprou (últimos 14 dias). Remarcar a visita ou entender o que faltou.'],
   ['novos', 'Leads novos', 'Chegaram nas últimas 48 h e o cliente ainda não respondeu: ligar.'],
   ['retomar', 'Retomar conversa', 'A loja falou por último há 2 a 7 dias e o cliente sumiu.'],
 ];
@@ -1364,7 +1406,7 @@ async function carregarSdr() {
     return `<div class="card"><div class="cardTopo"><div><h2>${titulo} <span class="sub">(${itens.length})</span></h2><p class="sub">${desc}</p></div></div>
       ${itens.map((l) => {
         const tel = soDigitos(l.whatsapp); const nome = (l.nome || 'Cliente').split(' ')[0];
-        const quando = k === 'confirmar' ? `visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : k === 'novos' ? `chegou ${haTempo(l.created_date)}` : `última msg ${haTempo(l.ultima_msg_at)}`;
+        const quando = k === 'posVisita' ? `${l.compareceu === 0 ? '<span class="ruim">não veio</span>' : 'veio e não comprou'} · visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : k === 'confirmar' ? `visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : k === 'novos' ? `chegou ${haTempo(l.created_date)}` : `última msg ${haTempo(l.ultima_msg_at)}`;
         const feitos = l.contatosHoje.map((c) => (c.tipo === 'ligacao' ? 'ligação: ' : '') + (RESULTADO[c.resultado] || c.resultado)).join(' · ');
         const uc = l.ultimoContato;
         return `<div class="sdLinha ${feitos ? 'feito' : ''}" data-lead="${esc(l.id)}">
