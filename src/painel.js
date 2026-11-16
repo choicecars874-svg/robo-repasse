@@ -359,7 +359,7 @@ function iniciarPainel() {
     }
   });
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
-  app.get('/api/sdr', (_, res) => res.json(comercial.filaSdr({ horasSemResposta: leadsok.horasParado() })));
+  app.get('/api/sdr', (req, res) => res.json(comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: String(req.query.vendedor || '').slice(0, 80) })));
   app.post('/api/sdr/lead-teste', (req, res) => {
     try {
       if (req.usuario.papel !== 'admin') return res.status(403).json({ erro: 'Só o administrador cria leads de teste' });
