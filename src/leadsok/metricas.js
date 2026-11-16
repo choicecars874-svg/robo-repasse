@@ -161,25 +161,80 @@ function filaSdr({ horasSemResposta = 1 } = {}) {
     // 4) conversa parada: loja falou por último há 2 a 7 dias e o cliente sumiu, ou cliente sem resposta há 7 a 30 dias
     retomar: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND ((l.ultima_msg_owner = 'salesman' AND l.ultima_msg_at BETWEEN ? AND ?) OR (l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ?)) ${semAgendar} ORDER BY l.ultima_msg_at DESC LIMIT 100`).all(iso(7 * 86400000), iso(2 * 86400000), iso(30 * 86400000), iso(7 * 86400000)),
   };
-  // um lead só na lista mais urgente
+  // CRM do SDR: o último contato de cada lead decide em que etapa ele está.
+  // Só fica na fila de trabalho quem precisa de contato agora; o resto vai para a etapa da ação feita.
+  const fimDeHoje = Date.parse(hoje + 'T23:59:59-03:00');
+  const ultimos = {};
+  const tentativas = {};
+  for (const c of d.prepare('SELECT lead_id, em, por, tipo, resultado, nota, interesse, proximo_em FROM lk_contatos ORDER BY em').all()) {
+    ultimos[c.lead_id] = c;
+    // tentativas seguidas sem atender (zera quando atende ou agenda)
+    tentativas[c.lead_id] = c.resultado === 'nao_atendeu' ? (tentativas[c.lead_id] || 0) + 1 : 0;
+  }
+  const todosLeads = {};
+  const etapa = (id, lead) => {
+    const c = ultimos[id];
+    if (!c) return 'fila';
+    if (['ja_comprou', 'sem_interesse'].includes(c.resultado)) return 'encerrados';
+    if (c.resultado === 'agendou') return 'agendados';
+    if (c.proximo_em) return c.proximo_em <= fimDeHoje ? 'retornar' : 'retorno';
+    if (c.resultado === 'nao_atendeu') return tentativas[id] >= 3 ? 'semContato' : agora - c.em >= 3 * 3600000 ? 'retornar' : 'tentar';
+    if (c.resultado === 'enviada') {
+      const respondeu = lead && lead.ultima_msg_owner === 'customers' && Date.parse(lead.ultima_msg_at) > c.em;
+      return respondeu || agora - c.em >= 24 * 3600000 ? 'fila' : 'aguardando';
+    }
+    // atendeu sem retorno marcado: volta em 24 h
+    return agora - c.em >= 24 * 3600000 ? 'fila' : 'aguardando';
+  };
+  // leads com algum contato registrado que não estão nas listas acima (para as etapas e para "Retornar hoje")
+  const comContato = Object.keys(ultimos);
+  if (comContato.length) {
+    for (let i = 0; i < comContato.length; i += 500) {
+      const parte = comContato.slice(i, i + 500);
+      for (const l of d.prepare(`SELECT ${campos} FROM lk_leads l WHERE l.id IN (${parte.map(() => '?').join(',')})`).all(...parte)) todosLeads[l.id] = l;
+    }
+  }
+  listas.retornar = Object.values(todosLeads).filter((l) => etapa(l.id, l) === 'retornar')
+    .sort((a, b) => (ultimos[a.id].proximo_em || ultimos[a.id].em) - (ultimos[b.id].proximo_em || ultimos[b.id].em));
+  // fila de trabalho: um lead só na lista mais urgente, e só quem está na etapa "fila" (ou "retornar")
   const vistos = new Set();
-  for (const k of ['responder', 'confirmar', 'novos', 'retomar']) listas[k] = listas[k].filter((l) => !vistos.has(l.id) && vistos.add(l.id));
+  for (const k of ['retornar', 'responder', 'confirmar', 'novos', 'retomar']) {
+    listas[k] = listas[k].filter((l) => {
+      const e = etapa(l.id, l);
+      const pode = k === 'retornar' ? e === 'retornar' : k === 'confirmar' ? !['encerrados'].includes(e) : e === 'fila';
+      return pode && !vistos.has(l.id) && vistos.add(l.id);
+    });
+  }
+  // etapas (CRM): onde está cada lead que já foi trabalhado
+  const etapas = { aguardando: [], tentar: [], retorno: [], agendados: [], semContato: [], encerrados: [] };
+  for (const l of Object.values(todosLeads)) {
+    const e = etapa(l.id, l);
+    if (etapas[e]) etapas[e].push(l);
+  }
+  for (const k of Object.keys(etapas)) etapas[k].sort((a, b) => ultimos[b.id].em - ultimos[a.id].em);
+  const anexar = (l) => { l.ultimoContato = ultimos[l.id] || null; l.tentativas = tentativas[l.id] || 0; };
+  for (const k of Object.keys(listas)) listas[k].forEach(anexar);
+  for (const k of Object.keys(etapas)) etapas[k].forEach(anexar);
   // contatos que o SDR já registrou hoje
-  const contatos = d.prepare('SELECT lead_id, tipo, resultado, em, por FROM lk_contatos WHERE dia = ? ORDER BY em').all(hoje);
+  const contatos = d.prepare('SELECT lead_id, tipo, resultado, em, por, nota FROM lk_contatos WHERE dia = ? ORDER BY em').all(hoje);
   const porLead = {};
   for (const c of contatos) (porLead[c.lead_id] ||= []).push(c);
   for (const k of Object.keys(listas)) for (const l of listas[k]) l.contatosHoje = porLead[l.id] || [];
   const resumo = { ligacoes: contatos.filter((c) => c.tipo === 'ligacao').length, atenderam: contatos.filter((c) => ['atendeu', 'agendou', 'ja_comprou', 'sem_interesse'].includes(c.resultado) && c.tipo === 'ligacao').length, mensagens: contatos.filter((c) => c.tipo === 'mensagem').length, agendou: contatos.filter((c) => c.resultado === 'agendou').length, leads: Object.keys(porLead).length };
-  return { dia: hoje, horasSemResposta, listas, resumo };
+  return { dia: hoje, horasSemResposta, listas, etapas, resumo };
 }
 
 const RESULTADOS = ['atendeu', 'nao_atendeu', 'enviada', 'agendou', 'ja_comprou', 'sem_interesse'];
-function registrarContato({ leadId, tipo, resultado, por }) {
+function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proximoEm }) {
   const d = banco.abrir();
   if (!d) throw new Error(banco.erro());
   if (!['ligacao', 'mensagem'].includes(tipo)) throw new Error('Tipo de contato inválido');
   if (resultado && !RESULTADOS.includes(resultado)) throw new Error('Resultado inválido');
-  d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em, por) VALUES (?, ?, ?, ?, ?, ?)').run(String(leadId), diaSP(), tipo, resultado || null, Date.now(), por || null);
+  if (interesse && !['quente', 'morno', 'frio'].includes(interesse)) throw new Error('Interesse inválido');
+  const proximo = proximoEm ? Number(proximoEm) : null;
+  if (proximo && !(proximo > Date.now() - 3600000)) throw new Error('Data de retorno inválida');
+  d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em, por, nota, interesse, proximo_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(String(leadId), diaSP(), tipo, resultado || null, Date.now(), por || null, nota ? String(nota).slice(0, 2000) : null, interesse || null, proximo);
   return { ok: true };
 }
 
@@ -194,7 +249,7 @@ function historicoContatos({ dia, por } = {}) {
     filtro = ' AND c.por = ?';
     args.push(por);
   }
-  const contatos = d.prepare(`SELECT c.em, c.tipo, c.resultado, c.por, c.lead_id, l.nome, l.whatsapp, l.origem, l.vendedor, l.created_date
+  const contatos = d.prepare(`SELECT c.em, c.tipo, c.resultado, c.por, c.nota, c.interesse, c.proximo_em, c.lead_id, l.nome, l.whatsapp, l.origem, l.vendedor, l.created_date
     FROM lk_contatos c LEFT JOIN lk_leads l ON l.id = c.lead_id WHERE c.dia = ?${filtro} ORDER BY c.em DESC LIMIT 500`).all(...args);
   const pessoas = d.prepare('SELECT DISTINCT por FROM lk_contatos WHERE por IS NOT NULL ORDER BY por').all().map((x) => x.por);
   return { dia, contatos, pessoas };
@@ -210,7 +265,7 @@ function buscarLead(q) {
   const leads = dig.length >= 8
     ? d.prepare("SELECT id, nome, whatsapp, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE replace(replace(replace(whatsapp, '+', ''), ' ', ''), '-', '') LIKE ? LIMIT 20").all('%' + dig.slice(-9))
     : d.prepare('SELECT id, nome, whatsapp, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE nome LIKE ? LIMIT 20').all('%' + q + '%');
-  const cont = d.prepare('SELECT em, tipo, resultado, por FROM lk_contatos WHERE lead_id = ? ORDER BY em DESC');
+  const cont = d.prepare('SELECT em, tipo, resultado, por, nota, interesse, proximo_em FROM lk_contatos WHERE lead_id = ? ORDER BY em DESC');
   const ag = d.prepare('SELECT data, modalidade FROM lk_agenda WHERE lead_id = ? ORDER BY data DESC');
   return { leads: leads.map((l) => ({ ...l, contatos: cont.all(l.id), agenda: ag.all(l.id) })) };
 }
