@@ -142,6 +142,7 @@
   .tmGraf .gr { flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center; gap:2px; position:relative; } .tmGraf .gr i { flex:1; min-width:0; max-width:22px; border-radius:4px 4px 0 0; min-height:2px; }
   .tmGraf .gr em { position:absolute; top:-16px; font:600 10.5px var(--mono); font-style:normal; color:var(--sub); white-space:nowrap; } .tmGraf span { font-size:11px; color:var(--sub); white-space:nowrap; }
   .tmGraf.linha { gap:1px; flex-wrap:wrap; height:auto; } .tmGraf.linha .col { height:160px; } .tmEixo { flex:0 0 100%; display:flex; justify-content:space-between; margin-top:6px; } .tmGraf.linha .gr i { max-width:none; border-radius:2px 2px 0 0; }
+  .carro { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ouro); margin-top:2px; } .carro .i { width:14px; height:14px; flex:none; }
   .funilExtra { display:flex; gap:24px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--borda); font-size:14px; } .funilExtra b { font-size:20px; margin-right:4px; }
   .agItem { display:grid; grid-template-columns:70px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--borda); } .agItem:last-child { border:0; }
   .kpis.kpis5 { grid-template-columns:repeat(5, minmax(0, 1fr)); } .kpi.ok b { color:var(--verde); } .kpi.mau b { color:var(--verm); } .kpi.ouro b { color:var(--ouro); }
@@ -193,6 +194,7 @@
   <symbol id="i-sair" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></symbol>
   <symbol id="i-seta" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-carro" viewBox="0 0 24 24"><path d="M5 17h14M5 17v2M19 17v2M3 13l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v4H3z"/><circle cx="7.5" cy="14" r="1"/><circle cx="16.5" cy="14" r="1"/></symbol>
 </svg>
 <div class="layout">
 <nav>
@@ -289,7 +291,7 @@
     <div class="kpi"><div class="eyebrow">Na fila</div><b id="sdFila">0</b><small>somando as 4 listas</small></div>
   </div>
   <p class="sub" style="margin:0 0 14px">Trabalhe de cima para baixo. Depois de cada contato, marque o resultado: o lead fica marcado como trabalhado hoje. Os dados vêm do LeadsOK (atualizam a cada 15 min); responder e agendar continua sendo feito no LeadsOK.</p>
-  <div class="card filtros"><div style="flex:3"><label>Buscar lead por telefone ou nome</label><input id="sdBusca" placeholder="ex.: 11961262931 ou Maria"></div><div style="align-self:end"><button class="btn" id="btnSdBusca">Buscar</button></div></div>
+  <div class="card filtros"><div style="flex:3"><label>Buscar lead por telefone, nome ou carro</label><input id="sdBusca" placeholder="ex.: 11961262931, Maria ou Corolla"></div><div style="align-self:end"><button class="btn" id="btnSdBusca">Buscar</button></div></div>
   <div id="sdResultado"></div>
   <div id="sdListas"></div>
   <div class="card"><div class="cardTopo"><div><h2>Etapas</h2><p class="sub">Onde está cada lead que já foi trabalhado. Clique numa etapa para ver os leads.</p></div></div>
@@ -1329,7 +1331,7 @@ async function carregarAgenda() {
     const passou = dt.getTime() < agora;
     const tel = soDigitos(a.whatsapp);
     return `${cab}<div class="agItem" data-lead="${esc(a.lead_id || '')}" data-data="${esc(a.data)}"><span class="hora">${hora}</span>
-      <div><b>${esc(a.nome || 'Lead sem nome')}</b> <span class="sub">· ${esc(MOD[a.modalidade] || a.modalidade || '')} · ${esc(a.vendedor || 'sem vendedor')} · ${esc(canal(a.origem))}${a.pela_ia ? ' · agendado pela IA' : ''}</span>
+      <div><b>${esc(a.nome || 'Lead sem nome')}</b> <span class="sub">· ${esc(MOD[a.modalidade] || a.modalidade || '')} · ${esc(a.vendedor || 'sem vendedor')} · ${esc(canal(a.origem))}${a.pela_ia ? ' · agendado pela IA' : ''}</span>${carroLinha(a)}
         <div class="estado sub">${tel ? '+' + tel : ''}${!st && passou ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}${!st && !passou ? ' · ainda vai acontecer' : ''}${st && a.marcado_por ? ` · marcado por ${esc(a.marcado_por)}` : ''}</div>
         ${a.lead_id ? '' : '<span class="ruim">Lead não identificado neste agendamento.</span>'}</div>
       <div class="acoes">${VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('')}${st ? '<button class="btn" data-v="">Limpar</button>' : ''}</div></div>`;
@@ -1406,6 +1408,8 @@ const LISTAS_SDR = [
   ['novos', 'Leads novos', 'Chegaram nas últimas 48 h e o cliente ainda não respondeu: ligar.'],
   ['retomar', 'Retomar conversa', 'A loja falou por último há 2 a 7 dias e o cliente sumiu.'],
 ];
+// carro de interesse (texto do anúncio no LeadsOK): sem a placa, que só polui a linha
+const carroLinha = (l) => l.carro ? `<div class="carro"><svg class="i"><use href="#i-carro"/></svg>${esc(l.carro.replace(/\s*\|\s*Placa:.*$/i, ''))}</div>` : '';
 const haTempo = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`; };
 const soDigitos = (t) => String(t || '').replace(/\D/g, '');
 const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem enviada', agendou: 'agendou', ja_comprou: 'já comprou', sem_interesse: 'sem interesse' };
@@ -1469,7 +1473,7 @@ async function carregarSdr() {
         const feitos = l.contatosHoje.map((c) => (c.tipo === 'ligacao' ? 'ligação: ' : '') + (RESULTADO[c.resultado] || c.resultado)).join(' · ');
         const uc = l.ultimoContato;
         return `<div class="sdLinha ${feitos ? 'feito' : ''}" data-lead="${esc(l.id)}">
-          <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>
+          <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>${carroLinha(l)}
             <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}${l.tentativas ? ` · ${l.tentativas} tentativa(s) sem atender` : ''}</div>
             ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· retorno ${new Date(uc.proximo_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
           <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
@@ -1507,7 +1511,7 @@ async function buscarLeadSdr() {
   $('#sdResultado').innerHTML = `<div class="card"><h2>Resultado da busca <span class="sub">(${r.leads.length})</span></h2>${r.leads.map((l) => {
     const tel = soDigitos(l.whatsapp);
     const situacao = l.archive_reason ? `arquivado: ${l.archive_reason}` : l.aba_atual === 'agendados' ? 'agendado' : l.aba_atual === 'leads_novos' ? 'novo' : 'em conversa';
-    return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')} · entrou ${haTempo(l.created_date)} · ${esc(situacao)}${l.is_resgate ? ' · base de resgate' : ''}</span>
+    return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')} · entrou ${haTempo(l.created_date)} · ${esc(situacao)}${l.is_resgate ? ' · base de resgate' : ''}</span>${carroLinha(l)}
       <div class="sub">${tel ? '+' + tel : ''}${l.agenda.length ? ' · agenda: ' + l.agenda.map((a) => new Date(a.data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })).join(', ') : ''}</div>
       <div class="sub">${l.contatos.length ? 'Contatos: ' + l.contatos.map((c) => `${new Date(c.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} ${esc(c.por || '')} ${c.tipo === 'ligacao' ? 'ligação' : 'msg'} ${esc(RESULTADO[c.resultado] || '')}`).join(' · ') : 'Nenhum contato registrado ainda.'}</div></div>
       <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a>` : ''}${BOTOES_SDR}</div></div>`;

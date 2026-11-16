@@ -91,6 +91,8 @@ function gravarLeads(d, aba, leads) {
       agendado_alguma_vez = MAX(lk_leads.agendado_alguma_vez, excluded.agendado_alguma_vez), archive_reason = excluded.archive_reason,
       tem_financiamento = excluded.tem_financiamento, created_date = excluded.created_date, ultima_msg_owner = excluded.ultima_msg_owner,
       ultima_msg_at = excluded.ultima_msg_at, is_resgate = excluded.is_resgate, updated_at = excluded.updated_at, assinatura = excluded.assinatura`);
+  // carro de interesse: texto livre do anúncio (o LeadsOK escreve "vihecle_interest"); se sumir da lista, mantém o último
+  const carro = d.prepare('UPDATE lk_leads SET carro = COALESCE(?, carro) WHERE id = ?');
   let novos = 0;
   for (const l of leads) {
     const origem = String(l.customers_origin || 'unknown').trim().toLowerCase();
@@ -102,6 +104,8 @@ function gravarLeads(d, aba, leads) {
       l.ultima_msg_owner || null, l.ultima_msg_at || null, origem === 'resgate' || bool(l.em_resgate) ? 1 : 0, agora, agora,
       [l.ultima_msg_at || '', aba, arquivo || ''].join('|')
     );
+    const textoCarro = String(l.vihecle_interest || l.vehicle_interest || '').trim().slice(0, 200) || null;
+    carro.run(textoCarro, l.id);
     if (ehVenda(arquivo) && cfg.cargaInicialFeita) marcaVenda.run(agora, l.id);
   }
   return novos;

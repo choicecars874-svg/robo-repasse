@@ -141,7 +141,7 @@ function agenda({ de, ate } = {}) {
   if (!d) return { erro: banco.erro() };
   de ||= diaSP();
   ate ||= de;
-  const itens = d.prepare(`SELECT a.id, a.lead_id, a.data, a.modalidade, a.concluido, a.pela_ia, l.nome, l.whatsapp, l.vendedor, l.origem, l.aba_atual,
+  const itens = d.prepare(`SELECT a.id, a.lead_id, a.data, a.modalidade, a.concluido, a.pela_ia, l.nome, l.whatsapp, l.carro, l.vendedor, l.origem, l.aba_atual,
       v.compareceu, v.comprou, v.marcado_por, v.marcado_em
     FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id LEFT JOIN lk_visitas v ON v.lead_id = a.lead_id AND v.data_agendada = a.data
     WHERE date(a.data, '-3 hours') BETWEEN ? AND ? ORDER BY a.data`).all(de, ate);
@@ -241,7 +241,7 @@ function filaSdr({ horasSemResposta = 1 } = {}) {
   const amanha = diaSP(Date.now() + 86400000);
   const agora = Date.now();
   const iso = (ms) => new Date(agora - ms).toISOString();
-  const campos = `l.id, l.nome, l.whatsapp, l.origem, l.vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.aba_atual`;
+  const campos = `l.id, l.nome, l.whatsapp, l.carro, l.origem, l.vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.aba_atual`;
   // lead encerrado pelo SDR (já comprou / sem interesse) sai da fila; quem agendou sai das listas de prospecção
   const base = `l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND l.whatsapp IS NOT NULL
     AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))`;
@@ -369,8 +369,8 @@ function buscarLead(q) {
   if (q.length < 3) return { leads: [] };
   const dig = q.replace(/\D/g, '');
   const leads = dig.length >= 8
-    ? d.prepare("SELECT id, nome, whatsapp, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE replace(replace(replace(whatsapp, '+', ''), ' ', ''), '-', '') LIKE ? LIMIT 20").all('%' + dig.slice(-9))
-    : d.prepare('SELECT id, nome, whatsapp, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE nome LIKE ? LIMIT 20').all('%' + q + '%');
+    ? d.prepare("SELECT id, nome, whatsapp, carro, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE replace(replace(replace(whatsapp, '+', ''), ' ', ''), '-', '') LIKE ? LIMIT 20").all('%' + dig.slice(-9))
+    : d.prepare('SELECT id, nome, whatsapp, carro, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE nome LIKE ? OR carro LIKE ? LIMIT 20').all('%' + q + '%', '%' + q + '%');
   const cont = d.prepare('SELECT em, tipo, resultado, por, nota, interesse, proximo_em FROM lk_contatos WHERE lead_id = ? ORDER BY em DESC');
   const ag = d.prepare('SELECT data, modalidade FROM lk_agenda WHERE lead_id = ? ORDER BY data DESC');
   return { leads: leads.map((l) => ({ ...l, contatos: cont.all(l.id), agenda: ag.all(l.id) })) };
