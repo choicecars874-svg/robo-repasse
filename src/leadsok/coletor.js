@@ -64,6 +64,8 @@ const estado = {
   falhasSeguidas: 0,
   totaisLeadsOK: {},
   chavesAgenda: null,
+  estruturaAgenda: null,
+  agendaSemLead: null,
 };
 let cliente = null;
 const obterCliente = () => (cliente ||= criarCliente(credenciais()));
@@ -113,19 +115,83 @@ function gravarLeads(d, aba, leads) {
 
 // O item da agenda traz o lead num campo cujo nome não está documentado: tenta os mais prováveis
 const idDoLead = (a) => a.customer_id || a.customerId || a.customers_id || a.lead_id || a.leadId || a.cliente_id || a.id_customer || a.customer?.id || null;
+// Estrutura do item da agenda (só nomes de campos e tipos, sem valores): aparece no card do LeadsOK para conferência
+function estrutura(o, prefixo = '', nivel = 0) {
+  const out = [];
+  for (const [k, v] of Object.entries(o || {})) {
+    const nome = prefixo + k;
+    if (v && typeof v === 'object' && !Array.isArray(v) && nivel < 2) out.push(...estrutura(v, nome + '.', nivel + 1));
+    else out.push(`${nome}:${Array.isArray(v) ? 'lista' : v === null ? 'null' : typeof v}`);
+  }
+  return out;
+}
+// Todos os campos do item (com os aninhados), como [caminho, valor]
+function campos(o, prefixo = '', nivel = 0) {
+  const out = [];
+  for (const [k, v] of Object.entries(o || {})) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && nivel < 2) out.push(...campos(v, prefixo + k + '.', nivel + 1));
+    else if (v != null && typeof v !== 'object') out.push([prefixo + k, v]);
+  }
+  return out;
+}
+// O item da agenda não diz de forma documentada quem é o lead: procura id/conversa conhecidos em qualquer campo,
+// depois pelo telefone; e guarda nome, telefone, carro, vendedor, observação e confirmação que vierem no item
+function analisarAgenda(d, a, buscas) {
+  const cs = campos(a);
+  const texto = (re, nao) => cs.find(([k, v]) => re.test(k) && !(nao && nao.test(k)) && typeof v === 'string' && v.trim())?.[1]?.trim() || null;
+  let lead = idDoLead(a);
+  if (lead && !buscas.porId.get(String(lead))) lead = buscas.porConversa.get(String(lead))?.id || lead;
+  if (!lead || !buscas.porId.get(String(lead))) {
+    for (const [k, v] of cs) {
+      if (k === 'id') continue;
+      if (typeof v !== 'string' && typeof v !== 'number') continue;
+      const s = String(v);
+      // campo com cara de id (lead, cliente, conversa) vale com qualquer tamanho; os outros só se forem longos
+      if (s === String(a.id) || (s.length < 6 && !/lead|custom|client|convers|chat/i.test(k))) continue;
+      const achou = buscas.porId.get(s) || buscas.porConversa.get(s);
+      if (achou) { lead = achou.id; break; }
+    }
+  }
+  const telCampo = cs.find(([k, v]) => /whats|phone|fone|celular|telefone|contato/i.test(k) && String(v).replace(/\D/g, '').length >= 10);
+  const telefone = telCampo ? String(telCampo[1]).replace(/\D/g, '') : null;
+  if ((!lead || !buscas.porId.get(String(lead))) && telefone) lead = buscas.porTel.get('%' + telefone.slice(-9))?.id || lead;
+  const conf = cs.find(([k]) => /confirm/i.test(k));
+  return {
+    lead: lead && buscas.porId.get(String(lead)) ? String(lead) : lead ? String(lead) : null,
+    nome: texto(/nome|name/i, /vendedor|salesman|seller|usuario|user|loja|store|atendente|created|owner/i),
+    telefone,
+    carro: texto(/vihecle|vehicle|veiculo|carro|modelo|interest/i),
+    vendedor: texto(/vendedor|salesman|seller|atendente|responsavel/i),
+    obs: (texto(/obs|descri|nota|note|resumo|motivo|coment|detalhe|mensagem|summary/i) || '').slice(0, 400) || null,
+    confirmado: conf ? (conf[1] === true || conf[1] === 1 || /^(true|1|sim|confirmado|confirmed)$/i.test(String(conf[1])) ? 1 : 0) : null,
+  };
+}
 function gravarAgenda(d, agenda) {
   if (!Array.isArray(agenda)) return 0;
-  estado.chavesAgenda = agenda[0] ? Object.keys(agenda[0]) : estado.chavesAgenda;
-  const up = d.prepare(`INSERT INTO lk_agenda (id, lead_id, data, modalidade, concluido, pela_ia, visto_em, primeira_vez) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET lead_id = excluded.lead_id, data = excluded.data, modalidade = excluded.modalidade, concluido = excluded.concluido, pela_ia = excluded.pela_ia, visto_em = excluded.visto_em`);
-  const marca = d.prepare('UPDATE lk_leads SET agendado_alguma_vez = 1 WHERE id = ?');
-  const agora = Date.now();
-  for (const a of agenda) {
-    const lead = idDoLead(a);
-    // primeira_vez = quando o agendamento apareceu (só depois da 1ª carga; antes não dá para saber quando foi feito)
-    up.run(String(a.id), lead, a.date_scheduled || null, a.modality || null, bool(a.is_concluido), bool(a.scheduled_by_ia), agora, cfg.cargaInicialFeita ? agora : null);
-    if (lead) marca.run(lead);
+  if (agenda[0]) {
+    estado.chavesAgenda = Object.keys(agenda[0]);
+    estado.estruturaAgenda = estrutura(agenda[0]);
   }
+  const up = d.prepare(`INSERT INTO lk_agenda (id, lead_id, data, modalidade, concluido, pela_ia, visto_em, primeira_vez, nome, telefone, carro, obs, confirmado, vendedor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET lead_id = COALESCE(excluded.lead_id, lk_agenda.lead_id), data = excluded.data, modalidade = excluded.modalidade, concluido = excluded.concluido, pela_ia = excluded.pela_ia, visto_em = excluded.visto_em,
+      nome = excluded.nome, telefone = excluded.telefone, carro = excluded.carro, obs = excluded.obs, confirmado = excluded.confirmado, vendedor = excluded.vendedor`);
+  const marca = d.prepare('UPDATE lk_leads SET agendado_alguma_vez = 1 WHERE id = ?');
+  const buscas = {
+    porId: d.prepare('SELECT id FROM lk_leads WHERE id = ?'),
+    porConversa: d.prepare('SELECT id FROM lk_leads WHERE conversa_id = ?'),
+    porTel: d.prepare("SELECT id FROM lk_leads WHERE replace(replace(replace(replace(whatsapp, '+', ''), ' ', ''), '-', ''), '(', '') LIKE ? ORDER BY created_date DESC LIMIT 1"),
+  };
+  const agora = Date.now();
+  let semLead = 0;
+  for (const a of agenda) {
+    const x = analisarAgenda(d, a, buscas);
+    if (!x.lead) semLead++;
+    // primeira_vez = quando o agendamento apareceu (só depois da 1ª carga; antes não dá para saber quando foi feito)
+    up.run(String(a.id), x.lead, a.date_scheduled || a.data || a.date || null, a.modality || a.modalidade || null, bool(a.is_concluido), bool(a.scheduled_by_ia), agora, cfg.cargaInicialFeita ? agora : null,
+      x.nome, x.telefone, x.carro, x.obs, x.confirmado, x.vendedor);
+    if (x.lead) marca.run(x.lead);
+  }
+  estado.agendaSemLead = semLead;
   return agenda.length;
 }
 
@@ -423,4 +489,4 @@ function definirHorasParado(h) {
   salvarCfg();
 }
 
-module.exports = { iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };
+module.exports = { gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };

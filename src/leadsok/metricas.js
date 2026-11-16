@@ -141,9 +141,13 @@ function agenda({ de, ate } = {}) {
   if (!d) return { erro: banco.erro() };
   de ||= diaSP();
   ate ||= de;
-  const itens = d.prepare(`SELECT a.id, a.lead_id, a.data, a.modalidade, a.concluido, a.pela_ia, l.nome, l.whatsapp, l.carro, l.vendedor, l.origem, l.aba_atual,
-      v.compareceu, v.comprou, v.marcado_por, v.marcado_em
-    FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id LEFT JOIN lk_visitas v ON v.lead_id = a.lead_id AND v.data_agendada = a.data
+  // sem lead identificado: usa os dados que vieram no próprio agendamento e um id "agenda-..." para marcar a visita
+  const itens = d.prepare(`SELECT a.id, COALESCE(a.lead_id, 'agenda-' || a.id) lead_id, a.lead_id IS NOT NULL identificado, a.data, a.modalidade, a.concluido, a.pela_ia,
+      COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, COALESCE(l.vendedor, a.vendedor) vendedor, l.origem, l.aba_atual,
+      a.obs, a.confirmado, v.compareceu, v.comprou, v.marcado_por, v.marcado_em,
+      (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'mensagem') confirmacao_enviada,
+      (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'cliente') cliente_confirmou
+    FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id LEFT JOIN lk_visitas v ON v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data
     WHERE COALESCE(a.modalidade, 'presencial') != 'ligacao' AND date(a.data, '-3 hours') BETWEEN ? AND ? ORDER BY a.data`).all(de, ate);
   // agendamentos tipo "ligação" no LeadsOK são lembretes de follow-up, não visita: ficam fora, só contados
   const followupsLigacao = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE modalidade = 'ligacao' AND date(data, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
@@ -158,9 +162,11 @@ function agenda({ de, ate } = {}) {
     const data = new Date(c.proximo_em).toISOString();
     if (itens.some((a) => a.lead_id === c.lead_id && diaDe(a.data) === diaDe(data))) continue;
     const v = visita.get(c.lead_id, data) || {};
+    const cf = (tipo) => d.prepare('SELECT MAX(em) em FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo = ?').get(c.lead_id, data, tipo).em;
     itens.push({ id: 'sdr-' + c.lead_id + '-' + c.proximo_em, lead_id: c.lead_id, data, modalidade: 'presencial', concluido: 0, pela_ia: 0, pelo_sdr: c.por || 'SDR',
       nome: c.nome, whatsapp: c.whatsapp, carro: c.carro, vendedor: c.vendedor, origem: c.origem, aba_atual: c.aba_atual,
-      compareceu: v.compareceu ?? null, comprou: v.comprou ?? null, marcado_por: v.marcado_por || null, marcado_em: v.marcado_em || null });
+      compareceu: v.compareceu ?? null, comprou: v.comprou ?? null, marcado_por: v.marcado_por || null, marcado_em: v.marcado_em || null,
+      identificado: 1, confirmacao_enviada: cf('mensagem'), cliente_confirmou: cf('cliente') });
   }
   itens.sort((a, b) => (a.data < b.data ? -1 : 1));
   const agora = new Date().toISOString();
@@ -278,9 +284,13 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
     // 1) cliente mandou mensagem e ninguém respondeu
     responder: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 150`).all(iso(7 * 86400000), iso(horasSemResposta * 3600000), ...va),
     // 2) follow-up de visitas (agenda do LeadsOK): confirmar as de hoje e amanhã; marcar o resultado das que já passaram (7 dias)
-    visitas: d.prepare(`SELECT ${campos}, a.data agenda_data, a.modalidade, 'leadsok' agenda_origem FROM lk_agenda a JOIN lk_leads l ON l.id = a.lead_id
-      WHERE ${EH_VISITA} AND date(a.data, '-3 hours') BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = a.lead_id AND v.data_agendada = a.data)
-        AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse')) ${V} ORDER BY a.data ASC LIMIT 150`).all(diaSP(agora - 7 * 86400000), amanha, ...va),
+    visitas: d.prepare(`SELECT COALESCE(l.id, 'agenda-' || a.id) id, COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, l.origem,
+        COALESCE(l.vendedor, a.vendedor) vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.aba_atual,
+        a.data agenda_data, a.modalidade, a.obs agenda_obs, a.confirmado agenda_confirmado, a.lead_id IS NOT NULL identificado, 'leadsok' agenda_origem
+      FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id
+      WHERE ${EH_VISITA} AND date(a.data, '-3 hours') BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data)
+        AND COALESCE(l.id, '') NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))
+        ${vendedor ? "AND lower(COALESCE(l.vendedor, a.vendedor, '')) = lower(?)" : ''} ORDER BY a.data ASC LIMIT 150`).all(diaSP(agora - 7 * 86400000), amanha, ...va),
     // 3) ligar: leads dos últimos 7 dias que o SDR ainda não trabalhou e o cliente não respondeu (mais novos primeiro)
     novos: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.created_date > ? AND COALESCE(l.ultima_msg_owner, 'salesman') != 'customers' ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 200`).all(iso(diasNovos * 86400000), ...va),
     // 4) conversa parada: loja falou por último há 2 a 7 dias e o cliente sumiu, ou cliente sem resposta há 7 a 30 dias
@@ -352,7 +362,11 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
   }
   // primeiro as que já passaram (marcar o resultado), depois as próximas por horário
   const agoraIso = new Date(agora).toISOString();
-  for (const l of listas.visitas) l.passou = l.agenda_data < agoraIso;
+  const conf = d.prepare('SELECT tipo, MAX(em) em FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? GROUP BY tipo');
+  for (const l of listas.visitas) {
+    l.passou = l.agenda_data < agoraIso;
+    for (const c of conf.all(l.id, l.agenda_data)) l[c.tipo === 'cliente' ? 'cliente_confirmou' : 'confirmacao_enviada'] = c.em;
+  }
   listas.visitas.sort((a, b) => (a.passou !== b.passou ? (a.passou ? -1 : 1) : a.agenda_data < b.agenda_data ? -1 : 1));
   listas.retornar = Object.values(todosLeads).filter((l) => daCarteira(l) && etapa(l.id, l) === 'retornar')
     .sort((a, b) => (ultimos[a.id].proximo_em || ultimos[a.id].em) - (ultimos[b.id].proximo_em || ultimos[b.id].em));
@@ -436,6 +450,15 @@ function resultadoSdr({ de, ate, por } = {}) {
   return { de, ate, por: por || null, total: { ...total, ...visTot }, porDia, porPessoa: porPessoa.map((p) => ({ ...p, vieram: visMapa[p.por]?.vieram || 0, naoVieram: visMapa[p.por]?.naoVieram || 0, compraram: visMapa[p.por]?.compraram || 0 })), porHora, pessoas };
 }
 
+// Confirmação da visita: "mensagem" = SDR mandou a confirmação; "cliente" = cliente confirmou o horário
+function confirmarVisita({ leadId, data, tipo, por }) {
+  const d = banco.abrir();
+  if (!d) throw new Error(banco.erro());
+  if (!leadId || !data || !['mensagem', 'cliente'].includes(tipo)) throw new Error('Dados da confirmação inválidos');
+  d.prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(leadId), String(data), tipo, por || null, Date.now());
+  return { ok: true };
+}
+
 function historicoContatos({ dia, por } = {}) {
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
@@ -490,4 +513,4 @@ function removerLeadsTeste() {
   return { ok: true, removidos: Number(d.prepare("DELETE FROM lk_leads WHERE id LIKE 'teste-%'").run().changes) };
 }
 
-module.exports = { resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+module.exports = { confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

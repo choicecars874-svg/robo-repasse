@@ -346,7 +346,7 @@ function iniciarPainel() {
   };
   app.get('/api/leads', (req, res) => res.json(comercial.leads(periodo(req.query))));
   app.get('/api/time', (req, res) => res.json(comercial.time(periodo(req.query), leadsok.horasParado())));
-  app.get('/api/agenda', (req, res) => res.json(comercial.agenda({ de: req.query.de || req.query.dia, ate: req.query.ate || req.query.dia })));
+  app.get('/api/agenda', (req, res) => res.json({ ...comercial.agenda({ de: req.query.de || req.query.dia, ate: req.query.ate || req.query.dia }), confirmacao: (config.get().sdr || {}).confirmacao || '' }));
   app.post('/api/agenda/visita', (req, res) => {
     try {
       const { leadId, data, resultado, compareceu } = req.body;
@@ -362,10 +362,17 @@ function iniciarPainel() {
       res.status(400).json({ erro: e.message });
     }
   });
+  app.post('/api/agenda/confirmar', (req, res) => {
+    try {
+      res.json(comercial.confirmarVisita({ leadId: req.body.leadId, data: req.body.data, tipo: req.body.tipo, por: req.usuario?.nome }));
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
   app.get('/api/sdr', (req, res) => {
     const sdr = config.get().sdr || {};
-    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: String(req.query.vendedor || '').slice(0, 80), cadencia: sdr }), recado: sdr.recado || '', objecoes: sdr.objecoes || [] });
+    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: String(req.query.vendedor || '').slice(0, 80), cadencia: sdr }), recado: sdr.recado || '', confirmacao: sdr.confirmacao || '', objecoes: sdr.objecoes || [] });
   });
   // resultado do SDR: o administrador vê todos; o SDR vê só o dele
   app.get('/api/sdr/resultado', (req, res) => {
@@ -380,7 +387,7 @@ function iniciarPainel() {
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
     const objecoes = (Array.isArray(b.objecoes) ? b.objecoes : []).map((o) => ({ objecao: String(o.objecao || '').trim().slice(0, 120), resposta: String(o.resposta || '').trim().slice(0, 1500) })).filter((o) => o.objecao).slice(0, 40);
     const atual = config.get();
-    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 24), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, objecoes } }).sdr);
+    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 24), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, objecoes } }).sdr);
   });
   app.post('/api/sdr/lead-teste', (req, res) => {
     try {

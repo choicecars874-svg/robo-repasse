@@ -79,6 +79,8 @@ const PADRAO = {
     diasNovos: 7, // "Ligar agora": leads de até tantos dias
     recado:
       'Fala {lead}, aqui é {sdr} da Choice Cars, prazer falar com você! Notamos seu interesse {carro} e tentei te ligar pra entender melhor se é esse veículo mesmo que você procura. Vai ser um prazer te atender e te dar uma atenção especial. Qual o melhor horário pra gente conversar?',
+    confirmacao:
+      'Fala {lead}, tudo bem? Aqui é {sdr} da Choice Cars! Passando pra confirmar sua visita {quando} às {hora} pra ver {carro}. Estaremos te aguardando! Qualquer imprevisto, é só me avisar por aqui.',
     objecoes: [
       { objecao: 'Já comprei o carro', resposta: 'Que bom, parabéns! Posso te perguntar qual você pegou e o que pesou na escolha? (ouça) Muita gente que acabou de comprar ainda tem um carro pra vender ou alguém da família procurando. Se precisar avaliar seu usado ou indicar alguém, a gente faz uma avaliação justa e rápida. Posso te mandar meu contato?' },
       { objecao: 'Só estou pesquisando', resposta: 'Perfeito, é o melhor momento pra conversar: você compara sem pressa. Me conta, o que é mais importante pra você no próximo carro: parcela, ano ou modelo? (ouça) Tenho duas ou três opções nesse perfil. Que tal vir ver pessoalmente sábado de manhã, sem compromisso? Dá pra fazer uma simulação na hora.' },
