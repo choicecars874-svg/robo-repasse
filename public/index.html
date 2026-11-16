@@ -1413,7 +1413,35 @@ const carroLinha = (l) => l.carro ? `<div class="carro"><svg class="i"><use href
 const haTempo = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`; };
 const soDigitos = (t) => String(t || '').replace(/\D/g, '');
 const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem enviada', agendou: 'agendou', ja_comprou: 'já comprou', sem_interesse: 'sem interesse' };
-const BOTOES_SDR = `<button class="btn verde" data-c="ligacao:agendou">Agendou</button><button class="btn" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button><button class="btn" data-c="mensagem:enviada">Mandei msg</button><button class="btn verm" data-c="ligacao:ja_comprou" title="Tira o lead da fila">Já comprou</button><button class="btn verm" data-c="ligacao:sem_interesse" title="Tira o lead da fila">Sem interesse</button>`;
+// Na linha só o resultado da ligação. Agendou / sem interesse / já comprou ficam no briefing de "Atendeu";
+// "Não atendeu" já abre a mensagem de recado (cadência: ligação WhatsApp, ligação telefone, mensagem, follow-up)
+const BOTOES_SDR = `<button class="btn verde" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button>`;
+const leadsSdr = {};
+const guardarLeadsSdr = (lista) => (lista || []).forEach((l) => { leadsSdr[l.id] = l; });
+const carroCurto = (c) => String(c || '').replace(/\s*\|.*$/, '').trim();
+const COPY_NAO_ATENDEU = 'Fala {lead}, aqui é {sdr} da Choice Cars, prazer falar com você! Notamos seu interesse {carro} e tentei te ligar pra entender melhor se é esse veículo mesmo que você procura. Vai ser um prazer te atender e te dar uma atenção especial. Qual o melhor horário pra gente conversar?';
+function abrirRecado(leadId) {
+  const l = leadsSdr[leadId] || {};
+  const tel = soDigitos(l.whatsapp);
+  const primeiro = (t) => String(t || '').trim().split(/\s+/)[0] || '';
+  const carro = carroCurto(l.carro);
+  const texto = COPY_NAO_ATENDEU.replace('{lead}', primeiro(l.nome) || 'tudo bem').replace('{sdr}', primeiro(eu?.nome) || 'o time').replace('{carro}', carro ? `no ${carro}` : 'em um dos nossos carros');
+  const m = document.createElement('div');
+  m.className = 'modalFundo';
+  m.innerHTML = `<div class="modal card"><h2>Não atendeu · deixe um recado</h2>
+    <p class="sub" style="margin-top:0">${esc(l.nome || 'Lead')}${tel ? ' · +' + tel : ''}${(l.tentativas || 0) + 1 > 1 ? ` · ${(l.tentativas || 0) + 1}ª tentativa sem atender` : ''}. Ajuste o texto se quiser e envie pelo WhatsApp.</p>
+    <textarea id="rcTexto" style="min-height:150px;font-family:inherit">${esc(texto)}</textarea>
+    <p style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap"><button class="btn" id="rcPular">Agora não</button>${tel ? '<button class="btn verde" id="rcEnviar">Abrir WhatsApp com a mensagem</button>' : '<span class="ruim">Lead sem telefone</span>'}</p></div>`;
+  document.body.appendChild(m);
+  m.querySelector('#rcPular').onclick = () => m.remove();
+  const env = m.querySelector('#rcEnviar');
+  if (env) env.onclick = async () => {
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(m.querySelector('#rcTexto').value)}`, '_blank', 'noopener');
+    m.remove();
+    try { await api('/api/sdr/contato', { method:'POST', body: JSON.stringify({ leadId, tipo: 'mensagem', resultado: 'enviada' }) }); } catch {}
+    carregarSdr(); if ($('#sdBusca').value.trim()) buscarLeadSdr();
+  };
+}
 function ligarBotoesSdr(raiz) {
   raiz.querySelectorAll('[data-c]').forEach((b) => b.onclick = async () => {
     const [tipo, resultado] = b.dataset.c.split(':');
@@ -1421,6 +1449,7 @@ function ligarBotoesSdr(raiz) {
     if (['atendeu', 'agendou'].includes(resultado)) return abrirBriefing(linha.dataset.lead, linha.querySelector('b')?.textContent || 'Lead', resultado);
     if (['ja_comprou', 'sem_interesse'].includes(resultado) && !confirm('Encerrar este lead (sai da fila do SDR)?')) return;
     await api('/api/sdr/contato', { method:'POST', body: JSON.stringify({ leadId: linha.dataset.lead, tipo, resultado }) });
+    if (resultado === 'nao_atendeu') abrirRecado(linha.dataset.lead);
     carregarSdr(); if ($('#sdBusca').value.trim()) buscarLeadSdr();
   });
 }
@@ -1469,6 +1498,7 @@ async function carregarSdr() {
   avisoLk();
   const r = await api('/api/sdr');
   if (r.erro) return;
+  Object.values(r.listas).forEach(guardarLeadsSdr); Object.values(r.etapas).forEach(guardarLeadsSdr);
   $('#sdLig').textContent = num(r.resumo.ligacoes); $('#sdAtend').textContent = `atenderam: ${num(r.resumo.atenderam)}`;
   $('#sdMsg').textContent = num(r.resumo.mensagens); $('#sdAgendou').textContent = num(r.resumo.agendou); $('#sdLeads').textContent = `leads trabalhados: ${num(r.resumo.leads)}`;
   $('#sdFila').textContent = num(LISTAS_SDR.reduce((a, [k]) => a + r.listas[k].length, 0));
@@ -1521,6 +1551,7 @@ async function buscarLeadSdr() {
   const q = $('#sdBusca').value.trim();
   if (q.length < 3) { $('#sdResultado').innerHTML = ''; return; }
   const r = await api('/api/sdr/buscar?q=' + encodeURIComponent(q));
+  guardarLeadsSdr(r.leads);
   $('#sdResultado').innerHTML = `<div class="card"><h2>Resultado da busca <span class="sub">(${r.leads.length})</span></h2>${r.leads.map((l) => {
     const tel = soDigitos(l.whatsapp);
     const situacao = l.archive_reason ? `arquivado: ${l.archive_reason}` : l.aba_atual === 'agendados' ? 'agendado' : l.aba_atual === 'leads_novos' ? 'novo' : 'em conversa';
