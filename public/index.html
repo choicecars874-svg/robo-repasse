@@ -1512,7 +1512,7 @@ async function clienteConfirmou(leadId, data, depois) {
   try { await api('/api/agenda/confirmar', { method:'POST', body: JSON.stringify({ leadId, data, tipo: 'cliente' }) }); depois?.(); } catch (e) { alert(e.message); }
 }
 // selo do status da confirmação
-const seloConfirmacao = (x) => x.cliente_confirmou ? `<span class="tag vendido">cliente confirmou</span>` : x.confirmacao_enviada ? `<span class="tag">confirmação enviada ${new Date(x.confirmacao_enviada).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : (x.agenda_confirmado ?? x.confirmado) === 1 ? '<span class="tag">confirmado no LeadsOK</span>' : '<span class="tag ruimTag">horário ainda não confirmado</span>';
+const seloConfirmacao = (x) => x.cliente_confirmou ? `<span class="tag vendido">cliente confirmou</span>` : x.confirmacao_enviada ? `<span class="tag">confirmação enviada ${new Date(x.confirmacao_enviada).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : (x.agenda_confirmado ?? x.confirmado) === 1 ? '<span class="tag">confirmado no LeadsOK</span>' : '<span class="tag ruimTag">confirmação ainda não enviada</span>';
 function abrirRecado(leadId) {
   const l = leadsSdr[leadId] || {};
   const tel = soDigitos(l.whatsapp);

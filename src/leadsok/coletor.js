@@ -121,7 +121,8 @@ function estrutura(o, prefixo = '', nivel = 0) {
   for (const [k, v] of Object.entries(o || {})) {
     const nome = prefixo + k;
     if (v && typeof v === 'object' && !Array.isArray(v) && nivel < 2) out.push(...estrutura(v, nome + '.', nivel + 1));
-    else out.push(`${nome}:${Array.isArray(v) ? 'lista' : v === null ? 'null' : typeof v}`);
+    // "$..." = referência do RSC (o objeto está em outra parte da resposta)
+    else out.push(`${nome}:${Array.isArray(v) ? 'lista' : v === null ? 'null' : typeof v === 'string' && /^\$/.test(v) ? 'ref' : typeof v === 'string' && /^[0-9a-f-]{20,}$/i.test(v) ? 'id' : typeof v}`);
   }
   return out;
 }
