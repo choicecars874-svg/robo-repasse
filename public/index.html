@@ -145,6 +145,11 @@
   .subabas button { background:none; border:0; color:var(--sub); font:inherit; font-size:14px; padding:8px 14px; border-radius:10px; cursor:pointer; }
   .subabas button.ativo { background:var(--ouro2); color:var(--txt); box-shadow:inset 0 0 0 1px rgba(226,179,80,.45); }
   .subaba { display:none; } .subaba.ativo { display:block; }
+  .sdLinha { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px 14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--borda); }
+  .sdLinha:last-child { border:0; } .sdLinha.feito { opacity:.55; }
+  .sdLinha .acoes { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; } .sdLinha .btn { padding:7px 12px; font-size:13px; }
+  .sdLinha a.btn { text-decoration:none; }
+  @media (max-width:820px) { .sdLinha { grid-template-columns:1fr; } .sdLinha .acoes { justify-content:flex-start; } }
   .vazio { color:var(--sub); font-size:14px; padding:18px 0; }
 
   @media (max-width:1100px) { .kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:1fr; } }
@@ -200,6 +205,7 @@
   <div class="grupoMenu fechado" id="menuComercial">
     <button class="titulo" data-abre="menuComercial"><svg class="i"><use href="#i-leads"/></svg>Comercial <svg class="i seta"><use href="#i-seta"/></svg></button>
     <div class="sub-itens">
+      <button data-aba="comSdr">Fila do SDR</button>
       <button data-aba="comLeads">Leads e canais</button>
       <button data-aba="comTime">Time</button>
       <button data-aba="comAgenda">Agenda do dia</button>
@@ -258,6 +264,19 @@
     <div class="card"><div class="cardTopo"><div><h2>Alcance nos últimos 7 dias</h2><p class="sub">Soma dos perfis conectados.</p></div></div><div class="grafico" id="igSemana"></div></div>
     <p class="sub" id="igAtual"></p>
   </div>
+</section>
+
+<section id="comSdr">
+  <div class="lkAviso" hidden></div>
+  <div class="eyebrow">Hoje · contatos registrados</div>
+  <div class="kpis">
+    <div class="kpi"><div class="eyebrow">Ligações</div><b id="sdLig">0</b><small id="sdAtend">atenderam: 0</small></div>
+    <div class="kpi"><div class="eyebrow">Mensagens</div><b id="sdMsg">0</b><small>enviadas pelo SDR</small></div>
+    <div class="kpi"><div class="eyebrow">Leads trabalhados</div><b id="sdLeads">0</b><small>com pelo menos 1 contato hoje</small></div>
+    <div class="kpi"><div class="eyebrow">Na fila</div><b id="sdFila">0</b><small>somando as 4 listas</small></div>
+  </div>
+  <p class="sub" style="margin:0 0 14px">Trabalhe de cima para baixo. Depois de cada contato, marque o resultado: o lead fica marcado como trabalhado hoje. Os dados vêm do LeadsOK (atualizam a cada 15 min); responder e agendar continua sendo feito no LeadsOK.</p>
+  <div id="sdListas"></div>
 </section>
 
 <section id="comLeads">
@@ -641,6 +660,7 @@ let cfg = null;
 const TITULOS = {
   painel: ['Painel', 'Visão geral da Choice: metas do dia e o principal de cada área.'],
   inicio: ['Grupos', 'O que chegou dos grupos de repasse, o que foi postado e quem chamou a loja.'],
+  comSdr: ['Fila do SDR', 'Quem ligar ou chamar hoje, em ordem de urgência.'],
   comLeads: ['Leads e canais', 'Funil comercial do LeadsOK por período e canal de entrada.'],
   comTime: ['Time', 'Desempenho de cada vendedor no período.'],
   comAgenda: ['Agenda do dia', 'Agendamentos do LeadsOK. Marque quem compareceu.'],
@@ -667,7 +687,7 @@ function abrirAba(aba) {
   const [titulo, sub] = TITULOS[aba];
   $('#tEyebrow').textContent = aba.startsWith('ig') ? 'Instagram' : aba.startsWith('com') ? 'Comercial' : ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, sistema: () => { carregarSistema(); carregarDominio(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, comSdr: carregarSdr, sistema: () => { carregarSistema(); carregarDominio(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -1247,6 +1267,44 @@ $('#btnCkSalvar').onclick = async () => {
 };
 $('#btnCkSync').onclick = async () => { await api('/api/cockpit/sincronizar', { method:'POST' }); alert('Sincronização do Cockpit iniciada.'); setTimeout(carregarCkCfg, 3000); };
 $('#btnCkDesligar').onclick = async () => { if (confirm('Desligar a leitura do Cockpit?')) { await api('/api/cockpit/desligar', { method:'POST' }); carregarCkCfg(); } };
+
+// ---------- Fila do SDR ----------
+const LISTAS_SDR = [
+  ['responder', 'Responder agora', 'Cliente mandou mensagem e está sem resposta. Prioridade máxima.'],
+  ['confirmar', 'Confirmar agendamentos', 'Visitas de hoje e de amanhã: ligar ou mandar mensagem confirmando.'],
+  ['novos', 'Leads novos', 'Chegaram nas últimas 48 h e o cliente ainda não respondeu: ligar.'],
+  ['retomar', 'Retomar conversa', 'A loja falou por último há 2 a 7 dias e o cliente sumiu.'],
+];
+const haTempo = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`; };
+const soDigitos = (t) => String(t || '').replace(/\D/g, '');
+const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem enviada' };
+async function carregarSdr() {
+  avisoLk();
+  const r = await api('/api/sdr');
+  if (r.erro) return;
+  $('#sdLig').textContent = num(r.resumo.ligacoes); $('#sdAtend').textContent = `atenderam: ${num(r.resumo.atenderam)}`;
+  $('#sdMsg').textContent = num(r.resumo.mensagens); $('#sdLeads').textContent = num(r.resumo.leads);
+  $('#sdFila').textContent = num(LISTAS_SDR.reduce((a, [k]) => a + r.listas[k].length, 0));
+  $('#sdListas').innerHTML = LISTAS_SDR.map(([k, titulo, desc]) => {
+    const itens = r.listas[k];
+    return `<div class="card"><div class="cardTopo"><div><h2>${titulo} <span class="sub">(${itens.length})</span></h2><p class="sub">${desc}</p></div></div>
+      ${itens.map((l) => {
+        const tel = soDigitos(l.whatsapp); const nome = (l.nome || 'Cliente').split(' ')[0];
+        const quando = k === 'confirmar' ? `visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : k === 'novos' ? `chegou ${haTempo(l.created_date)}` : `última msg ${haTempo(l.ultima_msg_at)}`;
+        const feitos = l.contatosHoje.map((c) => (c.tipo === 'ligacao' ? 'ligação: ' : '') + (RESULTADO[c.resultado] || c.resultado)).join(' · ');
+        return `<div class="sdLinha ${feitos ? 'feito' : ''}" data-lead="${esc(l.id)}">
+          <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>
+            <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}</div></div>
+          <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
+            <button class="btn verde" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button><button class="btn" data-c="mensagem:enviada">Mandei msg</button></div></div>`;
+      }).join('') || '<div class="vazio">Nada nesta lista agora.</div>'}</div>`;
+  }).join('');
+  document.querySelectorAll('.sdLinha [data-c]').forEach((b) => b.onclick = async () => {
+    const [tipo, resultado] = b.dataset.c.split(':');
+    await api('/api/sdr/contato', { method:'POST', body: JSON.stringify({ leadId: b.closest('.sdLinha').dataset.lead, tipo, resultado }) });
+    carregarSdr();
+  });
+}
 
 async function carregarLkCfg() {
   const e = await api('/api/leadsok/estado');

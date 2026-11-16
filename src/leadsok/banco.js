@@ -30,6 +30,8 @@ function abrir() {
       CREATE TABLE IF NOT EXISTS lk_estoque (placa TEXT PRIMARY KEY, marca TEXT, modelo TEXT, versao TEXT, ano TEXT, km REAL, preco REAL, imagem TEXT, primeira_vez INTEGER, ultima_vez INTEGER, ativo INTEGER);
       CREATE TABLE IF NOT EXISTS lk_vendedores (id TEXT PRIMARY KEY, nome TEXT, setor TEXT);
       CREATE TABLE IF NOT EXISTS lk_visitas (lead_id TEXT, data_agendada TEXT, compareceu INTEGER, marcado_por TEXT, marcado_em INTEGER, PRIMARY KEY (lead_id, data_agendada));
+      CREATE TABLE IF NOT EXISTS lk_contatos (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id TEXT, dia TEXT, tipo TEXT, resultado TEXT, em INTEGER);
+      CREATE INDEX IF NOT EXISTS lk_contatos_dia ON lk_contatos(dia, lead_id);
       CREATE TABLE IF NOT EXISTS lk_sync_log (inicio INTEGER, fim INTEGER, tipo TEXT, ok INTEGER, erro TEXT, contagens TEXT);
     `);
     // colunas novas em bancos já criados: quando o agendamento apareceu e quando o lead virou venda

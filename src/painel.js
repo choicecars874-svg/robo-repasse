@@ -302,6 +302,14 @@ function iniciarPainel() {
     }
   });
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
+  app.get('/api/sdr', (_, res) => res.json(comercial.filaSdr({ horasSemResposta: leadsok.horasParado() })));
+  app.post('/api/sdr/contato', (req, res) => {
+    try {
+      res.json(comercial.registrarContato(req.body));
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
   app.get('/api/comercial/periodo', (req, res) => res.json(comercial.resumoPeriodo(req.query.de, req.query.ate) || {}));
   app.get('/api/comercial/hoje', (_, res) => res.json({ ...(comercial.resumoHoje() || {}), estado: { ativo: leadsok.status().ativo, problema: leadsok.status().problema } }));
 

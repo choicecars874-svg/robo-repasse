@@ -136,4 +136,46 @@ function resumoPeriodo(de, ate) {
   return { leads, agendamentos: Math.max(naAgenda, noHistorico), vendas, visitas, temDados: total > 0 };
 }
 
-module.exports = { resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+// Fila do SDR: quem ligar ou chamar hoje, em ordem de urgência. Só leads de entrada (sem a base de resgate)
+// e não arquivados. Cada lead aparece numa lista só (a mais urgente).
+function filaSdr({ horasSemResposta = 1 } = {}) {
+  const d = banco.abrir();
+  if (!d) return { erro: banco.erro() };
+  const hoje = diaSP();
+  const amanha = diaSP(Date.now() + 86400000);
+  const agora = Date.now();
+  const iso = (ms) => new Date(agora - ms).toISOString();
+  const campos = `l.id, l.nome, l.whatsapp, l.origem, l.vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.aba_atual`;
+  const base = `l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND l.whatsapp IS NOT NULL`;
+  const listas = {
+    // 1) cliente mandou mensagem e ninguém respondeu
+    responder: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ORDER BY l.ultima_msg_at ASC LIMIT 100`).all(iso(7 * 86400000), iso(horasSemResposta * 3600000)),
+    // 2) agendamentos de hoje e amanhã: confirmar presença
+    confirmar: d.prepare(`SELECT ${campos}, a.data agenda_data, a.modalidade FROM lk_agenda a JOIN lk_leads l ON l.id = a.lead_id
+      WHERE l.is_resgate = 0 AND date(a.data, '-3 hours') IN (?, ?) ORDER BY a.data ASC LIMIT 100`).all(hoje, amanha),
+    // 3) leads novos (últimas 48 h) que ainda não responderam a loja: ligar
+    novos: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.created_date > ? AND COALESCE(l.ultima_msg_owner, 'salesman') != 'customers' ORDER BY l.created_date DESC LIMIT 100`).all(iso(48 * 3600000)),
+    // 4) conversa parada: loja falou por último há 2 a 7 dias e o cliente sumiu, ou cliente sem resposta há 7 a 30 dias
+    retomar: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND ((l.ultima_msg_owner = 'salesman' AND l.ultima_msg_at BETWEEN ? AND ?) OR (l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ?)) ORDER BY l.ultima_msg_at DESC LIMIT 100`).all(iso(7 * 86400000), iso(2 * 86400000), iso(30 * 86400000), iso(7 * 86400000)),
+  };
+  // um lead só na lista mais urgente
+  const vistos = new Set();
+  for (const k of ['responder', 'confirmar', 'novos', 'retomar']) listas[k] = listas[k].filter((l) => !vistos.has(l.id) && vistos.add(l.id));
+  // contatos que o SDR já registrou hoje
+  const contatos = d.prepare('SELECT lead_id, tipo, resultado, em FROM lk_contatos WHERE dia = ? ORDER BY em').all(hoje);
+  const porLead = {};
+  for (const c of contatos) (porLead[c.lead_id] ||= []).push(c);
+  for (const k of Object.keys(listas)) for (const l of listas[k]) l.contatosHoje = porLead[l.id] || [];
+  const resumo = { ligacoes: contatos.filter((c) => c.tipo === 'ligacao').length, atenderam: contatos.filter((c) => c.resultado === 'atendeu').length, mensagens: contatos.filter((c) => c.tipo === 'mensagem').length, leads: Object.keys(porLead).length };
+  return { dia: hoje, horasSemResposta, listas, resumo };
+}
+
+function registrarContato({ leadId, tipo, resultado }) {
+  const d = banco.abrir();
+  if (!d) throw new Error(banco.erro());
+  if (!['ligacao', 'mensagem'].includes(tipo)) throw new Error('Tipo de contato inválido');
+  d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em) VALUES (?, ?, ?, ?, ?)').run(String(leadId), diaSP(), tipo, resultado || null, Date.now());
+  return { ok: true };
+}
+
+module.exports = { filaSdr, registrarContato, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
