@@ -288,7 +288,7 @@
     <div class="kpi"><div class="eyebrow">Ligações</div><b id="sdLig">0</b><small id="sdAtend">atenderam: 0</small></div>
     <div class="kpi"><div class="eyebrow">Mensagens</div><b id="sdMsg">0</b><small>enviadas pelo SDR</small></div>
     <div class="kpi"><div class="eyebrow">Agendou</div><b id="sdAgendou">0</b><small id="sdLeads">leads trabalhados: 0</small></div>
-    <div class="kpi"><div class="eyebrow">Na fila</div><b id="sdFila">0</b><small>somando as 4 listas</small></div>
+    <div class="kpi"><div class="eyebrow">Na fila</div><b id="sdFila">0</b><small>somando as listas</small></div>
   </div>
   <p class="sub" style="margin:0 0 14px">Trabalhe de cima para baixo. Depois de cada contato, marque o resultado: o lead fica marcado como trabalhado hoje. Os dados vêm do LeadsOK (atualizam a cada 15 min); responder e agendar continua sendo feito no LeadsOK.</p>
   <div class="card filtros"><div style="flex:3"><label>Buscar lead por telefone, nome ou carro</label><input id="sdBusca" placeholder="ex.: 11961262931, Maria ou Corolla"></div><div style="align-self:end"><button class="btn" id="btnSdBusca">Buscar</button></div></div>
@@ -1331,7 +1331,7 @@ async function carregarAgenda() {
     const passou = dt.getTime() < agora;
     const tel = soDigitos(a.whatsapp);
     return `${cab}<div class="agItem" data-lead="${esc(a.lead_id || '')}" data-data="${esc(a.data)}"><span class="hora">${hora}</span>
-      <div><b>${esc(a.nome || 'Lead sem nome')}</b> <span class="sub">· ${esc(MOD[a.modalidade] || a.modalidade || '')} · ${esc(a.vendedor || 'sem vendedor')} · ${esc(canal(a.origem))}${a.pela_ia ? ' · agendado pela IA' : ''}</span>${carroLinha(a)}
+      <div><b>${esc(a.nome || 'Lead sem nome')}</b> <span class="sub">· ${esc(MOD[a.modalidade] || a.modalidade || '')} · ${esc(a.vendedor || 'sem vendedor')} · ${esc(canal(a.origem))}${a.pela_ia ? ' · agendado pela IA' : ''}${a.pelo_sdr ? ' · agendado pelo SDR (' + esc(a.pelo_sdr) + ')' : ''}</span>${carroLinha(a)}
         <div class="estado sub">${tel ? '+' + tel : ''}${!st && passou ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}${!st && !passou ? ' · ainda vai acontecer' : ''}${st && a.marcado_por ? ` · marcado por ${esc(a.marcado_por)}` : ''}</div>
         ${a.lead_id ? '' : '<span class="ruim">Lead não identificado neste agendamento.</span>'}</div>
       <div class="acoes">${VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('')}${st ? '<button class="btn" data-v="">Limpar</button>' : ''}</div></div>`;
@@ -1403,7 +1403,7 @@ $('#btnCkDesligar').onclick = async () => { if (confirm('Desligar a leitura do C
 const LISTAS_SDR = [
   ['retornar', 'Retornar hoje', 'Retornos marcados para hoje e quem não atendeu há mais de 3 h. Leia o último briefing antes de ligar.'],
   ['responder', 'Responder agora', 'Cliente mandou mensagem e está sem resposta. Prioridade máxima.'],
-  ['confirmar', 'Confirmar agendamentos', 'Visitas de hoje e de amanhã: ligar ou mandar mensagem confirmando.'],
+  ['visitas', 'Follow-up de visitas', 'Visitas agendadas (no LeadsOK ou pelo SDR). Antes do horário: confirme a presença. Depois: marque se veio e se comprou.'],
   ['posVisita', 'Follow-up pós-visita', 'Não veio, ou veio e não comprou (últimos 14 dias). Remarcar a visita ou entender o que faltou.'],
   ['novos', 'Leads novos', 'Chegaram nas últimas 48 h e o cliente ainda não respondeu: ligar.'],
   ['retomar', 'Retomar conversa', 'A loja falou por último há 2 a 7 dias e o cliente sumiu.'],
@@ -1426,8 +1426,10 @@ function ligarBotoesSdr(raiz) {
 }
 // Briefing da ligação: resumo, interesse e próximo passo (o lead muda de etapa conforme a escolha)
 function abrirBriefing(leadId, nome, resultado) {
-  const amanha10 = new Date(Date.now() + 86400000); amanha10.setHours(10, 0, 0, 0);
-  const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  // datas sempre no horário de Brasília, seja qual for o fuso do aparelho
+  const amanha10 = diaSP(-1) + 'T10:00';
+  const local = (x) => x;
+  const lerSP = (v) => (v ? Date.parse(v.slice(0, 16) + ':00-03:00') : NaN);
   const m = document.createElement('div');
   m.className = 'modalFundo';
   m.innerHTML = `<div class="modal card"><h2>Briefing da ligação · ${esc(nome)}</h2>
@@ -1435,7 +1437,8 @@ function abrirBriefing(leadId, nome, resultado) {
     <label>Interesse</label><div class="opcoes">${['quente', 'morno', 'frio'].map((x) => `<label><input type="radio" name="bfInt" value="${x}" ${x === 'morno' ? 'checked' : ''}> ${x}</label>`).join('')}</div>
     <label>Próximo passo</label><div class="opcoes coluna">
       <label><input type="radio" name="bfProx" value="retornar" ${resultado === 'atendeu' ? 'checked' : ''}> Ligar de novo em <input type="datetime-local" id="bfData" value="${local(amanha10)}" style="width:auto;margin-left:6px"></label>
-      <label><input type="radio" name="bfProx" value="agendou" ${resultado === 'agendou' ? 'checked' : ''}> Agendou visita (registre também no LeadsOK)</label>
+      <label><input type="radio" name="bfProx" value="agendou" ${resultado === 'agendou' ? 'checked' : ''}> Agendou visita para <input type="datetime-local" id="bfVisita" value="${local(amanha10)}" style="width:auto;margin-left:6px"></label>
+      <span class="sub" style="margin:-4px 0 4px 28px">O lead vai para o Follow-up de visitas. Registre também no LeadsOK.</span>
       <label><input type="radio" name="bfProx" value="sem_interesse"> Não ligar mais: sem interesse</label>
       <label><input type="radio" name="bfProx" value="ja_comprou"> Não ligar mais: já comprou</label></div>
     <p style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn" id="bfCancelar">Cancelar</button><button class="btn verde" id="bfSalvar">Salvar briefing</button></p></div>`;
@@ -1449,8 +1452,13 @@ function abrirBriefing(leadId, nome, resultado) {
     if (!nota) return alert('Escreva o resumo da conversa.');
     const corpo = { leadId, tipo: 'ligacao', nota, interesse: m.querySelector('input[name=bfInt]:checked').value, resultado: prox === 'retornar' ? 'atendeu' : prox };
     if (prox === 'retornar') {
-      const t = Date.parse(m.querySelector('#bfData').value);
+      const t = lerSP(m.querySelector('#bfData').value);
       if (!t || t < Date.now() - 60000) return alert('Escolha uma data de retorno no futuro.');
+      corpo.proximoEm = t;
+    }
+    if (prox === 'agendou') {
+      const t = lerSP(m.querySelector('#bfVisita').value);
+      if (!t || t < Date.now() - 3600000) return alert('Escolha o dia e a hora da visita.');
       corpo.proximoEm = t;
     }
     try { await api('/api/sdr/contato', { method:'POST', body: JSON.stringify(corpo) }); m.remove(); carregarSdr(); if ($('#sdBusca').value.trim()) buscarLeadSdr(); }
@@ -1469,27 +1477,32 @@ async function carregarSdr() {
     return `<div class="card"><div class="cardTopo"><div><h2>${titulo} <span class="sub">(${itens.length})</span></h2><p class="sub">${desc}</p></div></div>
       ${itens.map((l) => {
         const tel = soDigitos(l.whatsapp); const nome = (l.nome || 'Cliente').split(' ')[0];
-        const quando = k === 'posVisita' ? `${l.compareceu === 0 ? '<span class="ruim">não veio</span>' : 'veio e não comprou'} · visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : k === 'confirmar' ? `visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : k === 'novos' ? `chegou ${haTempo(l.created_date)}` : `última msg ${haTempo(l.ultima_msg_at)}`;
+        const quando = k === 'posVisita' ? `${l.compareceu === 0 ? '<span class="ruim">não veio</span>' : 'veio e não comprou'} · visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : k === 'visitas' ? `visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${l.agenda_origem === 'sdr' ? ' · agendada pelo SDR' : ''}${l.passou ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}` : k === 'novos' ? `chegou ${haTempo(l.created_date)}` : `última msg ${haTempo(l.ultima_msg_at)}`;
         const feitos = l.contatosHoje.map((c) => (c.tipo === 'ligacao' ? 'ligação: ' : '') + (RESULTADO[c.resultado] || c.resultado)).join(' · ');
         const uc = l.ultimoContato;
-        return `<div class="sdLinha ${feitos ? 'feito' : ''}" data-lead="${esc(l.id)}">
+        return `<div class="sdLinha ${feitos ? 'feito' : ''}" data-lead="${esc(l.id)}" data-data="${esc(l.agenda_data || '')}">
           <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>${carroLinha(l)}
             <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}${l.tentativas ? ` · ${l.tentativas} tentativa(s) sem atender` : ''}</div>
-            ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· retorno ${new Date(uc.proximo_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
+            ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
           <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
-            ${BOTOES_SDR}</div></div>`;
+            ${k === 'visitas' && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') : BOTOES_SDR}</div></div>`;
       }).join('') || '<div class="vazio">Nada nesta lista agora.</div>'}</div>`;
   }).join('');
   ligarBotoesSdr($('#sdListas'));
+  $('#sdListas').querySelectorAll('[data-visita]').forEach((b) => b.onclick = async () => {
+    const linha = b.closest('.sdLinha');
+    try { await api('/api/agenda/visita', { method:'POST', body: JSON.stringify({ leadId: linha.dataset.lead, data: linha.dataset.data, resultado: b.dataset.visita }) }); carregarSdr(); }
+    catch (e) { alert(e.message); }
+  });
   // etapas do CRM
-  const ETAPAS = [['aguardando', 'Aguardando resposta'], ['tentar', 'Tentar de novo (3 h)'], ['retorno', 'Retorno marcado'], ['agendados', 'Agendados'], ['semContato', 'Sem contato (3 tentativas)'], ['encerrados', 'Encerrados']];
+  const ETAPAS = [['aguardando', 'Aguardando resposta'], ['tentar', 'Tentar de novo (3 h)'], ['retorno', 'Retorno marcado'], ['agendados', 'Agendados'], ['posVisita', 'Pós-visita'], ['semContato', 'Sem contato (3 tentativas)'], ['encerrados', 'Encerrados']];
   window.etapaSdr ||= 'retorno';
   $('#sdEtapasBtns').innerHTML = ETAPAS.map(([k, n]) => `<button data-et="${k}" class="${k === window.etapaSdr ? 'ativo' : ''}">${n} (${r.etapas[k].length})</button>`).join('');
   $('#sdEtapasBtns').querySelectorAll('button').forEach((b) => b.onclick = () => { window.etapaSdr = b.dataset.et; carregarSdr(); });
   $('#sdEtapa').innerHTML = r.etapas[window.etapaSdr].map((l) => {
     const uc = l.ultimoContato || {}; const tel = soDigitos(l.whatsapp);
     return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || '')} · ${tel ? '+' + tel : ''}</span>
-      <div class="briefing">${uc.interesse ? `<span class="tag">${esc(uc.interesse)}</span> ` : ''}${esc(RESULTADO[uc.resultado] || '')}${uc.nota ? ' · ' + esc(uc.nota) : ''}${uc.proximo_em ? ` <span class="sub">· retorno ${new Date(uc.proximo_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${uc.em ? haTempo(new Date(uc.em).toISOString()) : ''}</span></div></div>
+      <div class="briefing">${uc.interesse ? `<span class="tag">${esc(uc.interesse)}</span> ` : ''}${esc(RESULTADO[uc.resultado] || '')}${uc.nota ? ' · ' + esc(uc.nota) : ''}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${uc.em ? haTempo(new Date(uc.em).toISOString()) : ''}</span></div></div>
       <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a>` : ''}${BOTOES_SDR}</div></div>`;
   }).join('') || '<div class="vazio">Nenhum lead nesta etapa.</div>';
   ligarBotoesSdr($('#sdEtapa'));

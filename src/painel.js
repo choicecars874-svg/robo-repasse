@@ -346,7 +346,14 @@ function iniciarPainel() {
   app.post('/api/agenda/visita', (req, res) => {
     try {
       const { leadId, data, resultado, compareceu } = req.body;
-      res.json(comercial.marcarVisita({ leadId, data, resultado, compareceu: compareceu === undefined || compareceu === null ? compareceu : !!compareceu, por: req.usuario?.nome || req.usuario?.usuario }));
+      const por = req.usuario?.nome || req.usuario?.usuario;
+      res.json(comercial.marcarVisita({ leadId, data, resultado, compareceu: compareceu === undefined || compareceu === null ? compareceu : !!compareceu, por }));
+      // resultado da visita também nas Notas internas do lead no LeadsOK (se estiver ligado)
+      const TXT = { comprou: 'VEIO E COMPROU', nao_comprou: 'VEIO E NÃO COMPROU', nao_veio: 'NÃO VEIO (no-show)' };
+      if (TXT[resultado] && leadsok.gravarNotasAtivo()) {
+        const f = (t) => new Date(t).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        leadsok.gravarNotaLeadsOK(String(leadId), `[${f(Date.now())} · ${por} · visita de ${f(Date.parse(data))}] ${TXT[resultado]}`).catch((e) => console.error('Nota da visita no LeadsOK:', e.message));
+      }
     } catch (e) {
       res.status(400).json({ erro: e.message });
     }
@@ -362,7 +369,7 @@ function iniciarPainel() {
       if (req.body.nota && leadsok.gravarNotasAtivo()) {
         const RES = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem', agendou: 'AGENDOU', ja_comprou: 'JÁ COMPROU', sem_interesse: 'SEM INTERESSE' };
         const quando = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-        const retorno = req.body.proximoEm ? ` · retorno ${new Date(Number(req.body.proximoEm)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
+        const retorno = req.body.proximoEm ? ` · ${req.body.resultado === 'agendou' ? 'VISITA' : 'retorno'} ${new Date(Number(req.body.proximoEm)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
         const linha = `[${quando} · ${req.usuario.nome} · ${req.body.tipo === 'mensagem' ? 'mensagem' : 'ligação'} · ${RES[req.body.resultado] || ''}${req.body.interesse ? ' · ' + req.body.interesse : ''}] ${String(req.body.nota).slice(0, 1500)}${retorno}`;
         leadsok.gravarNotaLeadsOK(String(req.body.leadId), linha).then(() => comercial.marcarNoLeadsOK(r.id, 'ok')).catch((e) => comercial.marcarNoLeadsOK(r.id, 'erro: ' + e.message));
       }
