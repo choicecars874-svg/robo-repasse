@@ -58,23 +58,43 @@ function iniciarPainel() {
   if (!fs.existsSync(ARQ_SEGREDO)) fs.writeFileSync(ARQ_SEGREDO, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
   const SEGREDO = fs.readFileSync(ARQ_SEGREDO, 'utf8').trim();
   const versaoSenha = () => (fs.existsSync(ARQ_SENHA) ? fs.readFileSync(ARQ_SENHA, 'utf8') : SENHA);
-  const assinar = (validade) => crypto.createHmac('sha256', SEGREDO).update(`${validade}|${versaoSenha()}`).digest('hex');
+  // Usuários extras (ex.: SDR) com senha própria; o administrador continua sendo a senha do painel
+  const ARQ_USUARIOS = path.join(config.DATA_DIR, 'usuarios.json');
+  const lerUsuarios = () => { try { return JSON.parse(fs.readFileSync(ARQ_USUARIOS, 'utf8')); } catch { return []; } };
+  const salvarUsuarios = (l) => fs.writeFileSync(ARQ_USUARIOS, JSON.stringify(l), { mode: 0o600 });
+  const chaveNome = (n) => String(n || '').trim().toLowerCase();
+  const versaoDe = (usuario) => (usuario ? lerUsuarios().find((u) => chaveNome(u.nome) === chaveNome(usuario))?.hash || 'removido' : versaoSenha());
+  const assinar = (validade, usuario = '') => crypto.createHmac('sha256', SEGREDO).update(`${validade}|${usuario}|${versaoDe(usuario)}`).digest('hex');
+  const assinarAntigo = (validade) => crypto.createHmac('sha256', SEGREDO).update(`${validade}|${versaoSenha()}`).digest('hex');
   const TRINTA_DIAS = 30 * 24 * 3600 * 1000;
+  const igual = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  // devolve { nome, papel } de quem está logado, ou null
   const logado = (req) => {
     const c = (req.headers.cookie || '').split(';').map((x) => x.trim()).find((x) => x.startsWith('painel='));
-    if (!c) return false;
-    const [validade, assinatura] = decodeURIComponent(c.slice(7)).split('.');
-    if (!validade || !assinatura || Number(validade) < Date.now()) return false;
-    const esperado = assinar(validade);
-    return assinatura.length === esperado.length && crypto.timingSafeEqual(Buffer.from(assinatura), Buffer.from(esperado));
+    if (!c) return null;
+    const partes = decodeURIComponent(c.slice(7)).split('.');
+    const validade = partes[0];
+    if (!validade || Number(validade) < Date.now()) return null;
+    if (partes.length === 2) return igual(partes[1], assinarAntigo(validade)) ? { nome: 'Administrador', papel: 'admin' } : null; // login antigo
+    const usuario = Buffer.from(partes[1] || '', 'base64url').toString();
+    if (!igual(partes[2] || '', assinar(validade, usuario))) return null;
+    if (!usuario) return { nome: 'Administrador', papel: 'admin' };
+    const u = lerUsuarios().find((x) => chaveNome(x.nome) === chaveNome(usuario));
+    return u ? { nome: u.nome, papel: u.papel || 'sdr' } : null;
   };
 
   app.get('/login', (_, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(PUBLICO, 'login.html')));
   app.get('/marca.png', (_, res) => res.sendFile(path.join(__dirname, '..', 'logo.png')));
   app.post('/login', (req, res) => {
-    if (!senhaConfere(req.body.senha)) return res.redirect('/login?erro=1');
+    const nome = String(req.body.usuario || '').trim();
+    let usuario = '';
+    if (nome) {
+      const u = lerUsuarios().find((x) => chaveNome(x.nome) === chaveNome(nome));
+      if (!u || !req.body.senha || !igual(crypto.scryptSync(req.body.senha, u.sal, 64).toString('hex'), u.hash)) return res.redirect('/login?erro=1');
+      usuario = u.nome;
+    } else if (!senhaConfere(req.body.senha)) return res.redirect('/login?erro=1');
     const validade = Date.now() + TRINTA_DIAS;
-    res.cookie('painel', `${validade}.${assinar(validade)}`, { maxAge: TRINTA_DIAS, httpOnly: true, sameSite: 'lax', secure: req.secure });
+    res.cookie('painel', `${validade}.${Buffer.from(usuario).toString('base64url')}.${assinar(validade, usuario)}`, { maxAge: TRINTA_DIAS, httpOnly: true, sameSite: 'lax', secure: req.secure });
     res.redirect('/');
   });
   // Link do "Chame no WhatsApp" dos posts: conta o clique e manda para o WhatsApp da loja (não pede senha)
@@ -89,9 +109,35 @@ function iniciarPainel() {
   app.get('/sair', (_, res) => res.clearCookie('painel').redirect('/login'));
 
   app.use((req, res, next) => {
-    if (logado(req)) return next();
-    if (req.path.startsWith('/api')) return res.status(401).json({ erro: 'não autenticado' });
-    res.redirect('/login');
+    req.usuario = logado(req);
+    if (!req.usuario) {
+      if (req.path.startsWith('/api')) return res.status(401).json({ erro: 'não autenticado' });
+      return res.redirect('/login');
+    }
+    // SDR só enxerga o comercial (fila, agenda, leads) e o próprio estado do painel
+    if (req.usuario.papel !== 'admin' && req.path.startsWith('/api') && !/^\/api\/(eu|estado|sdr|agenda|leads|time|estoque|comercial|leadsok\/estado)(\/|$)/.test(req.path)) {
+      return res.status(403).json({ erro: 'Sem permissão para esta área' });
+    }
+    next();
+  });
+  app.get('/api/eu', (req, res) => res.json(req.usuario));
+  // Usuários (só administrador): criar, trocar senha, remover
+  app.get('/api/usuarios', (_, res) => res.json(lerUsuarios().map(({ nome, papel, criadoEm }) => ({ nome, papel, criadoEm }))));
+  app.post('/api/usuarios', (req, res) => {
+    const nome = String(req.body.nome || '').trim();
+    const senha = String(req.body.senha || '');
+    if (!/^[\p{L}\p{N} ._-]{2,30}$/u.test(nome)) return res.status(400).json({ erro: 'Nome de 2 a 30 letras ou números' });
+    if (senha.length < 6) return res.status(400).json({ erro: 'Senha com pelo menos 6 caracteres' });
+    if (/^admin/i.test(nome)) return res.status(400).json({ erro: 'Escolha outro nome' });
+    const sal = crypto.randomBytes(16).toString('hex');
+    const lista = lerUsuarios().filter((u) => chaveNome(u.nome) !== chaveNome(nome));
+    lista.push({ nome, papel: 'sdr', sal, hash: crypto.scryptSync(senha, sal, 64).toString('hex'), criadoEm: Date.now() });
+    salvarUsuarios(lista);
+    res.json({ ok: true });
+  });
+  app.post('/api/usuarios/remover', (req, res) => {
+    salvarUsuarios(lerUsuarios().filter((u) => chaveNome(u.nome) !== chaveNome(req.body.nome)));
+    res.json({ ok: true });
   });
 
   // sem cache: depois de atualizar, o navegador sempre pega a tela nova
@@ -303,9 +349,11 @@ function iniciarPainel() {
   });
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
   app.get('/api/sdr', (_, res) => res.json(comercial.filaSdr({ horasSemResposta: leadsok.horasParado() })));
+  app.get('/api/sdr/historico', (req, res) => res.json(comercial.historicoContatos({ dia: req.query.dia, por: req.query.por })));
+  app.get('/api/sdr/buscar', (req, res) => res.json(comercial.buscarLead(req.query.q)));
   app.post('/api/sdr/contato', (req, res) => {
     try {
-      res.json(comercial.registrarContato(req.body));
+      res.json(comercial.registrarContato({ ...req.body, por: req.usuario.nome }));
     } catch (e) {
       res.status(400).json({ erro: e.message });
     }

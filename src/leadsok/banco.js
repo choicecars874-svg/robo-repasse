@@ -35,7 +35,7 @@ function abrir() {
       CREATE TABLE IF NOT EXISTS lk_sync_log (inicio INTEGER, fim INTEGER, tipo TEXT, ok INTEGER, erro TEXT, contagens TEXT);
     `);
     // colunas novas em bancos já criados: quando o agendamento apareceu e quando o lead virou venda
-    for (const sql of ['ALTER TABLE lk_agenda ADD COLUMN primeira_vez INTEGER', 'ALTER TABLE lk_leads ADD COLUMN vendido_em INTEGER']) {
+    for (const sql of ['ALTER TABLE lk_agenda ADD COLUMN primeira_vez INTEGER', 'ALTER TABLE lk_leads ADD COLUMN vendido_em INTEGER', 'ALTER TABLE lk_contatos ADD COLUMN por TEXT']) {
       try {
         db.exec(sql);
       } catch {}

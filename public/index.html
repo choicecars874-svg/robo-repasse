@@ -272,11 +272,16 @@
   <div class="kpis">
     <div class="kpi"><div class="eyebrow">Ligações</div><b id="sdLig">0</b><small id="sdAtend">atenderam: 0</small></div>
     <div class="kpi"><div class="eyebrow">Mensagens</div><b id="sdMsg">0</b><small>enviadas pelo SDR</small></div>
-    <div class="kpi"><div class="eyebrow">Leads trabalhados</div><b id="sdLeads">0</b><small>com pelo menos 1 contato hoje</small></div>
+    <div class="kpi"><div class="eyebrow">Agendou</div><b id="sdAgendou">0</b><small id="sdLeads">leads trabalhados: 0</small></div>
     <div class="kpi"><div class="eyebrow">Na fila</div><b id="sdFila">0</b><small>somando as 4 listas</small></div>
   </div>
   <p class="sub" style="margin:0 0 14px">Trabalhe de cima para baixo. Depois de cada contato, marque o resultado: o lead fica marcado como trabalhado hoje. Os dados vêm do LeadsOK (atualizam a cada 15 min); responder e agendar continua sendo feito no LeadsOK.</p>
+  <div class="card filtros"><div style="flex:3"><label>Buscar lead por telefone ou nome</label><input id="sdBusca" placeholder="ex.: 11961262931 ou Maria"></div><div style="align-self:end"><button class="btn" id="btnSdBusca">Buscar</button></div></div>
+  <div id="sdResultado"></div>
   <div id="sdListas"></div>
+  <div class="card" id="sdHistCard"><div class="cardTopo"><div><h2>Histórico de contatos</h2><p class="sub">Tudo o que foi registrado na fila, com quem fez e quando.</p></div></div>
+    <div class="filtros" style="margin-bottom:10px"><div><label>Dia</label><input type="date" id="sdHistDia"></div><div><label>Quem</label><select id="sdHistPor"><option value="">Todos</option></select></div></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Hora</th><th>Quem</th><th>Lead</th><th>Telefone</th><th>Canal</th><th>Contato</th><th>Resultado</th></tr></thead><tbody id="sdHist"></tbody></table></div></div>
 </section>
 
 <section id="comLeads">
@@ -589,6 +594,13 @@
 </section>
 
 <section id="sistema">
+  <div class="card" id="cardUsuarios">
+    <h2>Usuários</h2>
+    <p class="sub" style="margin:4px 0 10px">Acesso próprio para o SDR: ele entra com usuário e senha, vê só a Fila do SDR e a Agenda do dia, e cada contato fica registrado com o nome dele. O administrador continua entrando só com a senha do painel.</p>
+    <div class="contasIg" id="listaUsuarios"></div>
+    <div class="linha"><div><label>Nome do usuário</label><input id="novoUsuario" placeholder="ex.: Lucas SDR" autocomplete="off"></div><div><label>Senha (mín. 6)</label><input type="password" id="novaSenhaUsuario" autocomplete="new-password"></div></div>
+    <p><button class="btn verde" id="btnNovoUsuario">Criar usuário</button></p>
+  </div>
   <div class="card">
     <h2>Backup</h2>
     <p class="sub" style="margin:4px 0 12px">Baixe toda semana e guarde no Google Drive ou no computador. Leva configurações (grupos, siglas, buscas, texto do post), histórico de posts e números do painel. Num servidor novo: instale, escaneie o QR e restaure aqui. A sessão do WhatsApp e os tokens do Instagram não vão no arquivo.</p>
@@ -687,7 +699,7 @@ function abrirAba(aba) {
   const [titulo, sub] = TITULOS[aba];
   $('#tEyebrow').textContent = aba.startsWith('ig') ? 'Instagram' : aba.startsWith('com') ? 'Comercial' : ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, comSdr: carregarSdr, sistema: () => { carregarSistema(); carregarDominio(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, comSdr: carregarSdr, sistema: () => { carregarSistema(); carregarDominio(); carregarUsuarios(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -985,6 +997,15 @@ $('#btnDom').onclick = async () => {
   catch (e) { alert(e.message); }
   b.disabled = false; b.textContent = 'Verificar e ativar';
 };
+async function carregarUsuarios() {
+  const l = await api('/api/usuarios').catch(() => []);
+  $('#listaUsuarios').innerHTML = l.map((u) => `<div><span><b>${esc(u.nome)}</b> <span class="sub">· SDR · criado em ${hora(u.criadoEm)}</span></span><button class="btn verm" data-rmu="${esc(u.nome)}">Remover</button></div>`).join('') || '<div><span class="sub">Nenhum usuário além do administrador.</span></div>';
+  document.querySelectorAll('[data-rmu]').forEach((b) => b.onclick = async () => { if (confirm(`Remover o acesso de ${b.dataset.rmu}? O histórico de contatos dele continua.`)) { await api('/api/usuarios/remover', { method:'POST', body: JSON.stringify({ nome: b.dataset.rmu }) }); carregarUsuarios(); } });
+}
+$('#btnNovoUsuario').onclick = async () => {
+  try { await api('/api/usuarios', { method:'POST', body: JSON.stringify({ nome: $('#novoUsuario').value, senha: $('#novaSenhaUsuario').value }) }); alert(`Usuário criado. Ele entra em ${location.origin} com o nome e a senha.`); $('#novoUsuario').value = ''; $('#novaSenhaUsuario').value = ''; carregarUsuarios(); }
+  catch (e) { alert(e.message); }
+};
 async function carregarSistema() {
   const r = await api('/api/sistema');
   const tempo = (s) => s >= 86400 ? `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h` : s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min` : `${Math.floor(s / 60)} min`;
@@ -1277,13 +1298,22 @@ const LISTAS_SDR = [
 ];
 const haTempo = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`; };
 const soDigitos = (t) => String(t || '').replace(/\D/g, '');
-const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem enviada' };
+const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem enviada', agendou: 'agendou', ja_comprou: 'já comprou', sem_interesse: 'sem interesse' };
+const BOTOES_SDR = `<button class="btn verde" data-c="ligacao:agendou">Agendou</button><button class="btn" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button><button class="btn" data-c="mensagem:enviada">Mandei msg</button><button class="btn verm" data-c="ligacao:ja_comprou" title="Tira o lead da fila">Já comprou</button><button class="btn verm" data-c="ligacao:sem_interesse" title="Tira o lead da fila">Sem interesse</button>`;
+function ligarBotoesSdr(raiz) {
+  raiz.querySelectorAll('[data-c]').forEach((b) => b.onclick = async () => {
+    const [tipo, resultado] = b.dataset.c.split(':');
+    if (['ja_comprou', 'sem_interesse'].includes(resultado) && !confirm('Tirar este lead da fila do SDR?')) return;
+    await api('/api/sdr/contato', { method:'POST', body: JSON.stringify({ leadId: b.closest('[data-lead]').dataset.lead, tipo, resultado }) });
+    carregarSdr(); if ($('#sdBusca').value.trim()) buscarLeadSdr();
+  });
+}
 async function carregarSdr() {
   avisoLk();
   const r = await api('/api/sdr');
   if (r.erro) return;
   $('#sdLig').textContent = num(r.resumo.ligacoes); $('#sdAtend').textContent = `atenderam: ${num(r.resumo.atenderam)}`;
-  $('#sdMsg').textContent = num(r.resumo.mensagens); $('#sdLeads').textContent = num(r.resumo.leads);
+  $('#sdMsg').textContent = num(r.resumo.mensagens); $('#sdAgendou').textContent = num(r.resumo.agendou); $('#sdLeads').textContent = `leads trabalhados: ${num(r.resumo.leads)}`;
   $('#sdFila').textContent = num(LISTAS_SDR.reduce((a, [k]) => a + r.listas[k].length, 0));
   $('#sdListas').innerHTML = LISTAS_SDR.map(([k, titulo, desc]) => {
     const itens = r.listas[k];
@@ -1296,15 +1326,37 @@ async function carregarSdr() {
           <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>
             <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}</div></div>
           <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
-            <button class="btn verde" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button><button class="btn" data-c="mensagem:enviada">Mandei msg</button></div></div>`;
+            ${BOTOES_SDR}</div></div>`;
       }).join('') || '<div class="vazio">Nada nesta lista agora.</div>'}</div>`;
   }).join('');
-  document.querySelectorAll('.sdLinha [data-c]').forEach((b) => b.onclick = async () => {
-    const [tipo, resultado] = b.dataset.c.split(':');
-    await api('/api/sdr/contato', { method:'POST', body: JSON.stringify({ leadId: b.closest('.sdLinha').dataset.lead, tipo, resultado }) });
-    carregarSdr();
-  });
+  ligarBotoesSdr($('#sdListas'));
+  carregarHistSdr();
 }
+async function carregarHistSdr() {
+  if (!$('#sdHistDia').value) $('#sdHistDia').value = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+  const r = await api(`/api/sdr/historico?dia=${$('#sdHistDia').value}&por=${encodeURIComponent($('#sdHistPor').value)}`);
+  if (r.erro) return;
+  const atual = $('#sdHistPor').value;
+  $('#sdHistPor').innerHTML = '<option value="">Todos</option>' + r.pessoas.map((p) => `<option ${p === atual ? 'selected' : ''}>${esc(p)}</option>`).join('');
+  $('#sdHist').innerHTML = r.contatos.map((c) => `<tr><td>${new Date(c.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td><td>${esc(c.por || '—')}</td><td><b>${esc(c.nome || 'lead')}</b> <span class="sub">entrou ${haTempo(c.created_date)}</span></td><td class="sub">${c.whatsapp ? '+' + soDigitos(c.whatsapp) : '—'}</td><td>${esc(canal(c.origem))}</td><td>${c.tipo === 'ligacao' ? 'ligação' : 'mensagem'}</td><td class="${['ja_comprou', 'sem_interesse'].includes(c.resultado) ? 'ruim' : c.resultado === 'agendou' ? 'bom' : ''}">${esc(RESULTADO[c.resultado] || c.resultado || '')}</td></tr>`).join('') || '<tr><td colspan="7" class="sub">Nenhum contato registrado neste dia.</td></tr>';
+}
+$('#sdHistDia').onchange = carregarHistSdr; $('#sdHistPor').onchange = carregarHistSdr;
+async function buscarLeadSdr() {
+  const q = $('#sdBusca').value.trim();
+  if (q.length < 3) { $('#sdResultado').innerHTML = ''; return; }
+  const r = await api('/api/sdr/buscar?q=' + encodeURIComponent(q));
+  $('#sdResultado').innerHTML = `<div class="card"><h2>Resultado da busca <span class="sub">(${r.leads.length})</span></h2>${r.leads.map((l) => {
+    const tel = soDigitos(l.whatsapp);
+    const situacao = l.archive_reason ? `arquivado: ${l.archive_reason}` : l.aba_atual === 'agendados' ? 'agendado' : l.aba_atual === 'leads_novos' ? 'novo' : 'em conversa';
+    return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')} · entrou ${haTempo(l.created_date)} · ${esc(situacao)}${l.is_resgate ? ' · base de resgate' : ''}</span>
+      <div class="sub">${tel ? '+' + tel : ''}${l.agenda.length ? ' · agenda: ' + l.agenda.map((a) => new Date(a.data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })).join(', ') : ''}</div>
+      <div class="sub">${l.contatos.length ? 'Contatos: ' + l.contatos.map((c) => `${new Date(c.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} ${esc(c.por || '')} ${c.tipo === 'ligacao' ? 'ligação' : 'msg'} ${esc(RESULTADO[c.resultado] || '')}`).join(' · ') : 'Nenhum contato registrado ainda.'}</div></div>
+      <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a>` : ''}${BOTOES_SDR}</div></div>`;
+  }).join('') || '<div class="vazio">Nenhum lead encontrado com esse telefone ou nome (os dados vêm do LeadsOK).</div>'}</div>`;
+  ligarBotoesSdr($('#sdResultado'));
+}
+$('#btnSdBusca').onclick = buscarLeadSdr;
+$('#sdBusca').onkeydown = (e) => { if (e.key === 'Enter') buscarLeadSdr(); };
 
 async function carregarLkCfg() {
   const e = await api('/api/leadsok/estado');
@@ -1338,12 +1390,26 @@ $('#btnLkSync').onclick = async () => { await api('/api/leadsok/sincronizar', { 
 $('#btnLkDesligar').onclick = async () => { if (confirm('Desligar a coleta do LeadsOK? Os dados já coletados ficam.')) { await api('/api/leadsok/desligar', { method:'POST' }); carregarLkCfg(); } };
 setInterval(() => { if ($('#integracoes').classList.contains('ativo')) carregarLkCfg().catch(() => {}); }, 10000);
 
+let eu = { papel: 'admin' };
 barraPeriodo($('#perGeral'), () => carregarGeral());
 barraPeriodo($('#perGrupos'), () => carregarPainel());
 $('#filtroGrupo').onchange = () => carregarPainel();
-carregarConfig();
-let abaSalva = 'painel'; try { abaSalva = localStorage.getItem('aba') || 'painel'; } catch {}
-abrirAba(abaSalva);
+(async () => {
+  eu = await api('/api/eu').catch(() => ({ papel: 'admin' }));
+  if (eu.papel !== 'admin') {
+    // SDR: deixa no menu só a Fila do SDR e a Agenda do dia
+    document.querySelectorAll('nav > button, nav > .grupoMenu, nav .secao').forEach((el) => { el.hidden = !(el.id === 'menuComercial'); });
+    document.querySelectorAll('#menuComercial .sub-itens button').forEach((b) => { b.hidden = !['comSdr', 'comAgenda'].includes(b.dataset.aba); });
+    $('#menuComercial').classList.remove('fechado');
+    $('#sdHistCard').hidden = true;
+    document.querySelector('.barraTopo .eyebrow').textContent = 'Gestão Choice · ' + eu.nome;
+    abrirAba('comSdr');
+    return;
+  }
+  carregarConfig();
+  let abaSalva = 'painel'; try { abaSalva = localStorage.getItem('aba') || 'painel'; } catch {}
+  abrirAba(abaSalva);
+})();
 </script>
 </body>
 </html>

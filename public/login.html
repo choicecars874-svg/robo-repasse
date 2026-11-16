@@ -17,8 +17,9 @@
 <body>
 <form method="post" action="/login">
   <img src="/marca.png" alt="Choice Cars" style="height:64px;justify-self:center">
-  <input type="password" name="senha" placeholder="Senha" autofocus required>
-  <div class="erro" id="erro">Senha incorreta</div>
+  <input name="usuario" placeholder="Usuário (deixe vazio se for o administrador)" autocomplete="username">
+  <input type="password" name="senha" placeholder="Senha" autofocus required autocomplete="current-password">
+  <div class="erro" id="erro">Usuário ou senha incorretos</div>
   <button>Entrar</button>
 </form>
 <script>if (location.search.includes('erro')) document.getElementById('erro').style.display = 'block';</script>
