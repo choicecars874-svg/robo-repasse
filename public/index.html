@@ -293,6 +293,7 @@
   <p class="sub" style="margin:0 0 14px">Trabalhe de cima para baixo. Depois de cada contato, marque o resultado: o lead fica marcado como trabalhado hoje. Os dados vêm do LeadsOK (atualizam a cada 15 min); responder e agendar continua sendo feito no LeadsOK.</p>
   <div class="card filtros"><div style="flex:3"><label>Buscar lead por telefone, nome ou carro</label><input id="sdBusca" placeholder="ex.: 11961262931, Maria ou Corolla"></div><div style="align-self:end"><button class="btn" id="btnSdBusca">Buscar</button></div></div>
   <div id="sdResultado"></div>
+  <div class="card filtros soAdmin" id="sdTeste"><div><label>Lead de teste (só no painel, não vai ao LeadsOK)</label><input id="tsTel" placeholder="DDD + número, ex.: 48999990000"></div><div><label>Nome</label><input id="tsNome" value="Lead teste"></div><div><label>Carro</label><input id="tsCarro" value="Toyota Corolla XEi 2021"></div><div style="align-self:end;display:flex;gap:8px"><button class="btn verde" id="btnTeste">Criar</button><button class="btn" id="btnTesteRem">Apagar testes</button></div></div>
   <div id="sdListas"></div>
   <div class="card"><div class="cardTopo"><div><h2>Etapas</h2><p class="sub">Onde está cada lead que já foi trabalhado. Clique numa etapa para ver os leads.</p></div></div>
     <div class="atalhos" id="sdEtapasBtns"></div><div id="sdEtapa"></div></div>
@@ -1166,7 +1167,7 @@ async function carregarGeral() {
 
 // ---------- Comercial (LeadsOK) ----------
 const CORES_CANAL = ['#e2b350', '#60a5fa', '#34d399', '#f472b6', '#a78bfa', '#fbbf24', '#f87171', '#2dd4bf', '#94a3b8', '#fb923c'];
-const NOME_CANAL = { whatsapp: 'WhatsApp', webmotors: 'Webmotors', mercadolivre: 'Mercado Livre', faceads: 'Facebook Ads', instaads: 'Instagram Ads', napista: 'Napista', resgate: 'Resgate', manual: 'Manual', facebookparticular: 'Facebook (particular)', site: 'Site', unknown: 'Desconhecido' };
+const NOME_CANAL = { whatsapp: 'WhatsApp', webmotors: 'Webmotors', mercadolivre: 'Mercado Livre', faceads: 'Facebook Ads', instaads: 'Instagram Ads', napista: 'Napista', resgate: 'Resgate', manual: 'Manual', facebookparticular: 'Facebook (particular)', site: 'Site', teste: 'Teste', unknown: 'Desconhecido' };
 const canal = (o) => NOME_CANAL[o] || o || '—';
 const pct = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '—');
 async function avisoLk() {
@@ -1546,6 +1547,11 @@ async function carregarHistSdr() {
   $('#sdHistPor').innerHTML = '<option value="">Todos</option>' + r.pessoas.map((p) => `<option ${p === atual ? 'selected' : ''}>${esc(p)}</option>`).join('');
   $('#sdHist').innerHTML = r.contatos.map((c) => `<tr><td>${new Date(c.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td><td>${esc(c.por || '—')}</td><td><b>${esc(c.nome || 'lead')}</b> <span class="sub">entrou ${haTempo(c.created_date)}</span></td><td class="sub">${c.whatsapp ? '+' + soDigitos(c.whatsapp) : '—'}</td><td>${esc(canal(c.origem))}</td><td>${c.tipo === 'ligacao' ? 'ligação' : 'mensagem'}</td><td class="${['ja_comprou', 'sem_interesse'].includes(c.resultado) ? 'ruim' : c.resultado === 'agendou' ? 'bom' : ''}">${esc(RESULTADO[c.resultado] || c.resultado || '')}${c.nota ? `<div class="sub" style="max-width:340px">${esc(c.interesse ? c.interesse + ' · ' : '')}${esc(c.nota)}</div>` : ''}${c.no_leadsok ? `<div class="sub ${c.no_leadsok === 'ok' ? 'bom' : 'ruim'}">${c.no_leadsok === 'ok' ? 'gravado nas Notas do LeadsOK' : 'LeadsOK: ' + esc(c.no_leadsok)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="sub">Nenhum contato registrado neste dia.</td></tr>';
 }
+$('#btnTeste').onclick = async () => {
+  try { await api('/api/sdr/lead-teste', { method:'POST', body: JSON.stringify({ telefone: $('#tsTel').value, nome: $('#tsNome').value, carro: $('#tsCarro').value }) }); alert('Lead de teste criado: está em "Leads novos".'); carregarSdr(); }
+  catch (e) { alert(e.message); }
+};
+$('#btnTesteRem').onclick = async () => { if (!confirm('Apagar todos os leads de teste e o que foi registrado neles?')) return; const r = await api('/api/sdr/lead-teste', { method:'POST', body: JSON.stringify({ remover: true }) }); alert(`${r.removidos} lead(s) de teste apagado(s).`); carregarSdr(); };
 $('#sdHistDia').onchange = carregarHistSdr; $('#sdHistPor').onchange = carregarHistSdr;
 async function buscarLeadSdr() {
   const q = $('#sdBusca').value.trim();
@@ -1614,7 +1620,7 @@ $('#filtroGrupo').onchange = () => carregarPainel();
     document.querySelectorAll('nav > button, nav > .grupoMenu, nav .secao').forEach((el) => { el.hidden = !(el.id === 'menuComercial'); });
     document.querySelectorAll('#menuComercial .sub-itens button').forEach((b) => { b.hidden = !['comSdr', 'comAgenda'].includes(b.dataset.aba); });
     $('#menuComercial').classList.remove('fechado');
-    $('#sdHistCard').hidden = true;
+    $('#sdHistCard').hidden = true; $('#sdTeste').hidden = true;
     document.querySelector('.barraTopo .eyebrow').textContent = 'Gestão Choice · ' + eu.nome;
     abrirAba('comSdr');
     return;

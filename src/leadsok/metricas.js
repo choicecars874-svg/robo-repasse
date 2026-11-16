@@ -8,9 +8,9 @@ const nomeStatus = (s) => STATUS_FICHA[s] || 'Outros';
 
 // Leads do período (pela data de criação). base: "entrada" (sem a base antiga de resgate) ou "resgate"
 // Canais que não entram na visão de Leads e canais (contato direto, não é mídia paga)
-const FORA_DOS_CANAIS = ['whatsapp', 'manual'];
+const FORA_DOS_CANAIS = ['whatsapp', 'manual', 'teste'];
 function coorte({ de, ate, origem, base = 'entrada', ocultar = [] }) {
-  const filtros = ["date(l.created_date, '-3 hours') BETWEEN ? AND ?", 'l.is_resgate = ?'];
+  const filtros = ["date(l.created_date, '-3 hours') BETWEEN ? AND ?", 'l.is_resgate = ?', "COALESCE(l.origem, '') != 'teste'"];
   const args = [de, ate, base === 'resgate' ? 1 : 0];
   if (origem) {
     filtros.push('l.origem = ?');
@@ -415,4 +415,27 @@ function buscarLead(q) {
   return { leads: leads.map((l) => ({ ...l, contatos: cont.all(l.id), agenda: ag.all(l.id) })) };
 }
 
-module.exports = { registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+// Lead de teste (só no painel, não existe no LeadsOK): para treinar o SDR e ver o fluxo. Fica fora dos números.
+function criarLeadTeste({ telefone, nome, carro }) {
+  const d = banco.abrir();
+  if (!d) throw new Error(banco.erro());
+  let dig = String(telefone || '').replace(/\D/g, '');
+  if (dig.length === 10 || dig.length === 11) dig = '55' + dig;
+  if (dig.length < 12 || dig.length > 13) throw new Error('Telefone inválido (use DDD + número)');
+  const id = 'teste-' + dig;
+  const agora = new Date().toISOString();
+  d.prepare(`INSERT OR REPLACE INTO lk_leads (id, nome, whatsapp, origem, vendedor, vendedor_is_ia, aba_atual, created_date, ultima_msg_owner, ultima_msg_at, is_resgate, first_seen_at, updated_at, carro)
+    VALUES (?, ?, ?, 'teste', 'Teste', 0, 'leads_novos', ?, NULL, NULL, 0, ?, ?, ?)`).run(id, String(nome || 'Lead teste').slice(0, 60), '+' + dig, agora, Date.now(), Date.now(), String(carro || '').slice(0, 120) || null);
+  // começa do zero: sem contatos nem visitas anteriores
+  d.prepare('DELETE FROM lk_contatos WHERE lead_id = ?').run(id);
+  d.prepare('DELETE FROM lk_visitas WHERE lead_id = ?').run(id);
+  return { ok: true, id };
+}
+function removerLeadsTeste() {
+  const d = banco.abrir();
+  if (!d) throw new Error(banco.erro());
+  for (const t of ['lk_contatos', 'lk_visitas']) d.prepare(`DELETE FROM ${t} WHERE lead_id LIKE 'teste-%'`).run();
+  return { ok: true, removidos: Number(d.prepare("DELETE FROM lk_leads WHERE id LIKE 'teste-%'").run().changes) };
+}
+
+module.exports = { criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

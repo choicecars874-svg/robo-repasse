@@ -336,6 +336,8 @@ const FORMATOS_NOTA = {
 };
 let filaNotas = Promise.resolve();
 function gravarNotaLeadsOK(leadId, linha) {
+  // lead de teste criado no painel: não existe no LeadsOK
+  if (String(leadId).startsWith('teste-')) return Promise.reject(new Error('lead de teste (só no painel)'));
   // uma gravação por vez, para não atropelar a nota do mesmo lead
   const tarefa = filaNotas.then(async () => {
     const c = obterCliente();

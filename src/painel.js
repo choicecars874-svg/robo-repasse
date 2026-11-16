@@ -360,6 +360,14 @@ function iniciarPainel() {
   });
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
   app.get('/api/sdr', (_, res) => res.json(comercial.filaSdr({ horasSemResposta: leadsok.horasParado() })));
+  app.post('/api/sdr/lead-teste', (req, res) => {
+    try {
+      if (req.usuario.papel !== 'admin') return res.status(403).json({ erro: 'Só o administrador cria leads de teste' });
+      res.json(req.body.remover ? comercial.removerLeadsTeste() : comercial.criarLeadTeste(req.body));
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
   app.get('/api/sdr/historico', (req, res) => res.json(comercial.historicoContatos({ dia: req.query.dia, por: req.query.por })));
   app.get('/api/sdr/buscar', (req, res) => res.json(comercial.buscarLead(req.query.q)));
   app.post('/api/sdr/contato', (req, res) => {
