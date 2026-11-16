@@ -252,7 +252,11 @@ function resumoPeriodo(de, ate) {
 
 // Fila do SDR: quem ligar ou chamar hoje, em ordem de urgência. Só leads de entrada (sem a base de resgate)
 // e não arquivados. Cada lead aparece numa lista só (a mais urgente).
-function filaSdr({ horasSemResposta = 1, vendedor = '' } = {}) {
+function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
+  const hTentar = Number(cadencia.horasTentarDeNovo) || 3;
+  const hRecado = Number(cadencia.horasAguardandoRecado) || 24;
+  const maxTent = Number(cadencia.tentativasMax) || 3;
+  const diasNovos = Number(cadencia.diasNovos) || 7;
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
   const hoje = diaSP();
@@ -278,9 +282,9 @@ function filaSdr({ horasSemResposta = 1, vendedor = '' } = {}) {
       WHERE ${EH_VISITA} AND date(a.data, '-3 hours') BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = a.lead_id AND v.data_agendada = a.data)
         AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse')) ${V} ORDER BY a.data ASC LIMIT 150`).all(diaSP(agora - 7 * 86400000), amanha, ...va),
     // 3) ligar: leads dos últimos 7 dias que o SDR ainda não trabalhou e o cliente não respondeu (mais novos primeiro)
-    novos: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.created_date > ? AND COALESCE(l.ultima_msg_owner, 'salesman') != 'customers' ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 200`).all(iso(7 * 86400000), ...va),
+    novos: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.created_date > ? AND COALESCE(l.ultima_msg_owner, 'salesman') != 'customers' ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 200`).all(iso(diasNovos * 86400000), ...va),
     // 4) conversa parada: loja falou por último há 2 a 7 dias e o cliente sumiu, ou cliente sem resposta há 7 a 30 dias
-    retomar: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.created_date <= ? AND ((l.ultima_msg_owner = 'salesman' AND l.ultima_msg_at BETWEEN ? AND ?) OR (l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ?)) ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 150`).all(iso(7 * 86400000), iso(30 * 86400000), iso(2 * 86400000), iso(30 * 86400000), iso(7 * 86400000), ...va),
+    retomar: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.created_date <= ? AND ((l.ultima_msg_owner = 'salesman' AND l.ultima_msg_at BETWEEN ? AND ?) OR (l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ?)) ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 150`).all(iso(diasNovos * 86400000), iso(30 * 86400000), iso(2 * 86400000), iso(30 * 86400000), iso(7 * 86400000), ...va),
     // 5) pós-visita (últimos 14 dias): não veio, ou veio e não comprou, e o SDR ainda não falou depois
     posVisita: d.prepare(`SELECT ${campos}, v.data_agendada agenda_data, v.compareceu, v.comprou FROM lk_visitas v JOIN lk_leads l ON l.id = v.lead_id
       WHERE l.is_resgate = 0 AND l.whatsapp IS NOT NULL AND v.marcado_em > ? AND (v.compareceu = 0 OR (v.compareceu = 1 AND v.comprou = 0))
@@ -317,10 +321,11 @@ function filaSdr({ horasSemResposta = 1, vendedor = '' } = {}) {
     if (['ja_comprou', 'sem_interesse'].includes(c.resultado)) return 'encerrados';
     if (c.resultado === 'agendou') return 'agendados';
     if (c.proximo_em) return c.proximo_em <= fimDeHoje ? 'retornar' : 'retorno';
-    if (c.resultado === 'nao_atendeu') return tentativas[id] >= 3 ? 'semContato' : agora - c.em >= 3 * 3600000 ? 'retornar' : 'tentar';
+    if (c.resultado === 'nao_atendeu') return tentativas[id] >= maxTent ? 'semContato' : agora - c.em >= hTentar * 3600000 ? 'retornar' : 'tentar';
     if (c.resultado === 'enviada') {
       const respondeu = lead && lead.ultima_msg_owner === 'customers' && Date.parse(lead.ultima_msg_at) > c.em;
-      return respondeu || agora - c.em >= 24 * 3600000 ? 'fila' : 'aguardando';
+      // recado sem resposta depois do prazo: follow-up; se o cliente respondeu, volta para a fila ("Cliente respondeu")
+      return respondeu ? 'fila' : agora - c.em >= hRecado * 3600000 ? 'retornar' : 'aguardando';
     }
     // atendeu sem retorno marcado: volta em 24 h
     return agora - c.em >= 24 * 3600000 ? 'fila' : 'aguardando';
@@ -382,7 +387,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '' } = {}) {
   // vendedores com leads em aberto (para escolher a carteira)
   const vendedores = d.prepare(`SELECT l.vendedor, COUNT(*) n FROM lk_leads l WHERE l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND l.vendedor IS NOT NULL AND l.vendedor_is_ia = 0 AND l.created_date > ?
     GROUP BY l.vendedor ORDER BY n DESC`).all(iso(30 * 86400000));
-  return { dia: hoje, horasSemResposta, vendedor, vendedores, listas, etapas, resumo };
+  return { dia: hoje, horasSemResposta, vendedor, vendedores, listas, etapas, resumo, cadencia: { horasTentarDeNovo: hTentar, horasAguardandoRecado: hRecado, tentativasMax: maxTent, diasNovos } };
 }
 
 const RESULTADOS = ['atendeu', 'nao_atendeu', 'enviada', 'agendou', 'ja_comprou', 'sem_interesse'];
@@ -403,6 +408,34 @@ function marcarNoLeadsOK(id, situacao) {
 }
 
 // Histórico de contatos registrados (para acompanhar o SDR): por dia e por pessoa
+// Resultado do SDR no período: por dia e por pessoa (ligações, atenderam, recados, agendou) e o que virou visita
+function resultadoSdr({ de, ate, por } = {}) {
+  const d = banco.abrir();
+  if (!d) return { erro: banco.erro() };
+  const filtro = por ? 'AND c.por = ?' : '';
+  const args = por ? [de, ate, por] : [de, ate];
+  const ATENDEU = "c.tipo = 'ligacao' AND c.resultado IN ('atendeu', 'agendou', 'ja_comprou', 'sem_interesse')";
+  const cols = `TOTAL(c.tipo = 'ligacao') ligacoes, TOTAL(${ATENDEU}) atenderam, TOTAL(c.resultado = 'nao_atendeu') naoAtenderam,
+    TOTAL(c.tipo = 'mensagem') mensagens, TOTAL(c.resultado = 'agendou') agendou, TOTAL(c.resultado IN ('ja_comprou', 'sem_interesse')) encerrados,
+    COUNT(DISTINCT c.lead_id) leads`;
+  const porDia = d.prepare(`SELECT c.dia, ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY c.dia ORDER BY c.dia`).all(...args);
+  const porPessoa = d.prepare(`SELECT COALESCE(c.por, '—') por, ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY c.por ORDER BY ligacoes DESC`).all(...args);
+  const total = d.prepare(`SELECT ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro}`).get(...args);
+  // visitas dos leads que o SDR agendou no período: quantas aconteceram, quantas compraram
+  const vis = d.prepare(`SELECT COALESCE(c.por, '—') por, COUNT(DISTINCT c.lead_id) agendados,
+      COUNT(DISTINCT CASE WHEN v.compareceu = 1 THEN c.lead_id END) vieram, COUNT(DISTINCT CASE WHEN v.compareceu = 0 THEN c.lead_id END) naoVieram,
+      COUNT(DISTINCT CASE WHEN v.comprou = 1 THEN c.lead_id END) compraram
+    FROM lk_contatos c LEFT JOIN lk_visitas v ON v.lead_id = c.lead_id AND v.marcado_em > c.em
+    WHERE c.resultado = 'agendou' AND c.dia BETWEEN ? AND ? ${filtro} GROUP BY c.por`).all(...args);
+  const visMapa = Object.fromEntries(vis.map((x) => [x.por, x]));
+  const visTot = vis.reduce((a, x) => ({ vieram: a.vieram + x.vieram, naoVieram: a.naoVieram + x.naoVieram, compraram: a.compraram + x.compraram }), { vieram: 0, naoVieram: 0, compraram: 0 });
+  // horário das ligações (para ver em que hora ele mais atende)
+  const porHora = d.prepare(`SELECT CAST(strftime('%H', c.em / 1000, 'unixepoch', '-3 hours') AS INTEGER) hora, TOTAL(c.tipo = 'ligacao') ligacoes, TOTAL(${ATENDEU}) atenderam
+    FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY hora ORDER BY hora`).all(...args);
+  const pessoas = d.prepare('SELECT DISTINCT por FROM lk_contatos WHERE por IS NOT NULL ORDER BY por').all().map((x) => x.por);
+  return { de, ate, por: por || null, total: { ...total, ...visTot }, porDia, porPessoa: porPessoa.map((p) => ({ ...p, vieram: visMapa[p.por]?.vieram || 0, naoVieram: visMapa[p.por]?.naoVieram || 0, compraram: visMapa[p.por]?.compraram || 0 })), porHora, pessoas };
+}
+
 function historicoContatos({ dia, por } = {}) {
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
@@ -457,4 +490,4 @@ function removerLeadsTeste() {
   return { ok: true, removidos: Number(d.prepare("DELETE FROM lk_leads WHERE id LIKE 'teste-%'").run().changes) };
 }
 
-module.exports = { criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+module.exports = { resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

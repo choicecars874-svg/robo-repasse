@@ -89,7 +89,8 @@ function iniciarPainel() {
     const nome = String(req.body.usuario || '').trim();
     let usuario = '';
     if (nome) {
-      const u = lerUsuarios().find((x) => chaveNome(x.nome) === chaveNome(nome));
+      // entra pelo login (ex.: marcos@choicecars) ou pelo nome
+      const u = lerUsuarios().find((x) => chaveNome(x.login) === chaveNome(nome)) || lerUsuarios().find((x) => chaveNome(x.nome) === chaveNome(nome));
       if (!u || !req.body.senha || !igual(crypto.scryptSync(req.body.senha, u.sal, 64).toString('hex'), u.hash)) return res.redirect('/login?erro=1');
       usuario = u.nome;
     } else if (!senhaConfere(req.body.senha)) return res.redirect('/login?erro=1');
@@ -122,16 +123,19 @@ function iniciarPainel() {
   });
   app.get('/api/eu', (req, res) => res.json(req.usuario));
   // Usuários (só administrador): criar, trocar senha, remover
-  app.get('/api/usuarios', (_, res) => res.json(lerUsuarios().map(({ nome, papel, criadoEm }) => ({ nome, papel, criadoEm }))));
+  app.get('/api/usuarios', (_, res) => res.json(lerUsuarios().map(({ nome, login, papel, criadoEm }) => ({ nome, login: login || null, papel, criadoEm }))));
   app.post('/api/usuarios', (req, res) => {
     const nome = String(req.body.nome || '').trim();
     const senha = String(req.body.senha || '');
     if (!/^[\p{L}\p{N} ._-]{2,30}$/u.test(nome)) return res.status(400).json({ erro: 'Nome de 2 a 30 letras ou números' });
     if (senha.length < 6) return res.status(400).json({ erro: 'Senha com pelo menos 6 caracteres' });
     if (/^admin/i.test(nome)) return res.status(400).json({ erro: 'Escolha outro nome' });
+    const login = String(req.body.login || '').trim().toLowerCase();
+    if (login && !/^[a-z0-9._@-]{3,60}$/.test(login)) return res.status(400).json({ erro: 'Login com 3 a 60 letras, números, ponto, @ ou hífen' });
     const sal = crypto.randomBytes(16).toString('hex');
     const lista = lerUsuarios().filter((u) => chaveNome(u.nome) !== chaveNome(nome));
-    lista.push({ nome, papel: 'sdr', sal, hash: crypto.scryptSync(senha, sal, 64).toString('hex'), criadoEm: Date.now() });
+    if (login && lista.some((u) => chaveNome(u.login) === login || chaveNome(u.nome) === login)) return res.status(400).json({ erro: 'Esse login já está em uso' });
+    lista.push({ nome, ...(login ? { login } : {}), papel: 'sdr', sal, hash: crypto.scryptSync(senha, sal, 64).toString('hex'), criadoEm: Date.now() });
     salvarUsuarios(lista);
     res.json({ ok: true });
   });
@@ -359,7 +363,25 @@ function iniciarPainel() {
     }
   });
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
-  app.get('/api/sdr', (req, res) => res.json(comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: String(req.query.vendedor || '').slice(0, 80) })));
+  app.get('/api/sdr', (req, res) => {
+    const sdr = config.get().sdr || {};
+    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: String(req.query.vendedor || '').slice(0, 80), cadencia: sdr }), recado: sdr.recado || '', objecoes: sdr.objecoes || [] });
+  });
+  // resultado do SDR: o administrador vê todos; o SDR vê só o dele
+  app.get('/api/sdr/resultado', (req, res) => {
+    const hoje = comercial.diaSP();
+    const por = req.usuario.papel === 'admin' ? String(req.query.por || '') : req.usuario.nome;
+    res.json(comercial.resultadoSdr({ de: req.query.de || hoje, ate: req.query.ate || hoje, por }));
+  });
+  // cadência, recado e objeções (só o administrador muda)
+  app.post('/api/sdr/config', (req, res) => {
+    if (req.usuario.papel !== 'admin') return res.status(403).json({ erro: 'Só o administrador muda a configuração do SDR' });
+    const b = req.body || {};
+    const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
+    const objecoes = (Array.isArray(b.objecoes) ? b.objecoes : []).map((o) => ({ objecao: String(o.objecao || '').trim().slice(0, 120), resposta: String(o.resposta || '').trim().slice(0, 1500) })).filter((o) => o.objecao).slice(0, 40);
+    const atual = config.get();
+    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 24), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, objecoes } }).sdr);
+  });
   app.post('/api/sdr/lead-teste', (req, res) => {
     try {
       if (req.usuario.papel !== 'admin') return res.status(403).json({ erro: 'Só o administrador cria leads de teste' });

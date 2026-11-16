@@ -71,6 +71,26 @@ const PADRAO = {
   // investimento mensal em cada canal (R$), para calcular custo por lead, agendamento e venda
   investimento: {},
 
+  // cadência do SDR (Fila do SDR), texto do recado de "Não atendeu" e argumentário de objeções
+  sdr: {
+    horasTentarDeNovo: 3, // não atendeu: volta para o follow-up depois disso
+    horasAguardandoRecado: 24, // mandou recado e o cliente não respondeu: volta para o follow-up
+    tentativasMax: 3, // tentativas seguidas sem atender até ir para "Sem contato"
+    diasNovos: 7, // "Ligar agora": leads de até tantos dias
+    recado:
+      'Fala {lead}, aqui é {sdr} da Choice Cars, prazer falar com você! Notamos seu interesse {carro} e tentei te ligar pra entender melhor se é esse veículo mesmo que você procura. Vai ser um prazer te atender e te dar uma atenção especial. Qual o melhor horário pra gente conversar?',
+    objecoes: [
+      { objecao: 'Já comprei o carro', resposta: 'Que bom, parabéns! Posso te perguntar qual você pegou e o que pesou na escolha? (ouça) Muita gente que acabou de comprar ainda tem um carro pra vender ou alguém da família procurando. Se precisar avaliar seu usado ou indicar alguém, a gente faz uma avaliação justa e rápida. Posso te mandar meu contato?' },
+      { objecao: 'Só estou pesquisando', resposta: 'Perfeito, é o melhor momento pra conversar: você compara sem pressa. Me conta, o que é mais importante pra você no próximo carro: parcela, ano ou modelo? (ouça) Tenho duas ou três opções nesse perfil. Que tal vir ver pessoalmente sábado de manhã, sem compromisso? Dá pra fazer uma simulação na hora.' },
+      { objecao: 'Achei caro / tem desconto?', resposta: 'Entendo. Comparado com qual referência? (ouça) Nosso preço já está abaixo da FIPE em muitos casos e o carro vai revisado. O valor final a gente fecha pessoalmente, olhando entrada, troca e forma de pagamento. Consegue passar aqui pra gente montar a melhor condição?' },
+      { objecao: 'Não tenho entrada', resposta: 'Sem problema, temos opções com entrada baixa e às vezes sem entrada, depende da análise. Você tem algum carro pra dar na troca? (ouça) Posso já fazer uma simulação: me passa só seu nome completo e data de nascimento? Com o resultado a gente marca pra você vir ver o carro.' },
+      { objecao: 'Meu nome está com restrição', resposta: 'Entendo, acontece bastante. Trabalhamos com vários bancos e alguns aprovam mesmo com restrição, com uma entrada um pouco maior. Vale a pena fazer a simulação sem compromisso. Se aprovar, você vem ver o carro já sabendo a parcela. Posso simular?' },
+      { objecao: 'Vou pensar / falar com a família', resposta: 'Claro, decisão importante. O que ficou de dúvida pra você conversar com eles? (ouça) Que tal vir junto com quem decide com você? Assim todo mundo vê o carro e tira as dúvidas na hora. Sábado às 10h ou às 14h fica melhor?' },
+      { objecao: 'Moro longe / não consigo ir à loja', resposta: 'Entendo. Posso te mandar um vídeo completo do carro agora e fazer uma chamada de vídeo mostrando os detalhes. Se gostar, a gente reserva e você vem uma vez só pra fechar e retirar. Qual o melhor horário pra chamada?' },
+      { objecao: 'Me manda por mensagem, não posso falar', resposta: 'Claro! Vou te mandar no WhatsApp as fotos, o valor e uma simulação. Só me diz: é pra você mesmo e pretende usar o carro no dia a dia? Qual o melhor horário pra eu te ligar rapidinho, 2 minutos, depois que você olhar?' },
+    ],
+  },
+
   // sigla de cada grupo de origem no código do post (#DR1001). Vazio = automática pelo nome do grupo
   siglas: {},
 

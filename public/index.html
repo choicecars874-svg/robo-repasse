@@ -143,6 +143,7 @@
   .tmGraf .gr em { position:absolute; top:-16px; font:600 10.5px var(--mono); font-style:normal; color:var(--sub); white-space:nowrap; } .tmGraf span { font-size:11px; color:var(--sub); white-space:nowrap; }
   .tmGraf.linha { gap:1px; flex-wrap:wrap; height:auto; } .tmGraf.linha .col { height:160px; } .tmEixo { flex:0 0 100%; display:flex; justify-content:space-between; margin-top:6px; } .tmGraf.linha .gr i { max-width:none; border-radius:2px 2px 0 0; }
   .carro { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ouro); margin-top:2px; } .carro .i { width:14px; height:14px; flex:none; }
+  .objecao { border-bottom:1px solid var(--borda); padding:10px 0; } .objecao:last-child { border:0; } .objecao p { margin:8px 0 2px; color:var(--txt); line-height:1.55; white-space:pre-line; }
   .funilExtra { display:flex; gap:24px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--borda); font-size:14px; } .funilExtra b { font-size:20px; margin-right:4px; }
   .agItem { display:grid; grid-template-columns:70px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--borda); } .agItem:last-child { border:0; }
   .kpis.kpis5 { grid-template-columns:repeat(5, minmax(0, 1fr)); } .kpi.ok b { color:var(--verde); } .kpi.mau b { color:var(--verm); } .kpi.ouro b { color:var(--ouro); }
@@ -221,6 +222,7 @@
     <button class="titulo" data-abre="menuComercial"><svg class="i"><use href="#i-leads"/></svg>Comercial <svg class="i seta"><use href="#i-seta"/></svg></button>
     <div class="sub-itens">
       <button data-aba="comSdr">Fila do SDR</button>
+      <button data-aba="comSdrRes">Resultado do SDR</button>
       <button data-aba="comLeads">Leads e canais</button>
       <button data-aba="comTime">Time</button>
       <button data-aba="comAgenda">Agenda</button>
@@ -297,6 +299,12 @@
   <div id="sdListas"></div>
   <div class="card"><div class="cardTopo"><div><h2>Etapas</h2><p class="sub">Onde está cada lead que já foi trabalhado. Clique numa etapa para ver os leads.</p></div></div>
     <div class="atalhos" id="sdEtapasBtns"></div><div id="sdEtapa"></div></div>
+  <div class="card"><details id="sdObjDet"><summary><h2 style="display:inline">Argumentário de objeções</h2> <span class="sub">· o que responder quando o cliente trava</span></summary><div id="sdObjecoes" style="margin-top:12px"></div></details></div>
+  <div class="card soAdmin" id="sdCfgCard"><details><summary><h2 style="display:inline">Configuração do SDR</h2> <span class="sub">· prazos da cadência, texto do recado e objeções</span></summary>
+    <div class="linha" style="margin-top:12px"><div><label>Não atendeu: tentar de novo depois de (horas)</label><input type="number" step="0.5" min="0.5" id="cfTentar"></div><div><label>Recado sem resposta: follow-up depois de (horas)</label><input type="number" min="1" id="cfRecado"></div><div><label>Tentativas até "Sem contato"</label><input type="number" min="1" max="10" id="cfMax"></div><div><label>"Ligar agora": leads de até (dias)</label><input type="number" min="1" max="30" id="cfDias"></div></div>
+    <label>Texto do recado de "Não atendeu" ({lead} = nome do cliente, {sdr} = quem está logado, {carro} = "no Corolla XEi" ou "em um dos nossos carros")</label><textarea id="cfRecadoTxt" style="min-height:110px;font-family:inherit"></textarea>
+    <label>Objeções: uma por bloco. 1ª linha = objeção, linhas seguintes = resposta. Deixe uma linha em branco entre as objeções.</label><textarea id="cfObj" style="min-height:260px;font-family:inherit"></textarea>
+    <p><button class="btn verde" id="btnCfSdr">Salvar configuração do SDR</button></p></details></div>
   <div class="card" id="sdHistCard"><div class="cardTopo"><div><h2>Histórico de contatos</h2><p class="sub">Tudo o que foi registrado na fila, com quem fez e quando.</p></div></div>
     <div class="filtros" style="margin-bottom:10px"><div><label>Dia</label><input type="date" id="sdHistDia"></div><div><label>Quem</label><select id="sdHistPor"><option value="">Todos</option></select></div></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Hora</th><th>Quem</th><th>Lead</th><th>Telefone</th><th>Canal</th><th>Contato</th><th>Resultado</th></tr></thead><tbody id="sdHist"></tbody></table></div></div>
@@ -342,6 +350,19 @@
   </div>
   <p class="sub" id="tmObs"></p>
   <div class="contas" id="tmCartoes"></div>
+</section>
+
+<section id="comSdrRes">
+  <div class="lkAviso" hidden></div>
+  <div class="periodoBar" id="perSdrRes"></div>
+  <div class="card filtros soAdmin"><div><label>Pessoa</label><select id="srPor"><option value="">Todos</option></select></div></div>
+  <div class="kpis kpis5" id="srKpis"></div>
+  <div class="grade">
+    <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Por dia</h2><p class="sub">Ligações, quem atendeu e agendamentos de cada dia.</p></div><div class="legenda"><span style="--c:var(--azul)">Ligações</span><span style="--c:var(--verde)">Atenderam</span><span style="--c:var(--ouro)">Agendou</span></div></div><div class="tmGraf" id="srDias"></div></div>
+    <div class="card"><h2>Que horas mais atendem</h2><p class="sub">Ligações por hora do dia e quantas foram atendidas.</p><div id="srHoras"></div></div>
+  </div>
+  <div class="card"><h2>Por pessoa</h2><p class="sub">Agendou = agendamentos feitos no período. Vieram e compraram = visitas desses agendamentos marcadas na Agenda.</p>
+    <table><thead><tr><th>Pessoa</th><th>Ligações</th><th>Atenderam</th><th>Recados</th><th>Leads</th><th>Agendou</th><th>Vieram</th><th>Não vieram</th><th>Compraram</th></tr></thead><tbody id="srPessoas"></tbody></table></div>
 </section>
 
 <section id="comAgenda">
@@ -635,7 +656,7 @@
     <h2>Usuários</h2>
     <p class="sub" style="margin:4px 0 10px">Acesso próprio para o SDR: ele entra com usuário e senha, vê só a Fila do SDR e a Agenda do dia, e cada contato fica registrado com o nome dele. O administrador continua entrando só com a senha do painel.</p>
     <div class="contasIg" id="listaUsuarios"></div>
-    <div class="linha"><div><label>Nome do usuário</label><input id="novoUsuario" placeholder="ex.: Lucas SDR" autocomplete="off"></div><div><label>Senha (mín. 6)</label><input type="password" id="novaSenhaUsuario" autocomplete="new-password"></div></div>
+    <div class="linha"><div><label>Nome (aparece no recado e na carteira)</label><input id="novoUsuario" placeholder="ex.: Marcos" autocomplete="off"></div><div><label>Login (opcional)</label><input id="novoLogin" placeholder="ex.: marcos@choicecars" autocomplete="off" autocapitalize="none"></div><div><label>Senha (mín. 6)</label><input type="password" id="novaSenhaUsuario" autocomplete="new-password"></div></div>
     <p><button class="btn verde" id="btnNovoUsuario">Criar usuário</button></p>
   </div>
   <div class="card">
@@ -710,6 +731,7 @@ const TITULOS = {
   painel: ['Painel', 'Visão geral da Choice: metas do dia e o principal de cada área.'],
   inicio: ['Grupos', 'O que chegou dos grupos de repasse, o que foi postado e quem chamou a loja.'],
   comSdr: ['Fila do SDR', 'Quem ligar ou chamar hoje, em ordem de urgência.'],
+  comSdrRes: ['Resultado do SDR', 'Ligações, atendimentos, recados e agendamentos de cada dia, e quantas visitas viraram.'],
   comLeads: ['Leads e canais', 'Funil comercial do LeadsOK por período e canal de entrada.'],
   comTime: ['Time', 'Desempenho de cada vendedor no período.'],
   comAgenda: ['Agenda', 'Agendamentos por dia, semana ou mês. Marque quem veio, quem comprou e quem não veio.'],
@@ -736,7 +758,7 @@ function abrirAba(aba) {
   const [titulo, sub] = TITULOS[aba];
   $('#tEyebrow').textContent = aba.startsWith('ig') ? 'Instagram' : aba.startsWith('com') ? 'Comercial' : ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, comSdr: carregarSdr, sistema: () => { carregarSistema(); carregarDominio(); carregarUsuarios(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, comSdr: carregarSdr, comSdrRes: carregarSdrRes, sistema: () => { carregarSistema(); carregarDominio(); carregarUsuarios(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -1039,11 +1061,11 @@ $('#btnDom').onclick = async () => {
 };
 async function carregarUsuarios() {
   const l = await api('/api/usuarios').catch(() => []);
-  $('#listaUsuarios').innerHTML = l.map((u) => `<div><span><b>${esc(u.nome)}</b> <span class="sub">· SDR · criado em ${hora(u.criadoEm)}</span></span><button class="btn verm" data-rmu="${esc(u.nome)}">Remover</button></div>`).join('') || '<div><span class="sub">Nenhum usuário além do administrador.</span></div>';
+  $('#listaUsuarios').innerHTML = l.map((u) => `<div><span><b>${esc(u.nome)}</b> <span class="sub">${u.login ? '· entra com ' + esc(u.login) + ' ' : ''}· SDR · criado em ${hora(u.criadoEm)}</span></span><button class="btn verm" data-rmu="${esc(u.nome)}">Remover</button></div>`).join('') || '<div><span class="sub">Nenhum usuário além do administrador.</span></div>';
   document.querySelectorAll('[data-rmu]').forEach((b) => b.onclick = async () => { if (confirm(`Remover o acesso de ${b.dataset.rmu}? O histórico de contatos dele continua.`)) { await api('/api/usuarios/remover', { method:'POST', body: JSON.stringify({ nome: b.dataset.rmu }) }); carregarUsuarios(); } });
 }
 $('#btnNovoUsuario').onclick = async () => {
-  try { await api('/api/usuarios', { method:'POST', body: JSON.stringify({ nome: $('#novoUsuario').value, senha: $('#novaSenhaUsuario').value }) }); alert(`Usuário criado. Ele entra em ${location.origin} com o nome e a senha.`); $('#novoUsuario').value = ''; $('#novaSenhaUsuario').value = ''; carregarUsuarios(); }
+  try { await api('/api/usuarios', { method:'POST', body: JSON.stringify({ nome: $('#novoUsuario').value, login: $('#novoLogin').value, senha: $('#novaSenhaUsuario').value }) }); alert(`Usuário criado. Ele entra em ${location.origin} com ${$('#novoLogin').value ? 'o login' : 'o nome'} e a senha.`); $('#novoUsuario').value = ''; $('#novoLogin').value = ''; $('#novaSenhaUsuario').value = ''; carregarUsuarios(); }
   catch (e) { alert(e.message); }
 };
 async function carregarSistema() {
@@ -1293,6 +1315,30 @@ barraPeriodo($('#perTime'), () => carregarTime());
 // o Time abre nos últimos 7 dias (um dia só diz pouco sobre o time)
 $('#perTime').querySelectorAll('[data-p]').forEach((x) => x.classList.toggle('ativo', x.dataset.p === '7'));
 $('#perTime').per = { de: diaSP(6), ate: diaSP(0), rotulo: 'últimos 7 dias', chave: '7' };
+async function carregarSdrRes() {
+  avisoLk();
+  const per = $('#perSdrRes').per || { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje' };
+  const r = await api(`/api/sdr/resultado?de=${per.de}&ate=${per.ate}&por=${encodeURIComponent($('#srPor').value)}`);
+  if (r.erro) return;
+  const atual = $('#srPor').value;
+  $('#srPor').innerHTML = '<option value="">Todos</option>' + r.pessoas.map((p) => `<option ${p === atual ? 'selected' : ''}>${esc(p)}</option>`).join('');
+  const t = r.total;
+  $('#srKpis').innerHTML = [
+    ['Ligações', num(t.ligacoes), `${num(t.leads)} leads trabalhados`, ''],
+    ['Atenderam', num(t.atenderam), `${pct(t.atenderam, t.ligacoes)} das ligações`, 'ok'],
+    ['Recados', num(t.mensagens), `${num(t.naoAtenderam)} não atenderam`, ''],
+    ['Agendou', num(t.agendou), `${pct(t.agendou, t.atenderam)} de quem atendeu`, 'ouro'],
+    ['Vieram', num(t.vieram), `${num(t.compraram)} compraram · ${num(t.naoVieram)} não vieram`, 'ok'],
+  ].map(([n, v, txt, c]) => `<div class="kpi ${c}"><div class="eyebrow">${n}</div><b>${v}</b><small>${txt}</small></div>`).join('');
+  const dias = diasEntre(per.de, per.ate);
+  const pd = Object.fromEntries(r.porDia.map((x) => [x.dia, x]));
+  const max = Math.max(1, ...r.porDia.map((x) => x.ligacoes + x.mensagens));
+  $('#srDias').innerHTML = dias.map((dd) => { const x = pd[dd] || {}; return `<div class="col" title="${dd.split('-').reverse().join('/')}: ${x.ligacoes || 0} ligações, ${x.atenderam || 0} atenderam, ${x.agendou || 0} agendou, ${x.mensagens || 0} recados"><div class="gr">${dias.length <= 10 && x.ligacoes ? `<em>${x.ligacoes}</em>` : ''}${[['ligacoes', 'var(--azul)'], ['atenderam', 'var(--verde)'], ['agendou', 'var(--ouro)']].map(([k, c]) => `<i style="height:${((x[k] || 0) / max) * 100}%;background:${c}"></i>`).join('')}</div><span>${rotDia(dd, dias.length)}</span></div>`; }).join('');
+  $('#srHoras').innerHTML = r.porHora.filter((h) => h.ligacoes).length ? barras(r.porHora.filter((h) => h.ligacoes).map((h) => [`${String(h.hora).padStart(2, '0')}h`, h.ligacoes, `${h.atenderam} atenderam (${pct(h.atenderam, h.ligacoes)})`]), 'var(--azul)') : '<div class="vazio">Nenhuma ligação no período.</div>';
+  $('#srPessoas').innerHTML = r.porPessoa.map((p) => `<tr><td><b>${esc(p.por)}</b></td><td>${num(p.ligacoes)}</td><td>${num(p.atenderam)} <span class="sub">${pct(p.atenderam, p.ligacoes)}</span></td><td>${num(p.mensagens)}</td><td>${num(p.leads)}</td><td class="bom">${num(p.agendou)}</td><td>${num(p.vieram)}</td><td class="ruim">${num(p.naoVieram)}</td><td>${num(p.compraram)}</td></tr>`).join('') || '<tr><td colspan="9" class="sub">Nenhum contato registrado no período.</td></tr>';
+}
+barraPeriodo($('#perSdrRes'), () => carregarSdrRes());
+$('#srPor').onchange = () => carregarSdrRes();
 const VISITA_BTNS = [['comprou', 'Veio e comprou', 'verde'], ['nao_comprou', 'Veio e não comprou', ''], ['nao_veio', 'Não veio', 'verm']];
 async function carregarAgenda() {
   avisoLk();
@@ -1427,7 +1473,7 @@ function abrirRecado(leadId) {
   const tel = soDigitos(l.whatsapp);
   const primeiro = (t) => String(t || '').trim().split(/\s+/)[0] || '';
   const carro = carroCurto(l.carro);
-  const texto = COPY_NAO_ATENDEU.replace('{lead}', primeiro(l.nome) || 'tudo bem').replace('{sdr}', primeiro(eu?.nome) || 'o time').replace('{carro}', carro ? `no ${carro}` : 'em um dos nossos carros');
+  const texto = (window.recadoSdr || COPY_NAO_ATENDEU).replace('{lead}', primeiro(l.nome) || 'tudo bem').replace('{sdr}', primeiro(eu?.nome) || 'o time').replace('{carro}', carro ? `no ${carro}` : 'em um dos nossos carros');
   const m = document.createElement('div');
   m.className = 'modalFundo';
   m.innerHTML = `<div class="modal card"><h2>Não atendeu · deixe um recado</h2>
@@ -1505,6 +1551,13 @@ function carteiraSdr() {
   if (eu?.papel !== 'admin' && meu) return (window.vendedoresSdr || []).find((x) => x.toLowerCase().split(/\s+/)[0] === meu) || '';
   return '';
 }
+$('#btnCfSdr').onclick = async () => {
+  const objecoes = $('#cfObj').value.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).map((b) => { const [o, ...r] = b.split('\n'); return { objecao: o.trim(), resposta: r.join('\n').trim() }; });
+  try {
+    await api('/api/sdr/config', { method:'POST', body: JSON.stringify({ horasTentarDeNovo: $('#cfTentar').value, horasAguardandoRecado: $('#cfRecado').value, tentativasMax: $('#cfMax').value, diasNovos: $('#cfDias').value, recado: $('#cfRecadoTxt').value, objecoes }) });
+    alert('Configuração do SDR salva.'); delete $('#sdCfgCard').dataset.ok; carregarSdr();
+  } catch (e) { alert(e.message); }
+};
 $('#sdVend').onchange = () => { try { localStorage.setItem('carteiraSdr', $('#sdVend').value); } catch {} carregarSdr(); };
 async function carregarSdr() {
   avisoLk();
@@ -1516,10 +1569,21 @@ async function carregarSdr() {
   selV.innerHTML = '<option value="">Todos os vendedores</option>' + [...new Set([...r.vendedores.map((v) => v.vendedor), ...(atualV ? [atualV] : [])])].map((v) => { const n = r.vendedores.find((x) => x.vendedor === v)?.n; return `<option value="${esc(v)}" ${v === atualV ? 'selected' : ''}>${esc(v)}${n ? ` (${n})` : ''}</option>`; }).join('');
   window.vendedoresSdr = r.vendedores.map((v) => v.vendedor);
   Object.values(r.listas).forEach(guardarLeadsSdr); Object.values(r.etapas).forEach(guardarLeadsSdr);
+  window.recadoSdr = r.recado || null;
+  window.cfgSdr = { ...r.cadencia, recado: r.recado, objecoes: r.objecoes };
+  $('#sdObjecoes').innerHTML = (r.objecoes || []).map((o) => `<details class="objecao"><summary><b>"${esc(o.objecao)}"</b></summary><p>${esc(o.resposta)}</p></details>`).join('') || '<div class="vazio">Nenhuma objeção cadastrada.</div>';
+  if (eu?.papel === 'admin' && !$('#sdCfgCard').dataset.ok) {
+    $('#sdCfgCard').dataset.ok = '1';
+    $('#cfTentar').value = r.cadencia.horasTentarDeNovo; $('#cfRecado').value = r.cadencia.horasAguardandoRecado; $('#cfMax').value = r.cadencia.tentativasMax; $('#cfDias').value = r.cadencia.diasNovos;
+    $('#cfRecadoTxt').value = r.recado || COPY_NAO_ATENDEU;
+    $('#cfObj').value = (r.objecoes || []).map((o) => `${o.objecao}\n${o.resposta}`).join('\n\n');
+  }
   $('#sdLig').textContent = num(r.resumo.ligacoes); $('#sdAtend').textContent = `atenderam: ${num(r.resumo.atenderam)}`;
   $('#sdMsg').textContent = num(r.resumo.mensagens); $('#sdAgendou').textContent = num(r.resumo.agendou); $('#sdLeads').textContent = `leads trabalhados: ${num(r.resumo.leads)}`;
   $('#sdFila').textContent = num(LISTAS_SDR.reduce((a, [k]) => a + r.listas[k].length, 0));
-  $('#sdListas').innerHTML = LISTAS_SDR.map(([k, titulo, desc]) => {
+  const cd = r.cadencia;
+  const descSdr = (k, d) => k === 'novos' ? d.replace('7 dias', `${cd.diasNovos} dias`) : k === 'retornar' ? `Quem não atendeu há mais de ${String(cd.horasTentarDeNovo).replace('.', ',')} h, quem não respondeu o recado em ${cd.horasAguardandoRecado} h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.` : d;
+  $('#sdListas').innerHTML = LISTAS_SDR.map(([k, titulo, desc0]) => { const desc = descSdr(k, desc0);
     const itens = r.listas[k];
     return `<div class="card"><div class="cardTopo"><div><h2>${titulo} <span class="sub">(${itens.length})</span></h2><p class="sub">${desc}</p></div></div>
       ${itens.map((l) => {
@@ -1634,9 +1698,9 @@ $('#filtroGrupo').onchange = () => carregarPainel();
   if (eu.papel !== 'admin') {
     // SDR: deixa no menu só a Fila do SDR e a Agenda do dia
     document.querySelectorAll('nav > button, nav > .grupoMenu, nav .secao').forEach((el) => { el.hidden = !(el.id === 'menuComercial'); });
-    document.querySelectorAll('#menuComercial .sub-itens button').forEach((b) => { b.hidden = !['comSdr', 'comAgenda'].includes(b.dataset.aba); });
+    document.querySelectorAll('#menuComercial .sub-itens button').forEach((b) => { b.hidden = !['comSdr', 'comSdrRes', 'comAgenda'].includes(b.dataset.aba); });
     $('#menuComercial').classList.remove('fechado');
-    $('#sdHistCard').hidden = true; $('#sdTeste').hidden = true;
+    $('#sdHistCard').hidden = true; document.querySelectorAll('.soAdmin').forEach((e) => { e.hidden = true; });
     document.querySelector('.barraTopo .eyebrow').textContent = 'Gestão Choice · ' + eu.nome;
     abrirAba('comSdr');
     return;
