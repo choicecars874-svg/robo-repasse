@@ -239,7 +239,9 @@ function agenda({ de, ate } = {}) {
   }
   itens.sort((a, b) => (a.data < b.data ? -1 : 1));
   const agora = new Date().toISOString();
-  const resumo = { agendados: itens.length, vieram: 0, compraram: 0, vieramNaoCompraram: 0, naoVieram: 0, aMarcar: 0, futuros: 0, concluidosLeadsOK: 0, confirmados: 0, iaSemConfirmar: 0 };
+  // lead arquivado no LeadsOK (visita concluída sem ser venda) = visita cancelada: fora dos agendados
+  const cancelados = itens.filter((a) => a.concluido && a.compareceu == null && !/vend/i.test(a.motivo || '')).length;
+  const resumo = { agendados: itens.length - cancelados, canceladosLeadsOK: cancelados, vieram: 0, compraram: 0, vieramNaoCompraram: 0, naoVieram: 0, aMarcar: 0, futuros: 0, concluidosLeadsOK: 0, confirmados: 0, iaSemConfirmar: 0 };
   for (const a of itens) {
     if (a.compareceu === 1) {
       resumo.vieram++;

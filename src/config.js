@@ -88,9 +88,9 @@ const PADRAO = {
     // lembrete automático (vai junto com o card). Gatilhos: exclusividade (reservado no seu nome), escassez (procura),
     // perda (não liberar para outro cliente), facilidade (tudo pronto) e compromisso ("Combinado?")
     lembreteAutoCarro:
-      'Fala {lead}, {saudacao}! Aqui é {sdr} da Choice Cars.\n\nSeu {carro} já está separado e preparado pra você hoje às {hora}.\n\nEsse modelo está com bastante procura, então deixei ele reservado no seu nome até o horário da sua visita.\n\nTe espero aqui na {endereco}. Me confirma com um OK que está tudo certo pra {hora}? Se surgir algum imprevisto, me avisa por aqui pra eu não liberar o carro pra outro cliente.',
+      'Fala {lead}, {saudacao}! Aqui é {sdr} da Choice Cars.\n\n🔑 Seu {carro} já está separado e preparado pra você hoje às {hora}.\n\nEsse modelo está com bastante procura, então deixei ele reservado no seu nome até o horário da sua visita.\n\n📍 Te espero aqui na {endereco}.\n\n✅ Me confirma com um OK que está tudo certo pra {hora}? Se surgir algum imprevisto, me avisa por aqui pra eu não liberar o carro pra outro cliente.',
     lembreteAutoSemCarro:
-      'Fala {lead}, {saudacao}! Aqui é {sdr} da Choice Cars.\n\nHoje às {hora} é a sua visita, e já deixei tudo pronto pra te receber: separei as opções que combinam com o que você procura e reservei esse horário só pra você.\n\nTe espero aqui na {endereco}. Me confirma com um OK que está tudo certo pra {hora}? Se surgir algum imprevisto, me avisa por aqui que eu reorganizo a agenda.',
+      'Fala {lead}, {saudacao}! Aqui é {sdr} da Choice Cars.\n\nHoje às {hora} é a sua visita, e já deixei tudo pronto pra te receber: separei as opções que combinam com o que você procura e reservei esse horário só pra você.\n\n📍 Te espero aqui na {endereco}.\n\n✅ Me confirma com um OK que está tudo certo pra {hora}? Se surgir algum imprevisto, me avisa por aqui que eu reorganizo a agenda.',
     naoVeio:
       'Fala {lead}, tudo bem? Aqui é {sdr} da Choice Cars. A gente estava te esperando {quando} às {hora} pra ver {carro} e acabou que não deu pra você vir. Aconteceu alguma coisa? Se quiser, já deixo um novo horário reservado pra você. Qual dia fica melhor?',
     objecoes: [
