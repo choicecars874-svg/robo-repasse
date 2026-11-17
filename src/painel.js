@@ -416,7 +416,7 @@ function iniciarPainel() {
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
     const objecoes = (Array.isArray(b.objecoes) ? b.objecoes : []).map((o) => ({ objecao: String(o.objecao || '').trim().slice(0, 120), resposta: String(o.resposta || '').trim().slice(0, 1500) })).filter((o) => o.objecao).slice(0, 40);
     const atual = config.get();
-    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 2), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), horasSemRespostaResgate: n(b.horasSemRespostaResgate, 0.25, 48, 1), vendedoresFora: (Array.isArray(b.vendedoresFora) ? b.vendedoresFora : atual.sdr.vendedoresFora || []).map((v) => String(v).trim().slice(0, 60)).filter(Boolean).slice(0, 20), foraIniciado: true, chavePlanilha: atual.sdr.chavePlanilha || null, lembreteAuto: atual.sdr.lembreteAuto, recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, lembreteDia: String(b.lembreteDia || '').slice(0, 1000) || atual.sdr.lembreteDia, naoVeio: String(b.naoVeio || '').slice(0, 1000) || atual.sdr.naoVeio, objecoes } }).sdr);
+    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 2), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), horasSemRespostaResgate: n(b.horasSemRespostaResgate, 0.25, 48, 1), vendedoresFora: (Array.isArray(b.vendedoresFora) ? b.vendedoresFora : atual.sdr.vendedoresFora || []).map((v) => String(v).trim().slice(0, 60)).filter(Boolean).slice(0, 20), foraIniciado: true, chavePlanilha: atual.sdr.chavePlanilha || null, lembreteAuto: atual.sdr.lembreteAuto, nomeSdr: atual.sdr.nomeSdr, lembreteAutoCarro: atual.sdr.lembreteAutoCarro, lembreteAutoSemCarro: atual.sdr.lembreteAutoSemCarro, recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, lembreteDia: String(b.lembreteDia || '').slice(0, 1000) || atual.sdr.lembreteDia, naoVeio: String(b.naoVeio || '').slice(0, 1000) || atual.sdr.naoVeio, objecoes } }).sdr);
   });
   app.post('/api/sdr/lead-teste', (req, res) => {
     try {
@@ -482,7 +482,8 @@ function iniciarPainel() {
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
     const lembreteAuto = { ativo: !!b.ativo, horasAntes: n(b.horasAntes, 0.5, 12, 2), horaInicio: n(b.horaInicio, 6, 12, 8), horaFim: n(b.horaFim, 14, 22, 20), maxDia: n(b.maxDia, 1, 30, 15), comFoto: b.comFoto !== false, estiloCard: b.estiloCard === 'pb' ? 'pb' : 'cor', modeloCard: ['story', 'reservado', 'premium'].includes(b.modeloCard) ? b.modeloCard : 'premium' };
     const nomeSdr = String(b.nomeSdr || '').trim().slice(0, 40) || c.sdr.nomeSdr || (req.usuario.papel !== 'admin' ? req.usuario.nome : '');
-    config.salvar({ ...c, sdr: { ...c.sdr, lembreteAuto, nomeSdr } });
+    const txt = (v, atual) => String(v || '').trim().slice(0, 1200) || atual;
+    config.salvar({ ...c, sdr: { ...c.sdr, lembreteAuto, nomeSdr, lembreteAutoCarro: txt(b.lembreteAutoCarro, c.sdr.lembreteAutoCarro), lembreteAutoSemCarro: txt(b.lembreteAutoSemCarro, c.sdr.lembreteAutoSemCarro) } });
     res.json(sdrWhats.status());
   });
   // exemplo do card com um carro do estoque (para ver antes de ligar o automático)

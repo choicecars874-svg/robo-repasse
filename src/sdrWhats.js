@@ -121,8 +121,17 @@ function fraseDoCard({ nome, carro, data }) {
   return { titulo: `${primeiro ? primeiro + ', s' : 'S'}eu ${modelo || 'carro'} está pronto te esperando`, subtitulo: `${dia} · ${hora}` };
 }
 async function cardDaVisita({ nome, carro, data, modeloForcado }) {
-  const { gerarCard } = require('./card');
+  const { gerarCard, FOTO_LOJA } = require('./card');
   const f = fraseDoCard({ nome, carro, data });
+  const modeloSem = modeloForcado || cfg().modeloCard;
+  if (!carro?.imagem) {
+    // sem o carro: fachada da Choice + "estamos te esperando"
+    const primeiroSem = String(nome || '').trim().split(/\s+/)[0] || '';
+    const ruaSem = String((config.get().loja || {}).endereco || '').split(/\s[–-]\s/)[0].trim();
+    return gerarCard({ foto: fs.readFileSync(FOTO_LOJA), pb: cfg().estiloCard === 'pb', modelo: modeloSem, nome: primeiroSem, frase: 'estamos te esperando',
+      titulo: `${primeiroSem ? primeiroSem + ', e' : 'E'}stamos te esperando`, subtitulo: f.subtitulo,
+      quando: modeloSem === 'premium' ? `${f.subtitulo.replace(' · ', ' às ')}${ruaSem ? ' · ' + ruaSem : ''}` : f.subtitulo });
+  }
   const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
   const descricao = `${carro.marca || ''} ${carro.modelo || ''} ${carro.versao || ''} ${carro.ano || ''}`.replace(/\s+/g, ' ').trim();
   const modelo = modeloForcado || cfg().modeloCard;
@@ -134,16 +143,19 @@ async function cardDaVisita({ nome, carro, data, modeloForcado }) {
 }
 
 // ---------- Texto do lembrete ----------
-function textoLembrete({ nome, carro, data, sdr }) {
-  const modelo = (config.get().sdr || {}).lembreteDia ||
-    'Fala {lead}, bom dia! Aqui é {sdr} da Choice Cars. Passando pra lembrar que hoje às {hora} você tem a visita marcada pra ver {carro}. Já estamos te esperando! Qualquer imprevisto, é só me avisar por aqui.';
+// Texto do lembrete automático: com o carro (reservado no seu nome) ou sem (loja te esperando)
+function textoLembrete({ nome, carro, data, sdr, temCarro }) {
+  const c = config.get().sdr || {};
+  const modelo = (temCarro ? c.lembreteAutoCarro : c.lembreteAutoSemCarro) || c.lembreteDia ||
+    'Fala {lead}, {saudacao}! Aqui é {sdr} da Choice Cars. Passando pra lembrar que hoje às {hora} você tem a visita marcada. Te espero na {endereco}!';
   const primeiro = (t) => String(t || '').trim().split(/\s+/)[0] || '';
   const carroCurto = String(carro || '').replace(/\s*\|.*$/, '').trim();
   const hora = new Date(data).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-  // "bom dia" do modelo vira boa tarde / boa noite conforme a hora do envio
   const h = horaSP();
   const saudacao = h < 12 ? 'bom dia' : h < 18 ? 'boa tarde' : 'boa noite';
-  return modelo.replace(/bom dia/i, saudacao).replace('{saudacao}', saudacao).replace('{lead}', primeiro(nome) || 'tudo bem').replace('{sdr}', primeiro(sdr) || 'o time').replace('{hora}', hora).replace('{carro}', carroCurto ? `o ${carroCurto}` : 'nossos carros').replace('{quando}', 'hoje');
+  const endereco = String((config.get().loja || {}).endereco || 'nossa loja').trim();
+  return modelo.replace(/bom dia/i, saudacao).replace(/\{saudacao\}/g, saudacao).replace(/\{lead\}/g, primeiro(nome) || 'tudo bem').replace(/\{sdr\}/g, primeiro(sdr) || 'a equipe')
+    .replace(/\{hora\}/g, hora).replace(/\{carro\}/g, carroCurto || 'carro').replace(/\{endereco\}/g, endereco).replace(/\{quando\}/g, 'hoje');
 }
 
 // ---------- Quem recebe hoje ----------
@@ -186,16 +198,20 @@ async function enviarLembrete(v, { por = 'automático', teste = false } = {}) {
   const [existe] = await sock.onWhatsApp(numero);
   if (!existe?.exists) throw new Error(`O número ${numero} não tem WhatsApp`);
   const sdr = (config.get().sdr || {}).nomeSdr || 'a equipe';
-  const texto = textoLembrete({ nome: v.nome, carro: v.carro, data: v.data, sdr });
-  const carro = cfg().comFoto ? carroNoEstoque(v.carro) : null;
+  const carro = carroNoEstoque(v.carro);
+  // no texto, o nome do carro do estoque (marca e modelo) quando achado; senão o que veio do lead
+  const nomeCarro = carro ? `${carro.marca || ''} ${carro.modelo || ''}`.trim() : v.carro;
+  const texto = textoLembrete({ nome: v.nome, carro: nomeCarro, data: v.data, sdr, temCarro: !!carro });
   let card = null;
-  if (carro?.imagem) {
-    // card no estilo story (foto do carro + frase + logo); se falhar, manda a foto do carro como está
-    card = await cardDaVisita({ nome: v.nome, carro, data: v.data }).catch((e) => { registrar('aviso', `Card não foi montado (${e.message}): vai a foto simples`); return null; });
-    await sock.sendMessage(existe.jid, card ? { image: card, caption: texto } : { image: { url: carro.imagem }, caption: texto });
-  } else await sock.sendMessage(existe.jid, { text: texto });
+  if (cfg().comFoto) {
+    // card com a foto do carro do cliente; sem carro no estoque, a foto da fachada da loja e "estamos te esperando"
+    card = await cardDaVisita({ nome: v.nome, carro, data: v.data }).catch((e) => { registrar('aviso', `Card não foi montado (${e.message})`); return null; });
+  }
+  if (card) await sock.sendMessage(existe.jid, { image: card, caption: texto });
+  else if (carro?.imagem) await sock.sendMessage(existe.jid, { image: { url: carro.imagem }, caption: texto });
+  else await sock.sendMessage(existe.jid, { text: texto });
   if (!teste) banco.abrir().prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(v.lead_id), v.data, 'lembrete', 'automático', Date.now());
-  return { comFoto: !!carro?.imagem, comCard: !!card, texto };
+  return { comFoto: !!carro?.imagem, comCard: !!card, fotoDaLoja: !!card && !carro?.imagem, texto };
 }
 
 async function rodada() {
@@ -237,7 +253,7 @@ function iniciar() {
 }
 
 function status() {
-  return { ...estado, temSessao: temSessao(), config: cfg(), nomeSdr: (config.get().sdr || {}).nomeSdr || '', hoje: pendentesHoje().map((v) => ({ nome: v.nome, data: v.data, enviarEm: v.enviarEm, enviado: v.enviado, falhou: v.falhou, comResultado: v.comResultado, carro: v.carro, fotoDoCarro: !!carroNoEstoque(v.carro)?.imagem })) };
+  return { ...estado, temSessao: temSessao(), config: cfg(), nomeSdr: (config.get().sdr || {}).nomeSdr || '', textos: { carro: (config.get().sdr || {}).lembreteAutoCarro || '', semCarro: (config.get().sdr || {}).lembreteAutoSemCarro || '' }, hoje: pendentesHoje().map((v) => ({ nome: v.nome, data: v.data, enviarEm: v.enviarEm, enviado: v.enviado, falhou: v.falhou, comResultado: v.comResultado, carro: v.carro, fotoDoCarro: !!carroNoEstoque(v.carro)?.imagem })) };
 }
 
 // só para teste automatizado: usa um socket falso
