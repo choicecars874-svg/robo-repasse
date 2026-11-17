@@ -380,7 +380,7 @@ function planilhaSdr({ de, ate, por } = {}) {
       proximoContato: ultimoComRetorno ? fmtD(ultimoComRetorno.proximo_em) : '',
       visitou: SN(v.compareceu), fechou: v.comprou === 1 ? 'SIM' : encerrou?.resultado === 'ja_comprou' ? 'JÁ COMPROU' : '',
       observacoes: cs.map((c) => [c.resultado === 'sem_interesse' ? 'Sem interesse' : c.resultado === 'interesse_visita' ? 'Topou visitar, sem horário' : '', c.nota || ''].filter(Boolean).join(': ')).filter(Boolean).join(' | '),
-      por: [...new Set(cs.map((c) => c.por).filter(Boolean))].join(', '),
+      por: [...new Set(cs.map((c) => c.por).filter(Boolean))].join(', ') || 'Sem responsável (registro antigo)',
     });
   }
   // totais do topo da planilha
