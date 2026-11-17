@@ -22,7 +22,7 @@ let sock = null;
 let enviando = false;
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
-const cfg = () => ({ ativo: false, horasAntes: 2, horaInicio: 8, horaFim: 20, maxDia: 15, comFoto: true, estiloCard: 'cor', modeloCard: 'reservado', ...((config.get().sdr || {}).lembreteAuto || {}) });
+const cfg = () => ({ ativo: false, horasAntes: 2, horaInicio: 8, horaFim: 20, maxDia: 15, comFoto: true, estiloCard: 'cor', modeloCard: 'premium', ...((config.get().sdr || {}).lembreteAuto || {}) });
 const horaSP = (t = Date.now()) => Number(new Date(t).toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false })) % 24;
 const diaSP = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 function registrar(tipo, texto) {
@@ -125,7 +125,12 @@ async function cardDaVisita({ nome, carro, data, modeloForcado }) {
   const f = fraseDoCard({ nome, carro, data });
   const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
   const descricao = `${carro.marca || ''} ${carro.modelo || ''} ${carro.versao || ''} ${carro.ano || ''}`.replace(/\s+/g, ' ').trim();
-  return gerarCard({ foto: carro.imagem, ...f, pb: cfg().estiloCard === 'pb', modelo: modeloForcado || cfg().modeloCard, nome: primeiro, carro: descricao, quando: f.subtitulo });
+  const modelo = modeloForcado || cfg().modeloCard;
+  // "premium": frase curta (marca e modelo) e, no rodapé, dia, hora e a rua da loja ("HOJE ÀS 15H · AV. MARIA CAMPOS, 874")
+  const curto = `${carro.marca || ''} ${carro.modelo || ''}`.replace(/\s+/g, ' ').trim();
+  const rua = String((config.get().loja || {}).endereco || '').split(/\s[–-]\s/)[0].trim();
+  const quando = modelo === 'premium' ? `${f.subtitulo.replace(' · ', ' às ')}${rua ? ' · ' + rua : ''}` : f.subtitulo;
+  return gerarCard({ foto: carro.imagem, ...f, pb: cfg().estiloCard === 'pb', modelo, nome: primeiro, carro: modelo === 'premium' ? curto : descricao, quando });
 }
 
 // ---------- Texto do lembrete ----------
