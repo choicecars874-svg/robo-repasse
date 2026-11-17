@@ -158,6 +158,8 @@
   .tmGraf.linha { gap:1px; flex-wrap:wrap; height:auto; } .tmGraf.linha .col { height:160px; } .tmEixo { flex:0 0 100%; display:flex; justify-content:space-between; margin-top:6px; } .tmGraf.linha .gr i { max-width:none; border-radius:2px 2px 0 0; }
   .carro { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ouro); margin-top:2px; } .carro .i { width:14px; height:14px; flex:none; }
   .tag.ruimTag { color:var(--verm); border-color:rgba(248,113,113,.4); }
+  .sdLinha.ligando { background:rgba(226,179,80,.06); border-radius:12px; } .sdLinha.ligando [data-ligar] { border-color:var(--ouro); color:var(--ouro); }
+  .avisoLigando { margin-top:6px; font-size:13px; color:var(--ouro); font-weight:600; }
   .objecao { border-bottom:1px solid var(--borda); padding:10px 0; } .objecao:last-child { border:0; } .objecao p { margin:8px 0 2px; color:var(--txt); line-height:1.55; white-space:pre-line; }
   .funilExtra { display:flex; gap:24px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--borda); font-size:14px; } .funilExtra b { font-size:20px; margin-right:4px; }
   .agItem { display:grid; grid-template-columns:70px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--borda); } .agItem:last-child { border:0; }
@@ -1420,7 +1422,7 @@ async function carregarGestor() {
   ].join('');
   $('#gsKpis').style.gridTemplateColumns = 'repeat(auto-fit, minmax(190px, 1fr))';
   guardarLeadsSdr(g.semResposta.lista); guardarLeadsSdr(g.quentes); guardarLeadsSdr(g.semInfo.semVendedor);
-  const linha = (l, extra) => { const tel = soDigitos(l.whatsapp); return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor)}${l.ia ? ' (IA)' : ''} · ${extra}</span>${carroLinha(l)}<div class="sub">${tel ? '+' + tel : 'sem telefone'}</div></div><div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}">WhatsApp</a>` : ''}${BOTOES_SDR}</div></div>`; };
+  const linha = (l, extra) => { const tel = soDigitos(l.whatsapp); return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor)}${l.ia ? ' (IA)' : ''} · ${extra}</span>${carroLinha(l)}<div class="sub">${tel ? '+' + tel : 'sem telefone'}</div></div><div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button>` : ''}${BOTOES_SDR}</div></div>`; };
   $('#gsRespN').textContent = `(${g.semResposta.total})`;
   $('#gsRespObs').textContent = `O cliente mandou a última mensagem há mais de ${hp} h e ninguém respondeu (últimos 14 dias). Os mais recentes primeiro: ainda estão quentes.`;
   $('#gsRespVend').innerHTML = g.semResposta.porVendedor.length ? barras(g.semResposta.porVendedor.map((v) => [v.vendedor, v.n]), 'var(--verm)') : '';
@@ -1629,10 +1631,18 @@ document.addEventListener('click', async (ev) => {
   const b = ev.target.closest('[data-ligar]');
   if (!b) return;
   const tel = b.dataset.ligar;
+  const linha = b.closest('.sdLinha, .agItem');
+  if (linha) {
+    linha.classList.add('ligando');
+    b.textContent = `Ligando · ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    let aviso = linha.querySelector('.avisoLigando');
+    if (!aviso) { aviso = document.createElement('div'); aviso.className = 'avisoLigando'; (linha.firstElementChild || linha).appendChild(aviso); }
+    aviso.textContent = 'Ligação iniciada: depois de desligar, marque Atendeu ou Não atendeu.';
+  }
   if (ehCelular()) { location.href = `tel:+${tel}`; return; }
   const bonito = `+${tel.slice(0, 2)} (${tel.slice(2, 4)}) ${tel.slice(4, -4)}-${tel.slice(-4)}`;
   try { await navigator.clipboard.writeText(bonito); } catch {}
-  alert(`Número copiado: ${bonito}. Ligue pelo seu celular, ou abra o WhatsApp do computador (botão WhatsApp) e use o ícone de ligação.`);
+  alert(`Número copiado: ${bonito}`);
 });
 const guardarLeadsSdr = (lista) => (lista || []).forEach((l) => { leadsSdr[l.id] = l; });
 const carroCurto = (c) => String(c || '').replace(/\s*\|.*$/, '').trim();
@@ -1682,6 +1692,20 @@ async function clienteConfirmou(leadId, data, depois) {
 }
 // selo do status da confirmação
 const seloConfirmacao = (x) => x.lembrete_enviado ? `<span class="tag">lembrete de hoje enviado</span>` : x.cliente_confirmou ? `<span class="tag vendido">cliente confirmou</span>` : x.confirmacao_enviada ? `<span class="tag">confirmação enviada ${new Date(x.confirmacao_enviada).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : (x.agenda_confirmado ?? x.confirmado) === 1 ? '<span class="tag">confirmado no LeadsOK</span>' : '<span class="tag ruimTag">confirmação ainda não enviada</span>';
+function textoRecado(leadId) {
+  const l = leadsSdr[leadId] || {};
+  const primeiro = (t) => String(t || '').trim().split(/\s+/)[0] || '';
+  const carro = carroCurto(l.carro);
+  return (window.recadoSdr || COPY_NAO_ATENDEU).replace('{lead}', primeiro(l.nome) || 'tudo bem').replace('{sdr}', primeiro(eu?.nome) || 'o time').replace('{carro}', carro ? `no ${carro}` : 'em um dos nossos carros');
+}
+// Não atendeu: abre o WhatsApp já com o recado (dá para ajustar lá antes de enviar) e registra a mensagem
+async function enviarRecadoDireto(leadId) {
+  const tel = soDigitos((leadsSdr[leadId] || {}).whatsapp);
+  if (!tel) return alert('Este lead está sem telefone.');
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(textoRecado(leadId))}`, '_blank', 'noopener');
+  try { await api('/api/sdr/contato', { method:'POST', body: JSON.stringify({ leadId, tipo: 'mensagem', resultado: 'enviada' }) }); } catch {}
+  carregarSdr(); if ($('#sdBusca').value.trim()) buscarLeadSdr();
+}
 function abrirRecado(leadId) {
   const l = leadsSdr[leadId] || {};
   const tel = soDigitos(l.whatsapp);
@@ -1711,7 +1735,7 @@ function ligarBotoesSdr(raiz) {
     if (['atendeu', 'agendou'].includes(resultado)) return abrirBriefing(linha.dataset.lead, linha.querySelector('b')?.textContent || 'Lead', resultado, tipo);
     if (['ja_comprou', 'sem_interesse'].includes(resultado) && !confirm('Encerrar este lead (sai da fila do SDR)?')) return;
     await api('/api/sdr/contato', { method:'POST', body: JSON.stringify({ leadId: linha.dataset.lead, tipo, resultado }) });
-    if (resultado === 'nao_atendeu') abrirRecado(linha.dataset.lead);
+    if (resultado === 'nao_atendeu') enviarRecadoDireto(linha.dataset.lead);
     carregarSdr(); if ($('#sdBusca').value.trim()) buscarLeadSdr();
   });
 }
@@ -1819,7 +1843,7 @@ async function carregarSdr() {
           <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>${carroLinha(l)}${kv && !l.passou ? `<div style="margin-top:4px">${seloConfirmacao(l)}</div>` : ''}${kv && l.agenda_obs ? `<div class="briefing">${esc(l.agenda_obs)}</div>` : ''}
             <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}${l.tentativas ? ` · ${l.tentativas} tentativa(s) sem atender` : ''}</div>
             ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : uc.resultado === 'interesse_visita' ? 'confirmar até' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
-          <div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
+          <div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button>` : ''}
             ${kpv ? '<button class="btn verde" data-conf="nao_veio">Mandar mensagem: não veio</button>' : ''}${kv && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') + '<button class="btn" data-conf="nao_veio">Mandar mensagem: não veio</button>' : kv ? `<button class="btn verde" data-conf="${tipoMsgVisita(l.agenda_data, false)}">${ROTULO_MSG[tipoMsgVisita(l.agenda_data, false)]}</button>${l.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : BOTOES_SDR}</div></div>`;
       }).join('') || '<div class="vazio">Nada nesta lista agora.</div>'}</div>`;
   }).join('');
