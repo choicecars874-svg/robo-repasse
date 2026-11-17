@@ -316,6 +316,25 @@ function resumoPeriodo(de, ate) {
   return { leads, agendamentos: agendamentosFeitos(d, { de, ate }).length, vendas: vendasNoPeriodo(d, de, ate), visitas: visitasNoPeriodo(d, de, ate), temDados: total > 0 };
 }
 
+// Briefing do lead: tudo o que o painel sabe ANTES do contato (origem, carro, histórico, visitas, ficha, debriefings anteriores)
+function briefingLead(leadId) {
+  const d = banco.abrir();
+  if (!d) return { erro: banco.erro() };
+  const l = d.prepare(`SELECT l.*, ${CANAL_PROVAVEL} provavel FROM lk_leads l WHERE l.id = ?`).get(String(leadId));
+  if (!l) return { erro: 'Lead não encontrado' };
+  const msgs = d.prepare(`SELECT COUNT(*) total, TOTAL(owner = 'customers') cliente, TOTAL(owner = 'salesman') loja, MIN(ts) primeira, MAX(ts) ultima FROM lk_mensagens WHERE lead_id = ?`).get(l.id);
+  return {
+    lead: { id: l.id, nome: l.nome, whatsapp: l.whatsapp, origem: l.origem, provavel: l.provavel, canalPista: l.canal_pista, carro: l.carro, vendedor: l.vendedor, ia: !!l.vendedor_is_ia,
+      criado: l.created_date, aba: l.aba_atual, arquivo: l.archive_reason, ficha: !!l.tem_financiamento, ultimaMsgDe: l.ultima_msg_owner, ultimaMsgEm: l.ultima_msg_at, resgate: !!l.is_resgate },
+    mensagens: msgs,
+    fichas: d.prepare('SELECT banco, status, created_at FROM lk_fichas WHERE lead_id = ? ORDER BY created_at DESC').all(l.id).map((f) => ({ ...f, statusNome: nomeStatus(f.status) })),
+    agenda: d.prepare('SELECT data, modalidade, pela_ia, concluido, motivo FROM lk_agenda WHERE lead_id = ? ORDER BY data DESC LIMIT 10').all(l.id),
+    visitas: d.prepare('SELECT data_agendada, compareceu, comprou, marcado_por FROM lk_visitas WHERE lead_id = ? ORDER BY data_agendada DESC').all(l.id),
+    contatos: d.prepare('SELECT em, tipo, resultado, por, nota, interesse, proximo_em FROM lk_contatos WHERE lead_id = ? ORDER BY em DESC LIMIT 30').all(l.id),
+    eventos: d.prepare("SELECT tipo, ts, actor FROM lk_eventos WHERE lead_id = ? AND tipo IN ('transfer', 'scheduled', 'archived', 'created') ORDER BY ts DESC LIMIT 10").all(l.id),
+  };
+}
+
 // Gestor do dia: a varredura que um gestor faria toda manhã. Tudo o que está largado, em listas prontas para cobrar.
 function gestorDoDia({ horasParado = 2 } = {}) {
   const d = banco.abrir();
@@ -712,4 +731,4 @@ function removerLeadsTeste() {
   return { ok: true, removidos: Number(d.prepare("DELETE FROM lk_leads WHERE id LIKE 'teste-%'").run().changes) };
 }
 
-module.exports = { gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+module.exports = { briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

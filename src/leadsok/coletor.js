@@ -528,6 +528,31 @@ async function testarDetalhes() {
   };
 }
 
+// Conversa recente de um lead, lida na hora no LeadsOK para o briefing/debriefing. NÃO é gravada no banco.
+// Usa só getChatMessages (leitura); não chama markChatViewed, então o lead não é marcado como lido.
+async function conversaRecente(leadId, limite = 30) {
+  if (!cfg.ativo || String(leadId).startsWith('teste-') || String(leadId).startsWith('agenda-')) return { mensagens: [], motivo: 'sem LeadsOK para este lead' };
+  const c = obterCliente();
+  const r = await c.acao('getChatMessages', [{ customerId: String(leadId) }]);
+  const rows = Array.isArray(r?.rows) ? r.rows : [];
+  const mensagens = rows
+    .map((m) => ({
+      em: m.created_at || null,
+      de: m.messenger_owner === 'customers' ? 'cliente' : m.messenger_owner === 'salesman' ? 'loja' : m.messenger_owner || '?',
+      nome: m.owner_name || null,
+      texto: String(m.content_message || m.caption || m.texto_midia || (m.type_message && m.type_message !== 'text' ? `[${m.type_message}]` : '') || '').slice(0, 1000),
+      apagada: !!m.apagada_em,
+    }))
+    .filter((m) => m.texto && !m.apagada)
+    .sort((a, b) => (a.em < b.em ? -1 : 1))
+    .slice(-limite);
+  return { mensagens };
+}
+async function notasDoLead(leadId) {
+  if (!cfg.ativo || String(leadId).startsWith('teste-') || String(leadId).startsWith('agenda-')) return '';
+  return textoDaNota(await obterCliente().acao('getCustomerNotes', [{ customerId: String(leadId) }])) || '';
+}
+
 function status() {
   const d = banco.abrir();
   let base = {};
@@ -554,4 +579,4 @@ function definirHorasParado(h) {
   salvarCfg();
 }
 
-module.exports = { canalPelaMensagem, testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };
+module.exports = { conversaRecente, notasDoLead, canalPelaMensagem, testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };

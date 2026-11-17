@@ -410,6 +410,16 @@ function iniciarPainel() {
       res.status(400).json({ erro: e.message });
     }
   });
+  // briefing: o que o painel sabe + (na hora, sem gravar) notas e conversa recente do LeadsOK
+  app.get('/api/sdr/lead/:id', async (req, res) => {
+    const b = comercial.briefingLead(req.params.id);
+    if (b.erro) return res.status(404).json(b);
+    const [conv, notas] = await Promise.all([
+      leadsok.conversaRecente(req.params.id, 30).catch((e) => ({ mensagens: [], motivo: e.message })),
+      leadsok.notasDoLead(req.params.id).catch(() => ''),
+    ]);
+    res.set('Cache-Control', 'no-store').json({ ...b, conversa: conv, notasLeadsOK: notas });
+  });
   app.get('/api/sdr/historico', (req, res) => res.json(comercial.historicoContatos({ dia: req.query.dia, por: req.query.por })));
   app.get('/api/sdr/buscar', (req, res) => res.json(comercial.buscarLead(req.query.q)));
   app.post('/api/sdr/contato', (req, res) => {
