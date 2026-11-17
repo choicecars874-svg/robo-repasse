@@ -44,6 +44,11 @@ function gravarSenha(nova) {
 function iniciarPainel() {
   try {
     const c = config.get();
+    // textos antigos do lembrete automático (falavam de simulação): troca pelos novos uma vez
+    if (/simulação sai na hora/.test(c.sdr?.lembreteAutoSemCarro || '') || /pra eu não liberar o carro pra outro cliente\. Combinado\?$/.test(c.sdr?.lembreteAutoCarro || '')) {
+      const { lembreteAutoCarro, lembreteAutoSemCarro, ...resto } = c.sdr;
+      config.salvar({ ...c, sdr: resto });
+    }
     if (!c.sdr?.foraIniciado) config.salvar({ ...c, sdr: { ...c.sdr, vendedoresFora: [...new Set([...(c.sdr?.vendedoresFora || []), 'Lucas Ribeiro'])], foraIniciado: true } });
   } catch (e) {
     console.error('Configuração do SDR:', e.message);
