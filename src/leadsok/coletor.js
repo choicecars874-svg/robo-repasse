@@ -173,9 +173,9 @@ function gravarAgenda(d, agenda) {
     estado.chavesAgenda = Object.keys(agenda[0]);
     estado.estruturaAgenda = estrutura(agenda[0]);
   }
-  const up = d.prepare(`INSERT INTO lk_agenda (id, lead_id, data, modalidade, concluido, pela_ia, visto_em, primeira_vez, nome, telefone, carro, obs, confirmado, vendedor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const up = d.prepare(`INSERT INTO lk_agenda (id, lead_id, data, modalidade, concluido, pela_ia, visto_em, primeira_vez, nome, telefone, carro, obs, confirmado, vendedor, motivo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET lead_id = COALESCE(excluded.lead_id, lk_agenda.lead_id), data = excluded.data, modalidade = excluded.modalidade, concluido = excluded.concluido, pela_ia = excluded.pela_ia, visto_em = excluded.visto_em,
-      nome = excluded.nome, telefone = excluded.telefone, carro = excluded.carro, obs = excluded.obs, confirmado = excluded.confirmado, vendedor = excluded.vendedor`);
+      nome = excluded.nome, telefone = excluded.telefone, carro = excluded.carro, obs = excluded.obs, confirmado = excluded.confirmado, vendedor = excluded.vendedor, motivo = excluded.motivo`);
   const marca = d.prepare('UPDATE lk_leads SET agendado_alguma_vez = 1 WHERE id = ?');
   const buscas = {
     porId: d.prepare('SELECT id FROM lk_leads WHERE id = ?'),
@@ -185,11 +185,19 @@ function gravarAgenda(d, agenda) {
   const agora = Date.now();
   let semLead = 0;
   for (const a of agenda) {
-    const x = analisarAgenda(d, a, buscas);
+    // formato do LeadsOK (relatório da agenda): item plano = linha do lead + date_scheduled, modality, is_concluido, scheduled_by_ia.
+    // "id" é o id do lead (um item por lead). Se o formato mudar, cai na busca genérica.
+    const ehLinhaDoLead = a.date_scheduled !== undefined && (a.first_name !== undefined || a.conversa_id !== undefined);
+    const x = ehLinhaDoLead
+      ? { lead: String(a.id), nome: a.first_name || null, telefone: a.whatsapp ? String(a.whatsapp).replace(/\D/g, '') : null, carro: a.vihecle_interest || a.vehicle_interest || null,
+          vendedor: a.vendedor_nome || null, obs: null, confirmado: null }
+      : analisarAgenda(d, a, buscas);
     if (!x.lead) semLead++;
+    const data = a.date_scheduled || a.data || a.date || null;
+    const motivo = bool(a.is_concluido) ? a.archive_reason_name || 'concluído' : null;
     // primeira_vez = quando o agendamento apareceu (só depois da 1ª carga; antes não dá para saber quando foi feito)
-    up.run(String(a.id), x.lead, a.date_scheduled || a.data || a.date || null, a.modality || a.modalidade || null, bool(a.is_concluido), bool(a.scheduled_by_ia), agora, cfg.cargaInicialFeita ? agora : null,
-      x.nome, x.telefone, x.carro, x.obs, x.confirmado, x.vendedor);
+    up.run(`${x.lead || a.id}|${data || ''}`, x.lead, data, a.modality || a.modalidade || null, bool(a.is_concluido), bool(a.scheduled_by_ia), agora, cfg.cargaInicialFeita ? agora : null,
+      x.nome, x.telefone, x.carro, x.obs, x.confirmado, x.vendedor, motivo);
     if (x.lead) marca.run(x.lead);
   }
   estado.agendaSemLead = semLead;

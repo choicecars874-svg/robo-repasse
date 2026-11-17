@@ -40,12 +40,19 @@ function abrir() {
     // colunas novas em bancos já criados: quando o agendamento apareceu e quando o lead virou venda
     for (const sql of ['ALTER TABLE lk_agenda ADD COLUMN primeira_vez INTEGER', 'ALTER TABLE lk_leads ADD COLUMN vendido_em INTEGER', 'ALTER TABLE lk_contatos ADD COLUMN por TEXT', 'ALTER TABLE lk_contatos ADD COLUMN nota TEXT', 'ALTER TABLE lk_contatos ADD COLUMN interesse TEXT', 'ALTER TABLE lk_contatos ADD COLUMN proximo_em INTEGER', 'ALTER TABLE lk_contatos ADD COLUMN no_leadsok TEXT', 'ALTER TABLE lk_visitas ADD COLUMN comprou INTEGER', 'ALTER TABLE lk_leads ADD COLUMN carro TEXT',
       'ALTER TABLE lk_agenda ADD COLUMN nome TEXT', 'ALTER TABLE lk_agenda ADD COLUMN telefone TEXT', 'ALTER TABLE lk_agenda ADD COLUMN carro TEXT', 'ALTER TABLE lk_agenda ADD COLUMN obs TEXT',
-      'ALTER TABLE lk_agenda ADD COLUMN confirmado INTEGER', 'ALTER TABLE lk_agenda ADD COLUMN vendedor TEXT',
+      'ALTER TABLE lk_agenda ADD COLUMN confirmado INTEGER', 'ALTER TABLE lk_agenda ADD COLUMN vendedor TEXT', 'ALTER TABLE lk_agenda ADD COLUMN motivo TEXT',
       'CREATE TABLE IF NOT EXISTS lk_confirmacoes (lead_id TEXT, data_agendada TEXT, tipo TEXT, por TEXT, em INTEGER, PRIMARY KEY (lead_id, data_agendada, tipo))']) {
       try {
         db.exec(sql);
       } catch {}
     }
+    // o item da agenda do LeadsOK não tem id próprio: o "id" dele É o id do lead. Registros antigos guardaram esse id
+    // como id do agendamento e ficaram sem lead: corrige (id passa a ser lead|data, para guardar remarcações)
+    try {
+      db.exec("UPDATE lk_agenda SET lead_id = id WHERE lead_id IS NULL AND id NOT LIKE '%|%' AND id IN (SELECT id FROM lk_leads)");
+      db.exec("UPDATE OR IGNORE lk_agenda SET id = id || '|' || COALESCE(data, '') WHERE id NOT LIKE '%|%'");
+      db.exec("DELETE FROM lk_agenda WHERE id NOT LIKE '%|%'");
+    } catch {}
   } catch (e) {
     erroBanco = `Banco do LeadsOK indisponível (${e.message}). É preciso Node 22.13 ou mais novo.`;
   }

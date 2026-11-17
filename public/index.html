@@ -1382,11 +1382,11 @@ async function carregarAgenda() {
     const tel = soDigitos(a.whatsapp);
     return `${cab}<div class="agItem" data-lead="${esc(a.lead_id || '')}" data-data="${esc(a.data)}" data-nome="${esc(a.nome || '')}" data-tel="${esc(a.whatsapp || '')}" data-carro="${esc(a.carro || '')}"><span class="hora">${hora}</span>
       <div><b>${esc(a.nome || 'Lead sem nome')}</b> <span class="sub">· ${esc(MOD[a.modalidade] || a.modalidade || '')} · ${esc(a.vendedor || 'sem vendedor')} · ${esc(canal(a.origem))}${a.pela_ia ? ' · agendado pela IA' : ''}${a.pelo_sdr ? ' · agendado pelo SDR (' + esc(a.pelo_sdr) + ')' : ''}</span>${carroLinha(a)}
-        <div class="estado sub">${tel ? '+' + tel : ''}${!st && passou ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}${!st && !passou ? ' · ainda vai acontecer' : ''}${st && a.marcado_por ? ` · marcado por ${esc(a.marcado_por)}` : ''}</div>
-        ${!passou && !st ? `<div style="margin-top:4px">${seloConfirmacao(a)}</div>` : ''}
+        <div class="estado sub">${tel ? '+' + tel : ''}${!st && passou && !a.concluido ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}${!st && !passou ? ' · ainda vai acontecer' : ''}${st && a.marcado_por ? ` · marcado por ${esc(a.marcado_por)}` : ''}</div>
+        ${a.concluido && !st ? `<div style="margin-top:4px"><span class="tag">concluído no LeadsOK${a.motivo ? ': ' + esc(a.motivo) : ''}</span></div>` : !passou && !st ? `<div style="margin-top:4px">${seloConfirmacao(a)}</div>` : ''}
         ${a.obs ? `<div class="briefing">${esc(a.obs)}</div>` : ''}
-        ${a.identificado ? '' : '<span class="sub">Lead não achado na lista do LeadsOK: dados do próprio agendamento.</span>'}</div>
-      <div class="acoes">${!passou && !st ? `<button class="btn verde" data-conf="mensagem">Mandar confirmação</button>${a.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('') + (st ? '<button class="btn" data-v="">Limpar</button>' : '')}</div></div>`;
+        ${a.nome ? '' : '<span class="tag ruimTag">LeadsOK não enviou o nome</span> '}${a.vendedor ? '' : '<span class="tag ruimTag">sem vendedor responsável</span>'}</div>
+      <div class="acoes">${!passou && !st && !a.concluido ? `<button class="btn verde" data-conf="mensagem">Mandar confirmação</button>${a.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('') + (st ? '<button class="btn" data-v="">Limpar</button>' : '')}</div></div>`;
   }).join('') || '<div class="vazio">Nenhum agendamento no período.</div>';
   document.querySelectorAll('.agItem [data-conf]').forEach((b) => b.onclick = () => {
     const it = b.closest('.agItem');

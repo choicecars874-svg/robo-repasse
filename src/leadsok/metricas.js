@@ -144,7 +144,7 @@ function agenda({ de, ate } = {}) {
   // sem lead identificado: usa os dados que vieram no próprio agendamento e um id "agenda-..." para marcar a visita
   const itens = d.prepare(`SELECT a.id, COALESCE(a.lead_id, 'agenda-' || a.id) lead_id, a.lead_id IS NOT NULL identificado, a.data, a.modalidade, a.concluido, a.pela_ia,
       COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, COALESCE(l.vendedor, a.vendedor) vendedor, l.origem, l.aba_atual,
-      a.obs, a.confirmado, v.compareceu, v.comprou, v.marcado_por, v.marcado_em,
+      a.obs, a.confirmado, a.motivo, v.compareceu, v.comprou, v.marcado_por, v.marcado_em,
       (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'mensagem') confirmacao_enviada,
       (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'cliente') cliente_confirmou
     FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id LEFT JOIN lk_visitas v ON v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data
@@ -170,13 +170,14 @@ function agenda({ de, ate } = {}) {
   }
   itens.sort((a, b) => (a.data < b.data ? -1 : 1));
   const agora = new Date().toISOString();
-  const resumo = { agendados: itens.length, vieram: 0, compraram: 0, vieramNaoCompraram: 0, naoVieram: 0, aMarcar: 0, futuros: 0 };
+  const resumo = { agendados: itens.length, vieram: 0, compraram: 0, vieramNaoCompraram: 0, naoVieram: 0, aMarcar: 0, futuros: 0, concluidosLeadsOK: 0 };
   for (const a of itens) {
     if (a.compareceu === 1) {
       resumo.vieram++;
       if (a.comprou === 1) resumo.compraram++;
       else resumo.vieramNaoCompraram++;
     } else if (a.compareceu === 0) resumo.naoVieram++;
+    else if (a.concluido) resumo.concluidosLeadsOK++;
     else if (a.data < agora) resumo.aMarcar++;
     else resumo.futuros++;
   }
@@ -288,7 +289,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
         COALESCE(l.vendedor, a.vendedor) vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.aba_atual,
         a.data agenda_data, a.modalidade, a.obs agenda_obs, a.confirmado agenda_confirmado, a.lead_id IS NOT NULL identificado, 'leadsok' agenda_origem
       FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id
-      WHERE ${EH_VISITA} AND date(a.data, '-3 hours') BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data)
+      WHERE ${EH_VISITA} AND COALESCE(a.concluido, 0) = 0 AND date(a.data, '-3 hours') BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data)
         AND COALESCE(l.id, '') NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))
         ${vendedor ? "AND lower(COALESCE(l.vendedor, a.vendedor, '')) = lower(?)" : ''} ORDER BY a.data ASC LIMIT 150`).all(diaSP(agora - 7 * 86400000), amanha, ...va),
     // 3) ligar: leads dos últimos 7 dias que o SDR ainda não trabalhou e o cliente não respondeu (mais novos primeiro)
@@ -305,7 +306,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
   };
   // follow-ups marcados como "ligação" na agenda do LeadsOK (hoje e atrasados até 3 dias), sem contato do SDR depois
   const followLeadsOK = d.prepare(`SELECT ${campos}, a.data agenda_data FROM lk_agenda a JOIN lk_leads l ON l.id = a.lead_id
-    WHERE COALESCE(a.modalidade, '') = 'ligacao' AND date(a.data, '-3 hours') BETWEEN ? AND ? AND a.data <= ? AND ${base}
+    WHERE COALESCE(a.modalidade, '') = 'ligacao' AND COALESCE(a.concluido, 0) = 0 AND date(a.data, '-3 hours') BETWEEN ? AND ? AND a.data <= ? AND ${base}
       AND NOT EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.em > CAST(strftime('%s', a.data) AS INTEGER) * 1000) ${V}
     ORDER BY a.data ASC LIMIT 100`).all(diaSP(agora - 3 * 86400000), hoje, new Date(Date.parse(hoje + 'T23:59:59-03:00')).toISOString(), ...va);
   // CRM do SDR: o último contato de cada lead decide em que etapa ele está.

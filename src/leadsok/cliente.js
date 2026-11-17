@@ -48,6 +48,7 @@ function criarCliente({ email, senha }) {
   // Lê as páginas do menu do LeadsOK (links internos) e guarda nome -> id de cada ação
   // e em qual página ela apareceu (a ação é chamada nessa página)
   let paginaDaAcao = {};
+  let ultimaResposta = null;
   async function descobrirAcoes() {
     const mapa = {};
     const ondeEsta = {};
@@ -138,7 +139,11 @@ function criarCliente({ email, senha }) {
       headers: { 'Next-Action': id, Accept: 'text/x-component', 'Content-Type': 'text/plain;charset=UTF-8' },
     });
     const texto = foiParaLogin(r) ? '' : await r.text();
-    const linha = texto.split('\n').find((l) => l.startsWith('1:'));
+    ultimaResposta = { nome, status: r.status, tipo: r.headers.get('content-type') || '', inicio: texto.slice(0, 160).replace(/\d{8,}/g, '…') };
+    // a linha 0 diz onde está o resultado ({"a":"$@1"} ou ["$@1", ...]); o resultado pode ter referências "$n"
+    const mapa = linhasRsc(texto);
+    const raiz = JSON.stringify(mapa['0'] || '').match(/"\$@([0-9a-f]+)"/)?.[1] || '1';
+    const linha = mapa[raiz] !== undefined ? 'ok' : null;
     if (!linha || r.status >= 400) {
       if (tentativa) throw new Error(`Ação ${nome} falhou (${r.status})`);
       // sessão caiu ou o ID mudou com um deploy novo: redescobre e loga de novo
@@ -146,10 +151,10 @@ function criarCliente({ email, senha }) {
       if (foiParaLogin(r) || !texto) await login();
       return acao(nome, args, 1);
     }
-    return JSON.parse(linha.slice(2));
+    return resolverRefs(texto, mapa[raiz]);
   }
 
-  return { login, descobrirAcoes, pagina, acao, get acoes() { return acoes; } };
+  return { login, descobrirAcoes, pagina, acao, get acoes() { return acoes; }, get paginaDaAcao() { return paginaDaAcao; }, get ultimaResposta() { return ultimaResposta; } };
 }
 
 // Acha cada objeto de lead no texto RSC: {"id":"..." com "conversa_id" logo depois.
@@ -198,7 +203,7 @@ function camposDoFormulario(html) {
 function linhasRsc(texto) {
   const mapa = {};
   for (const linha of texto.split('\n')) {
-    const m = linha.match(/^([0-9a-f]+):([\[{"].*)$/);
+    const m = linha.match(/^([0-9a-f]+):(.+)$/);
     if (!m) continue;
     try {
       mapa[m[1]] = JSON.parse(m[2]);
