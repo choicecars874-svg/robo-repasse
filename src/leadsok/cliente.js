@@ -54,7 +54,8 @@ function criarCliente({ email, senha, acoesManuais = () => ({}) }) {
     const mapa = {};
     const ondeEsta = {};
     const vistos = new Set();
-    const fila = ['/atendimentos', '/login'];
+    // /atendimentos/kanban é a página que carrega o código da conversa (getChatMessages)
+    const fila = ['/atendimentos', '/atendimentos/kanban', '/login'];
     // formatos conhecidos de referência de server action no JS do Next (webpack e turbopack):
     //   (0,x.createServerReference)("<id>",x.callServer,void 0,x.findSourceMapURL,"nome")
     //   createServerReference("<id>",callServer,void 0,findSourceMapURL,"nome")
@@ -67,7 +68,11 @@ function criarCliente({ email, senha, acoesManuais = () => ({}) }) {
     const porNome = NOMES.map((n) => [n, new RegExp(`"([0-9a-f]{40,44})"${SEM_OUTRO_ID}"${n}"`, 'g')]);
     const scriptsDaPagina = (html) => {
       const out = new Set();
-      for (const m of html.matchAll(/<script[^>]+src="([^"]*\/_next\/static\/[^"]+\.js)"/g)) out.add(m[1].startsWith('http') ? new URL(m[1]).pathname : m[1]);
+      // src pode terminar em ".js?dpl=dpl_..." (versão do deploy): mantém a query para pedir o arquivo certo
+      for (const m of html.matchAll(/<script[^>]+src="([^"]*\/_next\/static\/[^"]+?\.js(?:\?[^"]*)?)"/g)) {
+        const u = m[1].replace(/&amp;/g, '&');
+        out.add(u.startsWith('http') ? new URL(u).pathname + new URL(u).search : u);
+      }
       // chunks citados nos dados do RSC (self.__next_f.push): "static/chunks/....js" (com ou sem barra invertida)
       for (const m of html.matchAll(/(?:\/_next\/)?static\/chunks\/[\w\-./%]+?\.js/g)) out.add('/_next/' + m[0].replace(/^\/_next\//, ''));
       return [...out];
@@ -88,16 +93,17 @@ function criarCliente({ email, senha, acoesManuais = () => ({}) }) {
     // getPendingSchedule não é usada: não vale continuar procurando por ela
     const faltam = () => NOMES.some((n) => n !== 'getPendingSchedule' && !mapa[n]);
     let lidos = 0;
+    const semQuery = (u) => u.split('?')[0];
     const lerScript = async (src, pag) => {
-      if (vistos.has(src) || lidos >= 600) return [];
-      vistos.add(src);
+      if (vistos.has(semQuery(src)) || lidos >= 600) return [];
+      vistos.add(semQuery(src));
       lidos++;
       const r = await req(src, { seguir: true });
       if (r.status >= 400) return [];
       const js = await r.text();
       const achar = (nome, id) => {
         if (!mapa[nome]) mapa[nome] = id;
-        ondeEsta[nome] ||= pag === '/login' ? '/atendimentos' : pag;
+        ondeEsta[nome] ||= pag === '/login' || pag.startsWith('/atendimentos') ? '/atendimentos' : pag;
       };
       for (const re of res) for (const a of js.matchAll(re)) achar(a[2], a[1]);
       for (const [nome, re] of porNome) if (!mapa[nome]) for (const a of js.matchAll(re)) { achar(nome, a[1]); break; }
@@ -109,16 +115,16 @@ function criarCliente({ email, senha, acoesManuais = () => ({}) }) {
       const r = await req(pag, { seguir: true });
       const html = await r.text();
       // links do menu (só caminhos internos simples, sem sair, sem arquivos)
-      for (const m of html.matchAll(/href="(\/[a-z][\w-]*)"/g)) if (!fila.includes(m[1]) && !/sair|logout|_next|api/i.test(m[1])) fila.push(m[1]);
+      for (const m of html.matchAll(/href="(\/[a-z][\w-]*(?:\/[a-z][a-z-]*)?)"/g)) if (!fila.includes(m[1]) && !/sair|logout|_next|api/i.test(m[1])) fila.push(m[1]);
       // lê os arquivos da página e, enquanto faltar ação, os que eles citam (em largura, até 600 arquivos no total)
       let atual = scriptsDaPagina(html);
       for (let nivel = 0; atual.length && nivel < 4; nivel++) {
         const prox = [];
         for (const src of atual) prox.push(...(await lerScript(src, pag)));
         if (!faltam()) break;
-        atual = prox.filter((x) => !vistos.has(x));
+        atual = prox.filter((x) => !vistos.has(semQuery(x)));
       }
-      if (!faltam() && k >= 1) break;
+      if (!faltam() && k >= 2) break;
     }
     estatisticaDescoberta = { paginas: fila.length, scripts: vistos.size, acoes: Object.keys(mapa).length, faltando: NOMES.filter((n) => !mapa[n]) };
     if (!Object.keys(mapa).length) throw new Error(`Não achei as ações do LeadsOK (o site pode ter mudado): li ${Math.min(fila.length, 16)} página(s) e ${vistos.size} arquivo(s) de código`);
