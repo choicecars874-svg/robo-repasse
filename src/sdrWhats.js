@@ -22,7 +22,7 @@ let sock = null;
 let enviando = false;
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
-const cfg = () => ({ ativo: false, horasAntes: 2, horaInicio: 8, horaFim: 20, maxDia: 15, comFoto: true, estiloCard: 'pb', ...((config.get().sdr || {}).lembreteAuto || {}) });
+const cfg = () => ({ ativo: false, horasAntes: 2, horaInicio: 8, horaFim: 20, maxDia: 15, comFoto: true, estiloCard: 'cor', modeloCard: 'reservado', ...((config.get().sdr || {}).lembreteAuto || {}) });
 const horaSP = (t = Date.now()) => Number(new Date(t).toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false })) % 24;
 const diaSP = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 function registrar(tipo, texto) {
@@ -120,10 +120,12 @@ function fraseDoCard({ nome, carro, data }) {
   const dia = diaSP(Date.parse(data)) === diaSP() ? 'Hoje' : new Date(data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long' }).replace('-feira', '');
   return { titulo: `${primeiro ? primeiro + ', s' : 'S'}eu ${modelo || 'carro'} está pronto te esperando`, subtitulo: `${dia} · ${hora}` };
 }
-async function cardDaVisita({ nome, carro, data }) {
+async function cardDaVisita({ nome, carro, data, modeloForcado }) {
   const { gerarCard } = require('./card');
   const f = fraseDoCard({ nome, carro, data });
-  return gerarCard({ foto: carro.imagem, ...f, pb: cfg().estiloCard !== 'cor' });
+  const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
+  const descricao = `${carro.marca || ''} ${carro.modelo || ''} ${carro.versao || ''} ${carro.ano || ''}`.replace(/\s+/g, ' ').trim();
+  return gerarCard({ foto: carro.imagem, ...f, pb: cfg().estiloCard === 'pb', modelo: modeloForcado || cfg().modeloCard, nome: primeiro, carro: descricao, quando: f.subtitulo });
 }
 
 // ---------- Texto do lembrete ----------
