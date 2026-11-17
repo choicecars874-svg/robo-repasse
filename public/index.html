@@ -1905,7 +1905,7 @@ $('#btnLkDiag').onclick = async () => {
   const b = $('#btnLkDiag'); b.disabled = true; b.textContent = 'Testando…';
   try {
     const r = await api('/api/leadsok/testar-detalhes', { method:'POST' });
-    const linhas = [`Ações do LeadsOK encontradas: ${r.acoesEncontradas}`, ...Object.entries(r.necessarias).map(([k, v]) => `  ${k}: ${v}`), '',
+    const linhas = [`Ações do LeadsOK encontradas: ${r.acoesEncontradas}${r.descoberta ? ` (li ${r.descoberta.paginas} página(s) e ${r.descoberta.scripts} arquivo(s) de código)` : ''}`, ...Object.entries(r.necessarias).map(([k, v]) => `  ${k}: ${v}`), '',
       ...r.passos.map((p) => `${p.ok ? 'OK  ' : 'ERRO'} ${p.acao}${p.ok ? ` · ${p.itens == null ? 'resposta sem a lista esperada' : p.itens + ' item(ns)'} · campos: ${Array.isArray(p.campos) ? p.campos.join(', ') : p.campos}` : ' · ' + p.erro}${p.resposta ? `\n       resposta: status ${p.resposta.status}, ${p.resposta.tipo || 'sem tipo'}, ${p.resposta.tamanho} caracteres${p.resposta.html ? ', veio uma PÁGINA HTML (não é resposta de ação)' : ''}, linhas: ${p.resposta.linhas.join(' ')}` : ''}`),
       '', `Leads no banco: ${r.base.leads} · com detalhes: ${r.base.detalhados || 0}`, r.ultimoErro ? `Último erro da coleta: ${r.ultimoErro}` : ''];
     $('#lkLog').textContent = linhas.join('\n'); $('#lkLog').closest('details').open = true;

@@ -49,31 +49,50 @@ function criarCliente({ email, senha }) {
   // e em qual página ela apareceu (a ação é chamada nessa página)
   let paginaDaAcao = {};
   let ultimaResposta = null;
+  let estatisticaDescoberta = null;
   async function descobrirAcoes() {
     const mapa = {};
     const ondeEsta = {};
     const vistos = new Set();
     const fila = ['/atendimentos', '/login'];
-    const res = [/createServerReference\)\("([0-9a-f]{40,42})"[^)]*?"(\w+)"/g, /createServerReference\("([0-9a-f]{40,42})",[^)]*?"(\w+)"\)/g];
+    // formatos conhecidos de referência de server action no JS do Next (webpack e turbopack):
+    //   (0,x.createServerReference)("<id>",x.callServer,void 0,x.findSourceMapURL,"nome")
+    //   createServerReference("<id>",callServer,void 0,findSourceMapURL,"nome")
+    //   (0,__TURBOPACK__...["createServerReference"])("<id>",...,"nome")
+    // o nome é o último argumento: "nome" seguido de ")" (no turbopack há outros nomes entre aspas no meio, ex. ["callServer"])
+    const SEM_OUTRO_ID = '(?:(?!"[0-9a-f]{40,44}")[\\s\\S]){0,400}?';
+    const res = [new RegExp(`createServerReference(?:\\)|"\\]\\))?\\(\\s*"([0-9a-f]{40,44})"${SEM_OUTRO_ID}"(\\w+)"\\s*\\)`, 'g')];
+    // e, para as ações que o painel usa, uma busca direta: id hexadecimal seguido do nome logo depois
+    const NOMES = [...PERMITIDAS, ...ESCRITAS];
+    const porNome = NOMES.map((n) => [n, new RegExp(`"([0-9a-f]{40,44})"${SEM_OUTRO_ID}"${n}"`, 'g')]);
+    const scriptsDaPagina = (html) => {
+      const out = new Set();
+      for (const m of html.matchAll(/<script[^>]+src="([^"]*\/_next\/static\/[^"]+\.js)"/g)) out.add(m[1].startsWith('http') ? new URL(m[1]).pathname : m[1]);
+      // chunks citados nos dados do RSC (self.__next_f.push): "static/chunks/....js" (com ou sem barra invertida)
+      for (const m of html.matchAll(/(?:\/_next\/)?static\/chunks\/[\w\-./%]+?\.js/g)) out.add('/_next/' + m[0].replace(/^\/_next\//, ''));
+      return [...out];
+    };
     for (let k = 0; k < fila.length && k < 16; k++) {
       const pag = fila[k];
       const r = await req(pag, { seguir: true });
       const html = await r.text();
       // links do menu (só caminhos internos simples, sem sair, sem arquivos)
       for (const m of html.matchAll(/href="(\/[a-z][\w-]*)"/g)) if (!fila.includes(m[1]) && !/sair|logout|_next|api/i.test(m[1])) fila.push(m[1]);
-      for (const m of html.matchAll(/<script[^>]+src="([^"]*\/_next\/static\/chunks\/[^"]+\.js)"/g)) {
-        const src = m[1].startsWith('http') ? new URL(m[1]).pathname : m[1];
+      for (const src of scriptsDaPagina(html)) {
         if (vistos.has(src)) continue;
         vistos.add(src);
         const js = await (await req(src, { seguir: true })).text();
-        for (const re of res) for (const a of js.matchAll(re)) {
-          mapa[a[2]] = a[1];
-          ondeEsta[a[2]] ||= pag === '/login' ? '/atendimentos' : pag;
-        }
+        const achar = (nome, id) => {
+          if (!mapa[nome]) mapa[nome] = id;
+          ondeEsta[nome] ||= pag === '/login' ? '/atendimentos' : pag;
+        };
+        for (const re of res) for (const a of js.matchAll(re)) achar(a[2], a[1]);
+        for (const [nome, re] of porNome) if (!mapa[nome]) for (const a of js.matchAll(re)) { achar(nome, a[1]); break; }
         await esperar(80);
       }
     }
-    if (!Object.keys(mapa).length) throw new Error('Não achei as ações do LeadsOK (o site pode ter mudado)');
+    estatisticaDescoberta = { paginas: fila.length, scripts: vistos.size, acoes: Object.keys(mapa).length };
+    if (!Object.keys(mapa).length) throw new Error(`Não achei as ações do LeadsOK (o site pode ter mudado): li ${Math.min(fila.length, 16)} página(s) e ${vistos.size} arquivo(s) de código`);
     acoes = mapa;
     paginaDaAcao = ondeEsta;
     return mapa;
@@ -155,7 +174,7 @@ function criarCliente({ email, senha }) {
     return resolverRefs(texto, mapa[raiz]);
   }
 
-  return { login, descobrirAcoes, pagina, acao, get acoes() { return acoes; }, get paginaDaAcao() { return paginaDaAcao; }, get ultimaResposta() { return ultimaResposta; } };
+  return { login, descobrirAcoes, pagina, acao, get acoes() { return acoes; }, get paginaDaAcao() { return paginaDaAcao; }, get ultimaResposta() { return ultimaResposta; }, get estatisticaDescoberta() { return estatisticaDescoberta; } };
 }
 
 // Acha cada objeto de lead no texto RSC: {"id":"..." com "conversa_id" logo depois.

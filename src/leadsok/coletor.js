@@ -519,6 +519,7 @@ async function testarDetalhes() {
   await tentar('getCustomerFinancing', [{ customerId: lead.id }], (r) => ({ itens: Array.isArray(r?.banks) ? r.banks.length : null }));
   const acoes = c.acoes || {};
   return {
+    descoberta: c.estatisticaDescoberta,
     acoesEncontradas: Object.keys(acoes).length,
     necessarias: Object.fromEntries(['getCustomerJourneyLog', 'getChatMessages', 'getCustomerFinancing'].map((n) => [n, acoes[n] ? `achada (página ${c.paginaDaAcao[n] || '?'})` : 'NÃO achada'])),
     passos,
