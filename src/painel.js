@@ -481,7 +481,7 @@ function iniciarPainel() {
     const c = config.get();
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
     const lembreteAuto = { ativo: !!b.ativo, horasAntes: n(b.horasAntes, 0.5, 12, 2), horaInicio: n(b.horaInicio, 6, 12, 8), horaFim: n(b.horaFim, 14, 22, 20), maxDia: n(b.maxDia, 1, 30, 15), comFoto: b.comFoto !== false, estiloCard: b.estiloCard === 'pb' ? 'pb' : 'cor', modeloCard: ['story', 'reservado', 'premium'].includes(b.modeloCard) ? b.modeloCard : 'premium' };
-    const nomeSdr = String(b.nomeSdr ?? c.sdr.nomeSdr ?? '').trim().slice(0, 40);
+    const nomeSdr = String(b.nomeSdr || '').trim().slice(0, 40) || c.sdr.nomeSdr || (req.usuario.papel !== 'admin' ? req.usuario.nome : '');
     config.salvar({ ...c, sdr: { ...c.sdr, lembreteAuto, nomeSdr } });
     res.json(sdrWhats.status());
   });

@@ -185,7 +185,7 @@ async function enviarLembrete(v, { por = 'automático', teste = false } = {}) {
   const numero = String(v.whatsapp).replace(/\D/g, '');
   const [existe] = await sock.onWhatsApp(numero);
   if (!existe?.exists) throw new Error(`O número ${numero} não tem WhatsApp`);
-  const sdr = (config.get().sdr || {}).nomeSdr || por;
+  const sdr = (config.get().sdr || {}).nomeSdr || 'a equipe';
   const texto = textoLembrete({ nome: v.nome, carro: v.carro, data: v.data, sdr });
   const carro = cfg().comFoto ? carroNoEstoque(v.carro) : null;
   let card = null;
