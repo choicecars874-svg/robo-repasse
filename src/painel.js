@@ -309,6 +309,13 @@ function iniciarPainel() {
   });
 
   // LeadsOK (comercial): a senha nunca volta para o navegador
+  app.post('/api/leadsok/testar-detalhes', async (_, res) => {
+    try {
+      res.json(await leadsok.testarDetalhes());
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
   app.get('/api/leadsok/estado', (_, res) => res.json(leadsok.status()));
   app.post('/api/leadsok/credenciais', async (req, res) => {
     try {
@@ -415,6 +422,11 @@ function iniciarPainel() {
       res.status(400).json({ erro: e.message });
     }
   });
+  app.get('/api/comercial/painel', (req, res) => {
+    const p = periodo(req.query);
+    res.json({ ...comercial.painelComercial({ de: p.de, ate: p.ate, horasParado: leadsok.horasParado(), metas: config.get().metas || {} }), estado: { ativo: leadsok.status().ativo, problema: leadsok.status().problema } });
+  });
+  app.get('/api/comercial/gestor', (_, res) => res.json(comercial.gestorDoDia({ horasParado: leadsok.horasParado() })));
   app.get('/api/comercial/periodo', (req, res) => res.json(comercial.resumoPeriodo(req.query.de, req.query.ate) || {}));
   app.get('/api/comercial/hoje', (_, res) => res.json({ ...(comercial.resumoHoje() || {}), estado: { ativo: leadsok.status().ativo, problema: leadsok.status().problema } }));
 

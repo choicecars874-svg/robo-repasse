@@ -139,7 +139,8 @@ function criarCliente({ email, senha }) {
       headers: { 'Next-Action': id, Accept: 'text/x-component', 'Content-Type': 'text/plain;charset=UTF-8' },
     });
     const texto = foiParaLogin(r) ? '' : await r.text();
-    ultimaResposta = { nome, status: r.status, tipo: r.headers.get('content-type') || '', inicio: texto.slice(0, 160).replace(/\d{8,}/g, '…') };
+    // só a forma da resposta (sem conteúdo, para não expor dados de cliente)
+    ultimaResposta = { nome, pagina: paginaDaAcao[nome] || '/atendimentos', status: r.status, tipo: r.headers.get('content-type') || '', tamanho: texto.length, html: /^\s*<(!doctype|html)/i.test(texto), linhas: texto.split('\n').slice(0, 8).map((l) => l.slice(0, 6).replace(/[^0-9a-zA-Z:$@\[{"]/g, '')).filter(Boolean) };
     // a linha 0 diz onde está o resultado ({"a":"$@1"} ou ["$@1", ...]); o resultado pode ter referências "$n"
     const mapa = linhasRsc(texto);
     const raiz = JSON.stringify(mapa['0'] || '').match(/"\$@([0-9a-f]+)"/)?.[1] || '1';

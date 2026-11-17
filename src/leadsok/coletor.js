@@ -472,6 +472,37 @@ function desligar() {
   cfg.ativo = false;
   salvarCfg();
 }
+// Diagnóstico: tenta ler histórico, conversa e ficha de UM lead recente e diz, passo a passo, onde falha.
+// Não grava nada e não devolve conteúdo de cliente: só contagens, nomes de campos e a forma da resposta.
+async function testarDetalhes() {
+  const d = banco.abrir();
+  if (!d) throw new Error(banco.erro());
+  const lead = d.prepare("SELECT id FROM lk_leads WHERE is_resgate = 0 AND id NOT LIKE 'teste-%' ORDER BY ultima_msg_at DESC LIMIT 1").get();
+  if (!lead) throw new Error('Nenhum lead no banco ainda: rode a sincronização primeiro');
+  const c = obterCliente();
+  const passos = [];
+  const tentar = async (nome, args, contar) => {
+    try {
+      const r = await c.acao(nome, args);
+      passos.push({ acao: nome, ok: true, ...contar(r), campos: r && typeof r === 'object' ? Object.keys(r).slice(0, 12) : typeof r, resposta: c.ultimaResposta });
+    } catch (e) {
+      passos.push({ acao: nome, ok: false, erro: e.message, resposta: c.ultimaResposta });
+    }
+    await esperar(PAUSA_MS);
+  };
+  await tentar('getCustomerJourneyLog', [{ customerId: lead.id, limit: 100, offset: 0 }], (r) => ({ itens: Array.isArray(r?.events) ? r.events.length : null }));
+  await tentar('getChatMessages', [{ customerId: lead.id }], (r) => ({ itens: Array.isArray(r?.rows) ? r.rows.length : null }));
+  await tentar('getCustomerFinancing', [{ customerId: lead.id }], (r) => ({ itens: Array.isArray(r?.banks) ? r.banks.length : null }));
+  const acoes = c.acoes || {};
+  return {
+    acoesEncontradas: Object.keys(acoes).length,
+    necessarias: Object.fromEntries(['getCustomerJourneyLog', 'getChatMessages', 'getCustomerFinancing'].map((n) => [n, acoes[n] ? `achada (página ${c.paginaDaAcao[n] || '?'})` : 'NÃO achada'])),
+    passos,
+    base: d.prepare('SELECT COUNT(*) leads, SUM(detalhe_em IS NOT NULL) detalhados FROM lk_leads').get(),
+    ultimoErro: estado.ultimoErro,
+  };
+}
+
 function status() {
   const d = banco.abrir();
   let base = {};
@@ -498,4 +529,4 @@ function definirHorasParado(h) {
   salvarCfg();
 }
 
-module.exports = { gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };
+module.exports = { testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };

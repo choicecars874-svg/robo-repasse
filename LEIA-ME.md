@@ -83,3 +83,19 @@ PAINEL_SENHA=minhasenha npm start      # abra http://localhost:3000
   O Histórico mostra custo, venda e FIPE de cada carro postado.
 - Confirme com o vendedor original que o carro ainda está disponível antes de fechar negócio.
 - Comandos úteis no servidor: `pm2 logs repasse` (ver o que está acontecendo) e `pm2 restart repasse` (reiniciar).
+
+## Definições das métricas (valem para todas as telas)
+
+- **Lead**: lead de entrada no LeadsOK (sem a base de resgate e sem leads de teste), contado no dia em que foi criado.
+- **Atendido**: a loja (vendedor ou IA) mandou pelo menos uma mensagem. Depende das conversas carregadas.
+- **Respondido**: o cliente respondeu depois da 1ª mensagem da loja. Depende das conversas carregadas.
+- **Agendamento**: visita presencial ou online na agenda do LeadsOK, ou "Agendou visita" na Fila do SDR. Tipo "ligação" é lembrete de follow-up e não conta.
+  - **Agendamento feito**: contado no dia em que foi criado (Painel, Time, Resultado do SDR).
+  - **Agendamento para o dia**: contado no dia da visita (tela Agenda).
+- **Compareceu**: visita marcada "Veio" na Agenda.
+- **Venda**: lead arquivado como "Vendido" no LeadsOK ou visita marcada "Veio e comprou".
+- **Funil**: dos leads criados no período, quantos chegaram pelo menos até cada etapa (nunca aumenta de uma etapa para a seguinte).
+- **Sem dado**: com as conversas carregadas para menos de 80% dos leads do período, Atendidos, Respondidos, Fichas e 1ª resposta aparecem como "sem dado", não 0.
+- **Contato direto**: WhatsApp da loja e cadastro manual; contam como lead e aparecem numa linha só na tabela de canais.
+
+As regras estão em `src/leadsok/metricas.js` (bloco "DEFINIÇÕES ÚNICAS DAS MÉTRICAS").

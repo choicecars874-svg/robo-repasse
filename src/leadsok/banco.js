@@ -32,6 +32,8 @@ function abrir() {
       CREATE TABLE IF NOT EXISTS lk_visitas (lead_id TEXT, data_agendada TEXT, compareceu INTEGER, marcado_por TEXT, marcado_em INTEGER, PRIMARY KEY (lead_id, data_agendada));
       CREATE TABLE IF NOT EXISTS lk_contatos (id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id TEXT, dia TEXT, tipo TEXT, resultado TEXT, em INTEGER);
       CREATE INDEX IF NOT EXISTS lk_contatos_dia ON lk_contatos(dia, lead_id);
+      CREATE INDEX IF NOT EXISTS lk_agenda_lead ON lk_agenda(lead_id);
+      CREATE INDEX IF NOT EXISTS lk_contatos_lead ON lk_contatos(lead_id);
       CREATE TABLE IF NOT EXISTS lk_notas_backup (lead_id TEXT, em INTEGER, texto TEXT);
       CREATE TABLE IF NOT EXISTS lk_esperando (em INTEGER, vendedor TEXT, n INTEGER);
       CREATE INDEX IF NOT EXISTS lk_esperando_em ON lk_esperando(em);

@@ -7,17 +7,17 @@ const STATUS_FICHA = { 1: 'Pré-aprovado', 2: 'Pré-reprovado', 3: 'Em análise'
 const nomeStatus = (s) => STATUS_FICHA[s] || 'Outros';
 
 // Leads do período (pela data de criação). base: "entrada" (sem a base antiga de resgate) ou "resgate"
-// Canais que não entram na visão de Leads e canais (contato direto, não é mídia paga)
-const FORA_DOS_CANAIS = ['whatsapp', 'manual', 'teste'];
-function coorte({ de, ate, origem, base = 'entrada', ocultar = [] }) {
+// WhatsApp direto e cadastro manual não são canal de mídia: nas tabelas de canal aparecem juntos como "direto",
+// mas contam como lead em todas as telas (senão o Painel, o Time e os canais não bateriam entre si)
+const DIRETOS = ['whatsapp', 'manual'];
+const ORIGEM = "CASE WHEN l.origem IN ('whatsapp', 'manual') THEN 'direto' ELSE l.origem END";
+function coorte({ de, ate, origem, base = 'entrada' }) {
   const filtros = ["date(l.created_date, '-3 hours') BETWEEN ? AND ?", 'l.is_resgate = ?', "COALESCE(l.origem, '') != 'teste'"];
   const args = [de, ate, base === 'resgate' ? 1 : 0];
-  if (origem) {
+  if (origem === 'direto') filtros.push("l.origem IN ('whatsapp', 'manual')");
+  else if (origem) {
     filtros.push('l.origem = ?');
     args.push(origem);
-  } else if (ocultar.length) {
-    filtros.push(`COALESCE(l.origem, '') NOT IN (${ocultar.map(() => '?').join(',')})`);
-    args.push(...ocultar);
   }
   return { onde: filtros.join(' AND '), args };
 }
@@ -26,37 +26,83 @@ function coorte({ de, ate, origem, base = 'entrada', ocultar = [] }) {
 const PRIMEIRA_LOJA = "(SELECT MIN(m.ts) FROM lk_mensagens m WHERE m.lead_id = l.id AND m.owner = 'salesman')";
 const RESPONDEU = `EXISTS (SELECT 1 FROM lk_mensagens m WHERE m.lead_id = l.id AND m.owner = 'customers' AND m.ts > ${PRIMEIRA_LOJA})`;
 const TEM_FICHA = 'EXISTS (SELECT 1 FROM lk_fichas f WHERE f.lead_id = l.id)';
-const AGENDOU = "(l.agendado_alguma_vez = 1 OR EXISTS (SELECT 1 FROM lk_eventos e WHERE e.lead_id = l.id AND e.tipo = 'scheduled'))";
+// ===================== DEFINIÇÕES ÚNICAS DAS MÉTRICAS (valem para todas as telas) =====================
+// LEAD        lead de entrada (sem a base de resgate e sem leads de teste), pela data em que foi criado no LeadsOK.
+// ATENDIDO    a loja (vendedor ou IA) mandou pelo menos uma mensagem. Precisa das conversas carregadas.
+// RESPONDIDO  o cliente respondeu depois da 1ª mensagem da loja. Precisa das conversas carregadas.
+// AGENDAMENTO de visita: agenda do LeadsOK com modalidade presencial ou online ("ligação" é lembrete de follow-up, não conta)
+//             ou "Agendou visita" registrado na Fila do SDR.
+//   - AGENDAMENTO FEITO: contado no dia em que foi CRIADO (dia em que apareceu na agenda do LeadsOK, ou dia do registro do SDR).
+//     Um lead conta uma vez por dia. Agendamentos que já existiam na 1ª carga não têm data de criação e ficam fora.
+//   - AGENDAMENTO PARA O DIA: contado no dia da VISITA (é o que a tela Agenda lista).
+// COMPARECEU  visita marcada como "Veio" na Agenda (o LeadsOK não registra comparecimento).
+// VENDA       lead arquivado como "Vendido" no LeadsOK ou visita marcada "Veio e comprou".
+// FUNIL       dos leads criados no período, quantos chegaram PELO MENOS até cada etapa. Quem comprou conta como compareceu,
+//             quem compareceu conta como agendou, e assim por diante: uma etapa nunca é maior que a anterior.
+// SEM DADO    se as conversas estão carregadas para menos de 80% dos leads do período, Atendidos, Respondidos, Fichas e
+//             1ª resposta saem como null ("sem dado") em vez de 0.
+const AG_VISITA = "COALESCE(a.modalidade, 'presencial') != 'ligacao'";
+const AGENDOU_VISITA = `(EXISTS (SELECT 1 FROM lk_agenda a WHERE a.lead_id = l.id AND ${AG_VISITA}) OR EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.resultado = 'agendou'))`;
+const COBERTURA_MINIMA = 0.8;
 const VISITOU = 'EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = l.id AND v.compareceu = 1)';
 const NAO_VEIO = 'EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = l.id AND v.compareceu = 0)';
 const VEIO_NAO_COMPROU = 'EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = l.id AND v.compareceu = 1 AND v.comprou = 0)';
 // comprou: vendido no LeadsOK ou marcado "Veio e comprou" na Agenda
 const COMPROU = `(${VENDIDO} OR EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = l.id AND v.comprou = 1))`;
+// etapas do funil: "chegou pelo menos até"
+const E_COMPARECEU = `(${VISITOU} OR ${COMPROU})`;
+const AGENDOU = `(${AGENDOU_VISITA} OR ${E_COMPARECEU})`;
+const E_RESPONDEU = `(${RESPONDEU} OR ${AGENDOU})`;
+const E_ATENDIDO = `(${PRIMEIRA_LOJA} IS NOT NULL OR ${E_RESPONDEU})`;
+
+// Agendamentos FEITOS no período (pela data de criação): linhas { lead_id, dia, vendedor, origem }
+function agendamentosFeitos(d, { de, ate, origem }) {
+  return d.prepare(`SELECT x.lead_id, x.dia, COALESCE(l.vendedor, 'Sem vendedor') vendedor, l.origem FROM (
+      SELECT a.lead_id, date(a.primeira_vez / 1000, 'unixepoch', '-3 hours') dia FROM lk_agenda a WHERE ${AG_VISITA} AND a.primeira_vez IS NOT NULL AND a.lead_id IS NOT NULL
+      UNION
+      SELECT c.lead_id, c.dia FROM lk_contatos c WHERE c.resultado = 'agendou'
+    ) x LEFT JOIN lk_leads l ON l.id = x.lead_id
+    WHERE x.dia BETWEEN ? AND ? AND COALESCE(l.origem, '') != 'teste' AND COALESCE(l.is_resgate, 0) = 0 ${origem ? 'AND l.origem = ?' : ''}`).all(...(origem ? [de, ate, origem] : [de, ate]));
+}
+// Vendas no período: pela data em que o lead virou "Vendido" no LeadsOK ou em que a visita foi marcada "Veio e comprou"
+function vendasNoPeriodo(d, de, ate) {
+  return d.prepare(`SELECT COUNT(*) n FROM (
+      SELECT l.id FROM lk_leads l WHERE ${VENDIDO} AND COALESCE(l.origem, '') != 'teste' AND date(COALESCE(datetime(l.vendido_em / 1000, 'unixepoch'), l.ultima_msg_at), '-3 hours') BETWEEN ? AND ?
+      UNION
+      SELECT v.lead_id FROM lk_visitas v WHERE v.comprou = 1 AND v.lead_id NOT LIKE 'teste-%' AND date(v.marcado_em / 1000, 'unixepoch', '-3 hours') BETWEEN ? AND ?)`).get(de, ate, de, ate).n;
+}
+// Visitas que aconteceram no período (marcadas "Veio"), pela data da visita
+const visitasNoPeriodo = (d, de, ate) => d.prepare("SELECT COUNT(*) n FROM lk_visitas WHERE compareceu = 1 AND lead_id NOT LIKE 'teste-%' AND date(data_agendada, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
 
 function leads(filtro) {
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
-  const { onde, args } = coorte({ ...filtro, ocultar: filtro.todosCanais ? [] : FORA_DOS_CANAIS });
-  const linha = (extra = '') => `SELECT COUNT(*) demanda,
-      TOTAL(${PRIMEIRA_LOJA} IS NOT NULL) atendidos,
-      TOTAL(${RESPONDEU}) responderam,
+  const { onde, args } = coorte(filtro);
+  const etapas = `COUNT(*) demanda,
+      TOTAL(${E_ATENDIDO}) atendidos,
+      TOTAL(${E_RESPONDEU}) responderam,
       TOTAL(${TEM_FICHA}) fichas,
       TOTAL(${AGENDOU}) agendados,
-      TOTAL(${VISITOU}) visitas,
+      TOTAL(${E_COMPARECEU}) visitas,
+      TOTAL(${VISITOU}) visitasMarcadas,
       TOTAL(${NAO_VEIO}) naoVieram,
       TOTAL(${VEIO_NAO_COMPROU}) vieramNaoCompraram,
       TOTAL(${COMPROU}) vendas,
-      TOTAL(l.detalhe_em IS NOT NULL) detalhados
-    FROM lk_leads l WHERE ${onde} ${extra}`;
-  const total = d.prepare(linha()).get(...args);
-  const agendamentos = d.prepare(`SELECT COUNT(*) n FROM lk_eventos e JOIN lk_leads l ON l.id = e.lead_id WHERE e.tipo = 'scheduled' AND ${onde}`).get(...args).n;
-  const porOrigem = d.prepare(`SELECT l.origem, COUNT(*) demanda, TOTAL(${RESPONDEU}) responderam, TOTAL(${TEM_FICHA}) fichas, TOTAL(${AGENDOU}) agendados, TOTAL(${VISITOU}) visitas, TOTAL(${COMPROU}) vendas
-    FROM lk_leads l WHERE ${onde} GROUP BY l.origem ORDER BY demanda DESC`).all(...args);
-  const porDia = d.prepare(`SELECT date(l.created_date, '-3 hours') dia, l.origem, COUNT(*) n FROM lk_leads l WHERE ${onde} GROUP BY dia, l.origem ORDER BY dia`).all(...args);
+      TOTAL(l.detalhe_em IS NOT NULL) detalhados`;
+  // sem as conversas carregadas, o que depende delas vira "sem dado" (null), não 0
+  const semDado = (x) => {
+    x.semDadoConversa = x.demanda > 0 && x.detalhados / x.demanda < COBERTURA_MINIMA;
+    if (x.semDadoConversa) x.atendidos = x.responderam = x.fichas = null;
+    return x;
+  };
+  const total = semDado(d.prepare(`SELECT ${etapas} FROM lk_leads l WHERE ${onde}`).get(...args));
+  const agendamentos = agendamentosFeitos(d, filtro).length;
+  const porOrigem = d.prepare(`SELECT ${ORIGEM} origem, ${etapas} FROM lk_leads l WHERE ${onde} GROUP BY 1 ORDER BY demanda DESC`).all(...args).map(semDado);
+  const porDia = d.prepare(`SELECT date(l.created_date, '-3 hours') dia, ${ORIGEM} origem, COUNT(*) n FROM lk_leads l WHERE ${onde} GROUP BY dia, 2 ORDER BY dia`).all(...args);
   const fichas = d.prepare(`SELECT f.banco, f.status, COUNT(DISTINCT f.lead_id) n FROM lk_fichas f JOIN lk_leads l ON l.id = f.lead_id WHERE ${onde} GROUP BY f.banco, f.status`).all(...args)
     .map((x) => ({ ...x, statusNome: nomeStatus(x.status) }));
-  const origens = d.prepare('SELECT DISTINCT origem FROM lk_leads WHERE origem IS NOT NULL ORDER BY origem').all().map((x) => x.origem).filter((o) => filtro.todosCanais || !FORA_DOS_CANAIS.includes(o));
-  return { filtro, total: { ...total, agendamentos }, porOrigem, porDia, fichas, origens };
+  const origens = [...new Set(d.prepare('SELECT DISTINCT origem FROM lk_leads WHERE origem IS NOT NULL ORDER BY origem').all().map((x) => (DIRETOS.includes(x.origem) ? 'direto' : x.origem)).filter((o) => o !== 'teste'))];
+  return { filtro, total: { ...total, agendamentos }, porOrigem, porDia, fichas, origens, cobertura: total.demanda ? total.detalhados / total.demanda : null };
 }
 
 // Por vendedor: o vendedor atual do lead (o LeadsOK não guarda quem estava com o lead em cada etapa
@@ -71,15 +117,23 @@ function time(filtro, horasParado = 2) {
      WHERE s.lead_id = l.id AND s.owner = 'salesman' AND s.ts > c.t)`;
   const linhas = d.prepare(`SELECT COALESCE(l.vendedor, 'Sem vendedor') vendedor, MAX(l.vendedor_is_ia) ia, COUNT(*) recebidos,
       AVG(CASE WHEN l.vendedor_is_ia = 0 THEN ${RESPOSTA_MIN} END) resposta_min,
-      TOTAL(${RESPONDEU}) responderam, TOTAL(${TEM_FICHA}) fichas, TOTAL(${AGENDOU}) agendados, TOTAL(${VISITOU}) visitas, TOTAL(${COMPROU}) vendas
+      TOTAL(${E_RESPONDEU}) responderam, TOTAL(${TEM_FICHA}) fichas, TOTAL(${AGENDOU}) agendados, TOTAL(${E_COMPARECEU}) visitas, TOTAL(${COMPROU}) vendas,
+      TOTAL(l.detalhe_em IS NOT NULL) detalhados
     FROM lk_leads l WHERE ${onde} GROUP BY vendedor ORDER BY recebidos DESC`).all(...args);
+  // sem as conversas carregadas: 1ª resposta, responderam e fichas são "sem dado"
+  const totRec = linhas.reduce((a, v) => a + v.recebidos, 0);
+  const totDet = linhas.reduce((a, v) => a + v.detalhados, 0);
+  const semDadoConversa = totRec > 0 && totDet / totRec < COBERTURA_MINIMA;
+  if (semDadoConversa) for (const v of linhas) v.resposta_min = v.responderam = v.fichas = null;
   const esperando = esperandoAgora(d, horasParado);
   const mapa = Object.fromEntries(esperando.map((x) => [x.vendedor, x.n]));
   // agendamentos FEITOS e visitas no período (pela data do fato, não da criação do lead), por vendedor do lead
   const filtroOrigem = filtro.origem ? 'AND l.origem = ?' : '';
   const argsO = filtro.origem ? [filtro.origem] : [];
-  const agPorVend = Object.fromEntries(d.prepare(`SELECT COALESCE(l.vendedor, 'Sem vendedor') vendedor, COUNT(DISTINCT e.lead_id || date(e.ts, '-3 hours')) n
-    FROM lk_eventos e JOIN lk_leads l ON l.id = e.lead_id WHERE e.tipo = 'scheduled' AND date(e.ts, '-3 hours') BETWEEN ? AND ? ${filtroOrigem} GROUP BY vendedor`).all(filtro.de, filtro.ate, ...argsO).map((x) => [x.vendedor, x.n]));
+  // mesma regra de "agendamento feito" de todas as telas
+  const feitos = agendamentosFeitos(d, filtro);
+  const agPorVend = {};
+  for (const x of feitos) agPorVend[x.vendedor] = (agPorVend[x.vendedor] || 0) + 1;
   const viPorVend = Object.fromEntries(d.prepare(`SELECT COALESCE(l.vendedor, 'Sem vendedor') vendedor, TOTAL(v.compareceu = 1) vieram, TOTAL(v.compareceu = 0) naoVieram, TOTAL(v.comprou = 1) compraram
     FROM lk_visitas v JOIN lk_leads l ON l.id = v.lead_id WHERE date(v.data_agendada, '-3 hours') BETWEEN ? AND ? ${filtroOrigem} GROUP BY vendedor`).all(filtro.de, filtro.ate, ...argsO).map((x) => [x.vendedor, x]));
   // por dia: leads que chegaram, tempo médio da 1ª resposta (só humanos), agendamentos feitos e visitas
@@ -87,10 +141,7 @@ function time(filtro, horasParado = 2) {
   const dia = (k) => (porDia[k] ||= { dia: k, leads: 0, resposta_min: null, agendamentos: 0, vieram: 0, naoVieram: 0, esperandoPico: null });
   for (const x of d.prepare(`SELECT date(l.created_date, '-3 hours') dia, COUNT(*) leads, AVG(CASE WHEN l.vendedor_is_ia = 0 THEN ${RESPOSTA_MIN} END) resposta_min
     FROM lk_leads l WHERE ${onde} GROUP BY dia`).all(...args)) Object.assign(dia(x.dia), { leads: x.leads, resposta_min: x.resposta_min });
-  for (const x of d.prepare(`SELECT date(e.ts, '-3 hours') dia, COUNT(DISTINCT e.lead_id) n FROM lk_eventos e JOIN lk_leads l ON l.id = e.lead_id
-    WHERE e.tipo = 'scheduled' AND date(e.ts, '-3 hours') BETWEEN ? AND ? ${filtroOrigem} GROUP BY dia`).all(filtro.de, filtro.ate, ...argsO)) dia(x.dia).agendamentos = x.n;
-  for (const x of d.prepare(`SELECT date(a.primeira_vez / 1000, 'unixepoch', '-3 hours') dia, COUNT(*) n FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id
-    WHERE a.primeira_vez IS NOT NULL AND date(a.primeira_vez / 1000, 'unixepoch', '-3 hours') BETWEEN ? AND ? ${filtroOrigem} GROUP BY dia`).all(filtro.de, filtro.ate, ...argsO)) dia(x.dia).agendamentos = Math.max(dia(x.dia).agendamentos, x.n);
+  for (const x of feitos) dia(x.dia).agendamentos++;
   for (const x of d.prepare(`SELECT date(v.data_agendada, '-3 hours') dia, TOTAL(v.compareceu = 1) vieram, TOTAL(v.compareceu = 0) naoVieram FROM lk_visitas v JOIN lk_leads l ON l.id = v.lead_id
     WHERE date(v.data_agendada, '-3 hours') BETWEEN ? AND ? ${filtroOrigem} GROUP BY dia`).all(filtro.de, filtro.ate, ...argsO)) Object.assign(dia(x.dia), { vieram: x.vieram, naoVieram: x.naoVieram });
   // pico de leads esperando em cada dia (das fotos tiradas a cada coleta)
@@ -111,7 +162,9 @@ function time(filtro, horasParado = 2) {
     esperandoPorVendedor: esperando,
     esperando24h: Object.values(fotos),
     porDia: Object.values(porDia).sort((a, b) => (a.dia < b.dia ? -1 : 1)),
-    faixasResposta: faixas,
+    faixasResposta: semDadoConversa ? null : faixas,
+    semDadoConversa,
+    agendamentosFeitos: feitos.length,
   };
 }
 
@@ -229,32 +282,124 @@ function resumoHoje() {
   const d = banco.abrir();
   if (!d) return null;
   const hoje = diaSP();
-  const mes = hoje.slice(0, 7);
-  const leadsHoje = d.prepare("SELECT COUNT(*) n FROM lk_leads WHERE is_resgate = 0 AND date(created_date, '-3 hours') = ?").get(hoje).n;
-  const agendHoje = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE COALESCE(modalidade, 'presencial') != 'ligacao' AND date(data, '-3 hours') = ?").get(hoje).n;
-  // agendamentos FEITOS hoje: os que apareceram hoje na agenda + os do histórico com data de hoje (o maior dos dois)
-  const naAgenda = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE COALESCE(modalidade, 'presencial') != 'ligacao' AND date(primeira_vez / 1000, 'unixepoch', '-3 hours') = ?").get(hoje).n;
-  const noHistorico = d.prepare("SELECT COUNT(DISTINCT lead_id) n FROM lk_eventos WHERE tipo = 'scheduled' AND date(ts, '-3 hours') = ?").get(hoje).n;
-  const agendFeitosHoje = Math.max(naAgenda, noHistorico);
-  const vendasMes = d.prepare(`SELECT COUNT(*) n FROM lk_leads l WHERE ${VENDIDO}
-    AND strftime('%Y-%m', COALESCE(datetime(l.vendido_em / 1000, 'unixepoch'), l.ultima_msg_at), '-3 hours') = ?`).get(mes).n;
-  const visitasHoje = d.prepare('SELECT COUNT(*) n FROM lk_visitas WHERE compareceu = 1 AND date(data_agendada, \'-3 hours\') = ?').get(hoje).n;
-  const total = d.prepare('SELECT COUNT(*) n FROM lk_leads').get().n;
-  return { leadsHoje, agendamentosHoje: agendHoje, agendamentosFeitosHoje: agendFeitosHoje, vendasMes, visitasHoje, temDados: total > 0 };
+  const r = resumoPeriodo(hoje, hoje);
+  const agendHoje = d.prepare(`SELECT COUNT(*) n FROM lk_agenda a WHERE ${AG_VISITA} AND date(a.data, '-3 hours') = ?`).get(hoje).n;
+  return { leadsHoje: r.leads, agendamentosHoje: agendHoje, agendamentosFeitosHoje: r.agendamentos, vendasMes: vendasNoPeriodo(d, hoje.slice(0, 8) + '01', hoje), visitasHoje: r.visitas, temDados: r.temDados };
 }
 
-// Totais do comercial num período (para o Painel geral): leads de entrada, agendamentos feitos, visitas e vendas
+// Totais do comercial num período: leads, agendamentos FEITOS, visitas e vendas (mesmas regras das outras telas)
 function resumoPeriodo(de, ate) {
   const d = banco.abrir();
   if (!d || !de || !ate) return null;
-  const leads = d.prepare("SELECT COUNT(*) n FROM lk_leads WHERE is_resgate = 0 AND date(created_date, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
-  const naAgenda = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE COALESCE(modalidade, 'presencial') != 'ligacao' AND date(primeira_vez / 1000, 'unixepoch', '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
-  const noHistorico = d.prepare("SELECT COUNT(DISTINCT lead_id) n FROM lk_eventos WHERE tipo = 'scheduled' AND date(ts, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
-  const vendas = d.prepare(`SELECT COUNT(*) n FROM lk_leads l WHERE ${VENDIDO}
-    AND date(COALESCE(datetime(l.vendido_em / 1000, 'unixepoch'), l.ultima_msg_at), '-3 hours') BETWEEN ? AND ?`).get(de, ate).n;
-  const visitas = d.prepare("SELECT COUNT(*) n FROM lk_visitas WHERE compareceu = 1 AND date(data_agendada, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
+  const leads = d.prepare("SELECT COUNT(*) n FROM lk_leads WHERE is_resgate = 0 AND COALESCE(origem, '') != 'teste' AND date(created_date, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
   const total = d.prepare('SELECT COUNT(*) n FROM lk_leads').get().n;
-  return { leads, agendamentos: Math.max(naAgenda, noHistorico), vendas, visitas, temDados: total > 0 };
+  return { leads, agendamentos: agendamentosFeitos(d, { de, ate }).length, vendas: vendasNoPeriodo(d, de, ate), visitas: visitasNoPeriodo(d, de, ate), temDados: total > 0 };
+}
+
+// Gestor do dia: a varredura que um gestor faria toda manhã. Tudo o que está largado, em listas prontas para cobrar.
+function gestorDoDia({ horasParado = 2 } = {}) {
+  const d = banco.abrir();
+  if (!d) return { erro: banco.erro() };
+  const agora = Date.now();
+  const hoje = diaSP();
+  const iso = (ms) => new Date(agora - ms).toISOString();
+  const campos = `l.id, l.nome, l.whatsapp, l.carro, ${ORIGEM} origem, COALESCE(l.vendedor, 'Sem vendedor') vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.tem_financiamento`;
+  const aberto = "l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND COALESCE(l.origem, '') != 'teste' AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))";
+  // 1) leads de hoje: quantos, de onde, quantos fora do horário (antes das 8h, depois das 19h ou domingo) e sem informação
+  const deHoje = d.prepare(`SELECT ${campos}, CAST(strftime('%H', l.created_date, '-3 hours') AS INTEGER) hora, CAST(strftime('%w', l.created_date, '-3 hours') AS INTEGER) semana
+    FROM lk_leads l WHERE l.is_resgate = 0 AND COALESCE(l.origem, '') != 'teste' AND date(l.created_date, '-3 hours') = ? ORDER BY l.created_date DESC`).all(hoje);
+  const foraHorario = deHoje.filter((l) => l.hora < 8 || l.hora >= 19 || l.semana === 0).length;
+  const porCanal = {};
+  for (const l of deHoje) porCanal[l.origem || 'unknown'] = (porCanal[l.origem || 'unknown'] || 0) + 1;
+  // 2) cliente falou por último e ninguém respondeu (últimos 14 dias): o mais recente primeiro (ainda está quente)
+  const semResposta = d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${aberto} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ORDER BY l.ultima_msg_at DESC LIMIT 300`).all(iso(14 * 86400000), iso(horasParado * 3600000));
+  const semRespostaPorVend = {};
+  for (const l of semResposta) semRespostaPorVend[l.vendedor] = (semRespostaPorVend[l.vendedor] || 0) + 1;
+  // 3) agenda: visitas de hoje e amanhã, quais a IA marcou e o cliente ainda não confirmou; e as que passaram sem resultado
+  const ag = agenda({ de: hoje, ate: diaSP(agora + 86400000) });
+  const proximas = ag.itens.filter((a) => a.compareceu == null && !a.concluido && Date.parse(a.data) >= agora);
+  const iaSemConfirmar = proximas.filter((a) => a.pela_ia && !a.cliente_confirmou);
+  const semConfirmar = proximas.filter((a) => !a.cliente_confirmou);
+  const pend = agenda({ de: diaSP(agora - 30 * 86400000), ate: hoje });
+  const visitasPendentes = pend.itens.filter((a) => a.compareceu == null && !a.concluido && Date.parse(a.data) < agora);
+  // 4) leads sem informação (últimos 3 dias, ainda abertos): sem vendedor, sem nome, sem carro
+  const recentes = d.prepare(`SELECT ${campos}, l.vendedor vendedor_real FROM lk_leads l WHERE ${aberto} AND l.created_date > ? ORDER BY l.created_date DESC`).all(iso(3 * 86400000));
+  const semInfo = { semVendedor: recentes.filter((l) => !l.vendedor_real), semNome: recentes.filter((l) => !l.nome), semCarro: recentes.filter((l) => !l.carro).length, total: recentes.length };
+  // 5) leads quentes parados: demonstraram interesse (ficha, muita conversa, já agendou) e estão há mais de 24 h sem movimento
+  const quentes = d.prepare(`SELECT ${campos},
+      (SELECT COUNT(*) FROM lk_mensagens m WHERE m.lead_id = l.id AND m.owner = 'customers') msgsCliente,
+      (SELECT COUNT(*) FROM lk_mensagens m WHERE m.lead_id = l.id) msgs,
+      ${AGENDOU_VISITA} jaAgendou, ${VISITOU} jaVeio,
+      (SELECT MAX(em) FROM lk_contatos c WHERE c.lead_id = l.id) ultimoSdr
+    FROM lk_leads l WHERE ${aberto} AND l.ultima_msg_at BETWEEN ? AND ?
+      AND NOT EXISTS (SELECT 1 FROM lk_agenda a WHERE a.lead_id = l.id AND a.data > ? AND COALESCE(a.concluido, 0) = 0)`).all(iso(21 * 86400000), iso(24 * 3600000), new Date(agora).toISOString())
+    .map((l) => {
+      const motivos = [];
+      let pontos = 0;
+      if (l.tem_financiamento) { pontos += 4; motivos.push('fez ficha de financiamento'); }
+      if (l.jaVeio) { pontos += 4; motivos.push('já veio à loja'); }
+      else if (l.jaAgendou) { pontos += 3; motivos.push('já agendou visita'); }
+      if (l.msgsCliente >= 8) { pontos += 3; motivos.push(`${l.msgsCliente} mensagens do cliente`); }
+      else if (l.msgsCliente >= 4) { pontos += 2; motivos.push(`${l.msgsCliente} mensagens do cliente`); }
+      if (l.ultima_msg_owner === 'customers') { pontos += 1; motivos.push('cliente falou por último'); }
+      const dias = Math.floor((agora - Date.parse(l.ultima_msg_at)) / 86400000);
+      return { ...l, pontos, motivos, diasParado: dias, semSdr: !l.ultimoSdr };
+    }).filter((l) => l.pontos >= 3).sort((a, b) => b.pontos - a.pontos || a.diasParado - b.diasParado).slice(0, 40);
+  const curto = (l) => ({ id: l.id, nome: l.nome, whatsapp: l.whatsapp, carro: l.carro, origem: l.origem, vendedor: l.vendedor, ia: l.ia, ultima_msg_at: l.ultima_msg_at, created_date: l.created_date });
+  return {
+    dia: hoje, horasParado,
+    hoje: { leads: deHoje.length, foraHorario, porCanal },
+    semResposta: { total: semResposta.length, porVendedor: Object.entries(semRespostaPorVend).map(([vendedor, n]) => ({ vendedor, n })).sort((a, b) => b.n - a.n), lista: semResposta.slice(0, 60).map(curto) },
+    agenda: { hoje: ag.itens.filter((a) => diaSP(Date.parse(a.data)) === hoje).length, amanha: ag.itens.filter((a) => diaSP(Date.parse(a.data)) !== hoje).length, semConfirmar: semConfirmar.length, iaSemConfirmar, visitasPendentes: visitasPendentes.length },
+    semInfo: { total: semInfo.total, semVendedor: semInfo.semVendedor.map(curto), semNome: semInfo.semNome.length, semCarro: semInfo.semCarro },
+    quentes: quentes.map((l) => ({ ...curto(l), pontos: l.pontos, motivos: l.motivos, diasParado: l.diasParado, semSdr: l.semSdr })),
+  };
+}
+
+// Painel: tudo o que a tela inicial precisa, com as mesmas funções das telas de detalhe (os números batem por construção)
+function painelComercial({ de, ate, horasParado = 2, metas = {} }) {
+  const d = banco.abrir();
+  if (!d) return { erro: banco.erro() };
+  const hoje = diaSP();
+  // período anterior equivalente (mesmo número de dias, imediatamente antes)
+  const dias = Math.round((Date.parse(ate) - Date.parse(de)) / 86400000) + 1;
+  const antAte = new Date(Date.parse(de) - 86400000).toISOString().slice(0, 10);
+  const antDe = new Date(Date.parse(de) - dias * 86400000).toISOString().slice(0, 10);
+  const L = leads({ de, ate });
+  const LA = leads({ de: antDe, ate: antAte });
+  const etapasDe = (t) => ({ leads: t.demanda, respondidos: t.responderam, agendou: t.agendados, compareceu: t.visitas, comprou: t.vendas, visitasMarcadas: t.visitasMarcadas, semDadoConversa: !!t.semDadoConversa });
+  const T = time({ de, ate }, horasParado);
+  // alertas (situação de agora, não dependem do período)
+  const pend = agenda({ de: diaSP(Date.now() - 30 * 86400000), ate: hoje });
+  const semVendedor = d.prepare(`SELECT COUNT(*) n FROM lk_leads l WHERE l.is_resgate = 0 AND COALESCE(l.origem, '') != 'teste' AND l.aba_atual != 'arquivados'
+    AND (l.vendedor IS NULL OR trim(l.vendedor) = '') AND date(l.created_date, '-3 hours') = ?`).get(hoje).n;
+  // meta x realizado: sempre o mês corrente
+  const iniMes = hoje.slice(0, 8) + '01';
+  const diasMes = new Date(Date.UTC(+hoje.slice(0, 4), +hoje.slice(5, 7), 0)).getUTCDate();
+  const diaDoMes = +hoje.slice(8);
+  const mes = resumoPeriodo(iniMes, hoje);
+  const linhaMeta = (feito, meta) => ({ feito, meta: meta || 0, projecao: Math.round((feito / diaDoMes) * diasMes) });
+  return {
+    de, ate, anterior: { de: antDe, ate: antAte }, dias,
+    cobertura: L.cobertura,
+    alertas: {
+      horasParado,
+      esperando: { total: T.esperandoTotal, porVendedor: T.esperandoPorVendedor },
+      visitasPendentes: pend.resumo.aMarcar,
+      semVendedorHoje: semVendedor,
+    },
+    funil: { atual: etapasDe(L.total), anterior: etapasDe(LA.total) },
+    agendamentosFeitos: L.total.agendamentos,
+    metas: {
+      mes: hoje.slice(0, 7), diaDoMes, diasMes,
+      agendamentos: linhaMeta(mes.agendamentos, (metas.agendamentosDia || 0) * diasMes),
+      visitas: linhaMeta(mes.visitas, (metas.visitasDia || 0) * diasMes),
+      vendas: linhaMeta(mes.vendas, metas.vendasMes || 0),
+    },
+    canais: L.porOrigem,
+    time: T.vendedores,
+    semDadoConversa: !!L.total.semDadoConversa,
+  };
 }
 
 // Fila do SDR: quem ligar ou chamar hoje, em ordem de urgência. Só leads de entrada (sem a base de resgate)
@@ -284,6 +429,9 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
   const listas = {
     // 1) cliente mandou mensagem e ninguém respondeu
     responder: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 150`).all(iso(7 * 86400000), iso(horasSemResposta * 3600000), ...va),
+    // 1b) com a carteira escolhida: leads de OUTROS vendedores que estão sem resposta (ninguém cuidando): ligar antes que esfrie
+    abandonados: vendedor ? d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ${semAgendar}
+      AND lower(COALESCE(l.vendedor, '')) != lower(?) ORDER BY l.ultima_msg_at DESC LIMIT 100`).all(iso(7 * 86400000), iso(horasSemResposta * 3600000), vendedor) : [],
     // 2) follow-up de visitas (agenda do LeadsOK): confirmar as de hoje e amanhã; marcar o resultado das que já passaram (7 dias)
     visitas: d.prepare(`SELECT COALESCE(l.id, 'agenda-' || a.id) id, COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, l.origem,
         COALESCE(l.vendedor, a.vendedor) vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.aba_atual,
@@ -375,7 +523,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
   for (const l of followLeadsOK) if (!noRetornar.has(l.id) && noRetornar.add(l.id)) listas.retornar.push({ ...l, followLeadsOK: l.agenda_data });
   // fila de trabalho: um lead só na lista mais urgente, e só quem está na etapa "fila" (ou "retornar")
   const vistos = new Set();
-  for (const k of ['retornar', 'responder', 'visitas', 'posVisita', 'novos', 'retomar']) {
+  for (const k of ['retornar', 'responder', 'visitas', 'posVisita', 'novos', 'abandonados', 'retomar']) {
     listas[k] = listas[k].filter((l) => {
       const e = etapa(l.id, l);
       const pode = k === 'retornar' ? e === 'retornar' || (l.followLeadsOK && e !== 'encerrados') : k === 'visitas' ? e !== 'encerrados' : k === 'posVisita' ? e !== 'encerrados' : e === 'fila';
@@ -410,6 +558,7 @@ function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proxi
   const d = banco.abrir();
   if (!d) throw new Error(banco.erro());
   if (!['ligacao', 'mensagem'].includes(tipo)) throw new Error('Tipo de contato inválido');
+  if (!por || !String(por).trim()) throw new Error('Contato sem responsável: entre com o seu usuário');
   if (resultado && !RESULTADOS.includes(resultado)) throw new Error('Resultado inválido');
   if (interesse && !['quente', 'morno', 'frio'].includes(interesse)) throw new Error('Interesse inválido');
   const proximo = proximoEm ? Number(proximoEm) : null;
@@ -434,10 +583,10 @@ function resultadoSdr({ de, ate, por } = {}) {
     TOTAL(c.tipo = 'mensagem') mensagens, TOTAL(c.resultado = 'agendou') agendou, TOTAL(c.resultado IN ('ja_comprou', 'sem_interesse')) encerrados,
     COUNT(DISTINCT c.lead_id) leads`;
   const porDia = d.prepare(`SELECT c.dia, ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY c.dia ORDER BY c.dia`).all(...args);
-  const porPessoa = d.prepare(`SELECT COALESCE(c.por, '—') por, ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY c.por ORDER BY ligacoes DESC`).all(...args);
+  const porPessoa = d.prepare(`SELECT COALESCE(c.por, 'Sem responsável (registro antigo)') por, ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY c.por ORDER BY ligacoes DESC`).all(...args);
   const total = d.prepare(`SELECT ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro}`).get(...args);
   // visitas dos leads que o SDR agendou no período: quantas aconteceram, quantas compraram
-  const vis = d.prepare(`SELECT COALESCE(c.por, '—') por, COUNT(DISTINCT c.lead_id) agendados,
+  const vis = d.prepare(`SELECT COALESCE(c.por, 'Sem responsável (registro antigo)') por, COUNT(DISTINCT c.lead_id) agendados,
       COUNT(DISTINCT CASE WHEN v.compareceu = 1 THEN c.lead_id END) vieram, COUNT(DISTINCT CASE WHEN v.compareceu = 0 THEN c.lead_id END) naoVieram,
       COUNT(DISTINCT CASE WHEN v.comprou = 1 THEN c.lead_id END) compraram
     FROM lk_contatos c LEFT JOIN lk_visitas v ON v.lead_id = c.lead_id AND v.marcado_em > c.em
@@ -514,4 +663,4 @@ function removerLeadsTeste() {
   return { ok: true, removidos: Number(d.prepare("DELETE FROM lk_leads WHERE id LIKE 'teste-%'").run().changes) };
 }
 
-module.exports = { confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+module.exports = { gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

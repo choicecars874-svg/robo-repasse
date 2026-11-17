@@ -116,6 +116,20 @@
   .postIg .mets { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px 8px; margin-top:8px; } .postIg .mets span { font-size:11.5px; } .postIg .mets b { display:block; color:var(--txt); font-size:15px; font-weight:600; }
   .postIg .leg { margin-top:8px; font-size:12px; color:var(--sub); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .contasIg div { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--borda); }
+  .alertas { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; margin:12px 0 16px; }
+  .alerta { background:var(--card); border:1px solid var(--borda); border-radius:20px; padding:18px 20px; cursor:pointer; display:flex; flex-direction:column; gap:4px; } .alerta:hover { border-color:var(--borda2); }
+  .alerta b { font-size:38px; line-height:1.1; font-weight:700; } .alerta small { color:var(--sub); font-size:13px; } .alerta .eyebrow { font-size:11.5px; }
+  .alerta.urgente { border-color:rgba(248,113,113,.5); } .alerta.urgente b { color:var(--verm); } .alerta.atencao { border-color:rgba(251,191,36,.45); } .alerta.atencao b { color:var(--amar); } .alerta.okk b { color:var(--verde); }
+  .alerta .quem { font-size:12.5px; color:var(--sub); } .alerta .ir { margin-top:auto; padding-top:8px; font-size:12.5px; color:var(--ouro); }
+  .pnFunil { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:10px; } .pnEtapa { border:1px solid var(--borda); border-radius:16px; padding:16px; position:relative; }
+  .pnEtapa .eyebrow { font-size:11px; } .pnEtapa b { display:block; font-size:34px; font-weight:700; line-height:1.15; margin:6px 0 2px; } .pnEtapa .conv { font-size:13px; color:var(--txt); } .pnEtapa .var { font-size:12.5px; color:var(--sub); margin-top:4px; }
+  .pnEtapa .trilho { height:5px; border-radius:3px; background:rgba(255,255,255,.07); margin-top:10px; overflow:hidden; } .pnEtapa .trilho i { display:block; height:100%; background:var(--ouro); border-radius:3px; }
+  .semDado { color:var(--amar); font-weight:600; } .pnEtapa b.semDado { font-size:20px; margin:16px 0 8px; }
+  .pnMetas { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; } .pnMeta { border:1px solid var(--borda); border-radius:16px; padding:16px; } .pnMeta b { font-size:30px; font-weight:700; } .pnMeta b span { font-size:16px; color:var(--sub); font-weight:500; }
+  .pnMeta .trilho { height:8px; border-radius:4px; background:rgba(255,255,255,.07); margin:10px 0 8px; overflow:hidden; } .pnMeta .trilho i { display:block; height:100%; border-radius:4px; }
+  .pnMeta small { color:var(--sub); font-size:13px; display:block; } .pnMeta .proj { margin-top:6px; font-size:13px; }
+  .pnOrigem { display:flex; flex-wrap:wrap; gap:10px; } .pnOrigem div { border:1px solid var(--borda); border-radius:14px; padding:10px 14px; min-width:120px; } .pnOrigem b { display:block; font-size:22px; } .pnOrigem span { font-size:12.5px; color:var(--sub); }
+  .defs p { margin:10px 0 0; font-size:14px; line-height:1.55; color:var(--sub); } .defs b { color:var(--txt); }
   .areas { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; } .areas .card { margin:0; }
   .area[data-ir] { cursor:pointer; } .area[data-ir]:hover { border-color:var(--borda2); } .area .eyebrow { display:flex; align-items:center; gap:8px; } .area .eyebrow svg.i { width:16px; height:16px; }
   .area .mini { margin-top:16px; } .area .mini b { font-size:26px; }
@@ -168,7 +182,7 @@
   .opcoes { display:flex; gap:16px; flex-wrap:wrap; } .opcoes.coluna { flex-direction:column; gap:8px; } .opcoes label { display:flex; align-items:center; gap:6px; color:var(--txt); margin:0; font-size:14px; } .opcoes input[type=radio] { width:auto; }
   .vazio { color:var(--sub); font-size:14px; padding:18px 0; }
 
-  @media (max-width:1100px) { .kpis, .kpis.kpis5 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:minmax(0, 1fr); } }
+  @media (max-width:1100px) { .alertas, .pnMetas { grid-template-columns:repeat(2, minmax(0, 1fr)); } .pnFunil { grid-template-columns:repeat(2, minmax(0, 1fr)); } .kpis, .kpis.kpis5 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .grade, .breves { grid-template-columns:minmax(0, 1fr); } }
   @media (max-width:820px) {
     .layout { grid-template-columns:minmax(0, 1fr); } .card table { display:block; overflow-x:auto; } #menu { display:inline-flex; }
     nav { position:fixed; inset:0 auto 0 0; width:270px; transform:translateX(-100%); transition:transform .2s; background:rgba(10,11,14,.92); }
@@ -222,6 +236,7 @@
   <div class="grupoMenu fechado" id="menuComercial">
     <button class="titulo" data-abre="menuComercial"><svg class="i"><use href="#i-leads"/></svg>Comercial <svg class="i seta"><use href="#i-seta"/></svg></button>
     <div class="sub-itens">
+      <button data-aba="comGestor">Gestor do dia</button>
       <button data-aba="comSdr">Fila do SDR</button>
       <button data-aba="comSdrRes">Resultado do SDR</button>
       <button data-aba="comLeads">Leads e canais</button>
@@ -251,19 +266,37 @@
 <div class="cabeca"><div class="eyebrow" id="tEyebrow"></div><h1 id="tTitulo">Painel</h1><p id="tSub"></p></div>
 
 <section id="painel" class="ativo">
-  <div class="eyebrow">Metas principais</div>
-  <div class="kpis" id="gPrincipais"></div>
-  <div class="card" id="gOutras" style="margin-top:12px"><div class="cardTopo"><div><h2>Outras metas de hoje</h2><p class="sub">Grupos, Instagram e leads.</p></div><a data-ir="metas">Definir metas</a></div><div id="gMetas"></div></div>
+  <div class="lkAviso" hidden></div>
   <div class="periodoBar" id="perGeral"></div>
-  <div class="eyebrow" style="margin-bottom:12px">Por área · <span id="perGeralRot">hoje</span></div>
-  <div class="areas">
-    <div class="card area" data-ir="inicio"><div class="cardTopo"><div class="eyebrow"><svg class="i"><use href="#i-grupos"/></svg> Grupos</div><span class="link">Ver mais</span></div>
-      <div class="mini"><div><b id="gPost">—</b>postados</div><div><b id="gClq">—</b>cliques</div><div><b id="gLidos">—</b>anúncios lidos</div></div></div>
-    <div class="card area" data-ir="instagram"><div class="cardTopo"><div class="eyebrow"><svg class="i"><use href="#i-instagram"/></svg> Instagram</div><span class="link">Ver mais</span></div>
-      <div class="mini"><div><b id="gSeg">—</b>seguidores</div><div><b id="gAlc">—</b>alcance</div><div><b id="gInt">—</b>interações</div></div><p class="sub" id="gIgObs" style="margin:10px 0 0"></p></div>
-    <div class="card area" data-ir="comLeads"><div class="cardTopo"><div class="eyebrow"><svg class="i"><use href="#i-leads"/></svg> Comercial</div><span class="link">Ver mais</span></div>
-      <div class="mini"><div><b id="gLeads">—</b>leads</div><div><b id="gAgend">—</b>agendamentos feitos</div><div><b id="gVendas">—</b>vendas</div></div><p class="sub" id="gComObs" style="margin:10px 0 0">Vem do LeadsOK, com todos os canais: Webmotors, Mercado Livre, Napista, Facebook, Instagram, site e WhatsApp.</p></div>
-  </div>
+  <div class="eyebrow">Precisa de ação agora <span class="sub" style="text-transform:none;letter-spacing:0">· situação deste momento, não depende do período</span></div>
+  <div class="alertas" id="pnAlertas"></div>
+
+  <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Funil do período</h2><p class="sub" id="pnFunilObs"></p></div><a data-ir="comLeads">Ver Leads e canais</a></div>
+    <div class="pnFunil" id="pnFunil"></div><p class="sub" id="pnFunilNota" style="margin:12px 0 0"></p></div>
+
+  <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Meta x realizado</h2><p class="sub" id="pnMetaObs"></p></div><a data-ir="metas">Definir metas</a></div>
+    <div class="pnMetas" id="pnMetas"></div></div>
+
+  <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Canais</h2><p class="sub" id="pnCanaisObs"></p></div><a data-ir="comLeads">Ver Leads e canais</a></div>
+    <table><thead><tr><th>Canal</th><th>Leads</th><th>Agendaram</th><th>Vendas</th><th>Conversão lead→venda</th><th>Investimento</th><th>Custo por venda</th></tr></thead><tbody id="pnCanais"></tbody></table>
+    <p class="sub" id="pnInvAviso" style="margin:10px 0 0" hidden></p></div>
+
+  <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Time</h2><p class="sub" id="pnTimeObs"></p></div><a data-ir="comTime">Ver Time</a></div>
+    <table><thead><tr><th>Vendedor</th><th>Leads recebidos</th><th>1ª resposta</th><th>Esperando agora</th><th>Agendaram</th><th>Compareceram</th><th>Vendas</th><th>Conversão</th></tr></thead><tbody id="pnTime"></tbody></table></div>
+
+  <div class="card"><div class="cardTopo"><div><h2>Origem dos leads</h2><p class="sub" id="pnOrigemObs"></p></div></div><div class="pnOrigem" id="pnOrigem"></div></div>
+
+  <div class="card"><details><summary><b>Como os números são calculados</b> <span class="sub">· as mesmas regras em todas as telas</span></summary><div class="defs">
+    <p><b>Lead:</b> lead de entrada no LeadsOK (sem a base de resgate e sem leads de teste), contado no dia em que foi criado.</p>
+    <p><b>Respondido:</b> o cliente respondeu depois da 1ª mensagem da loja. Depende das conversas carregadas do LeadsOK; com menos de 80% carregadas aparece "sem dado".</p>
+    <p><b>Agendamento:</b> visita presencial ou online na agenda do LeadsOK, ou "Agendou visita" registrado na Fila do SDR. Agendamento do tipo "ligação" é lembrete de follow-up e não conta.</p>
+    <p><b>Agendamento feito:</b> contado no dia em que foi <u>criado</u>. É o que aparece em Meta x realizado, na tela Time e no Resultado do SDR (lá, só os do SDR). Agendamentos que já existiam antes da 1ª carga do LeadsOK não têm data de criação e ficam fora.</p>
+    <p><b>Agendamento para o dia:</b> contado no dia da <u>visita</u>. É o que a tela Agenda lista.</p>
+    <p><b>Compareceu:</b> visita marcada como "Veio" na Agenda. O LeadsOK não registra comparecimento.</p>
+    <p><b>Venda:</b> lead arquivado como "Vendido" no LeadsOK, ou visita marcada "Veio e comprou".</p>
+    <p><b>Funil:</b> dos leads criados no período, quantos chegaram <u>pelo menos</u> até cada etapa. Quem comprou conta como compareceu e quem compareceu conta como agendou: uma etapa nunca é maior que a anterior. Vendas sem visita marcada aparecem na nota do funil.</p>
+    <p><b>Contato direto:</b> leads que chegaram pelo WhatsApp da loja ou cadastrados à mão. Contam como lead; na tabela de canais ficam numa linha só.</p>
+  </div></details></div>
 </section>
 
 <section id="instagram">
@@ -354,6 +387,16 @@
   <div class="contas" id="tmCartoes"></div>
 </section>
 
+<section id="comGestor">
+  <div class="lkAviso" hidden></div>
+  <div class="cardTopo" style="margin-bottom:12px;flex-wrap:wrap;gap:8px"><p class="sub" id="gsObs" style="margin:0"></p><button class="btn verde" id="btnGsCopiar">Copiar resumo para o WhatsApp</button></div>
+  <div class="alertas" id="gsKpis"></div>
+  <div class="card"><h2>1. Sem resposta <span class="sub" id="gsRespN"></span></h2><p class="sub" id="gsRespObs"></p><div id="gsRespVend" style="margin-bottom:10px"></div><div id="gsResp"></div></div>
+  <div class="card"><h2>2. Leads quentes parados <span class="sub" id="gsQuenteN"></span></h2><p class="sub">Mostraram interesse de verdade (ficha de financiamento, muita conversa, já agendou ou já veio) e estão há mais de 24 h sem movimento e sem visita marcada. Os de maior pontuação primeiro.</p><div id="gsQuentes"></div></div>
+  <div class="card"><h2>3. Agenda <span class="sub" id="gsAgN"></span></h2><p class="sub">Visitas de hoje e amanhã que a IA marcou e o cliente ainda não confirmou: sem confirmação humana, é só interesse em agendar.</p><div id="gsAgenda"></div></div>
+  <div class="card"><h2>4. Leads sem informação <span class="sub" id="gsInfoN"></span></h2><p class="sub">Leads dos últimos 3 dias, ainda abertos.</p><div id="gsInfo"></div></div>
+</section>
+
 <section id="comSdrRes">
   <div class="lkAviso" hidden></div>
   <div class="periodoBar" id="perSdrRes"></div>
@@ -370,6 +413,7 @@
 <section id="comAgenda">
   <div class="lkAviso" hidden></div>
   <div class="periodoBar" id="perAgenda"></div>
+  <div class="card" id="agPend" hidden><b class="semDado">Mostrando só as visitas sem resultado dos últimos 30 dias.</b> <span class="sub">Marque o que aconteceu em cada uma: é isso que alimenta "Compareceram" no funil.</span> <button class="btn" id="agPendVoltar" style="margin-left:8px">Voltar para a agenda</button></div>
   <div class="kpis kpis5" id="agKpis"></div>
   <div class="card" id="agGrafCard" hidden><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Visitas por dia</h2><p class="sub">Agendados, quem veio e quem comprou em cada dia do período.</p></div><div class="legenda" id="agLeg"></div></div><div class="agGraf" id="agGraf"></div></div>
   <div class="card"><h2 id="agTitulo">Agendamentos</h2><p class="sub">Depois do horário, marque o que aconteceu. O LeadsOK não registra visita: é daqui que sai o funil de comparecimento. Quem não veio, ou veio e não comprou, vai para o "Follow-up pós-visita" da Fila do SDR.</p><div id="agLista"></div></div>
@@ -637,7 +681,7 @@
       <div><label>Senha (fica criptografada no servidor)</label><input type="password" id="lkSenha" autocomplete="new-password" placeholder="deixe vazio para manter a atual"></div>
       <div><label>Considerar cliente sem resposta depois de (horas)</label><input type="number" id="lkHoras" step="0.5" min="0.5"></div>
     </div>
-    <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn verde" id="btnLkSalvar">Salvar e conectar</button><button class="btn" id="btnLkTestar">Testar conexão</button><button class="btn" id="btnLkSync">Sincronizar agora</button><button class="btn verm" id="btnLkDesligar">Desligar</button></p>
+    <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn verde" id="btnLkSalvar">Salvar e conectar</button><button class="btn" id="btnLkTestar">Testar conexão</button><button class="btn" id="btnLkSync">Sincronizar agora</button><button class="btn" id="btnLkDiag">Testar coleta de detalhes</button><button class="btn verm" id="btnLkDesligar">Desligar</button></p>
     <label style="display:flex;gap:8px;align-items:center;color:var(--txt);margin:14px 0 4px"><input type="checkbox" id="lkNotas" style="width:auto"> Gravar o briefing da Fila do SDR nas <b>Notas internas</b> do lead no LeadsOK (o cliente não vê; só acrescenta, nunca apaga)</label>
     <p class="sub" id="lkNotasInfo" style="margin:0 0 10px"></p>
     <details><summary class="sub">Últimas sincronizações</summary><pre id="lkLog" style="max-height:220px;overflow:auto;margin-top:10px"></pre></details>
@@ -730,7 +774,8 @@ let cfg = null;
 
 // Abas
 const TITULOS = {
-  painel: ['Painel', 'Visão geral da Choice: metas do dia e o principal de cada área.'],
+  painel: ['Painel', 'Como está o processo comercial: o que precisa de ação, onde o lead trava e o ritmo da meta.'],
+  comGestor: ['Gestor do dia', 'A varredura de toda manhã: o que está sem resposta, sem confirmação, sem informação e os leads quentes parados.'],
   inicio: ['Grupos', 'O que chegou dos grupos de repasse, o que foi postado e quem chamou a loja.'],
   comSdr: ['Fila do SDR', 'Quem ligar ou chamar hoje, em ordem de urgência.'],
   comSdrRes: ['Resultado do SDR', 'Ligações, atendimentos, recados e agendamentos de cada dia, e quantas visitas viraram.'],
@@ -760,7 +805,7 @@ function abrirAba(aba) {
   const [titulo, sub] = TITULOS[aba];
   $('#tEyebrow').textContent = aba.startsWith('ig') ? 'Instagram' : aba.startsWith('com') ? 'Comercial' : ['integracoes', 'sistema'].includes(aba) ? 'Configurações' : aba === 'instagram' ? 'Redes' : aba === 'painel' ? new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' }) : 'Grupos';
   $('#tTitulo').textContent = titulo; $('#tSub').textContent = sub;
-  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, comSdr: carregarSdr, comSdrRes: carregarSdrRes, sistema: () => { carregarSistema(); carregarDominio(); carregarUsuarios(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
+  ({ painel: carregarGeral, inicio: carregarPainel, instagram: carregarInstagram, igDirect: carregarInstagram, igPostsSec: carregarPostsIg, integracoes: () => { carregarIgCfg(); carregarLkCfg(); carregarCkCfg(); }, comLeads: carregarLeads, comTime: carregarTime, comAgenda: carregarAgenda, comEstoque: carregarEstoque, comCockpit: carregarCockpit, comSdr: carregarSdr, comSdrRes: carregarSdrRes, comGestor: carregarGestor, sistema: () => { carregarSistema(); carregarDominio(); carregarUsuarios(); }, aprovar: carregarPendentes, historico: carregarHistorico })[aba]?.();
 }
 document.querySelectorAll('nav button[data-aba]').forEach((b) => b.onclick = () => abrirAba(b.dataset.aba));
 document.querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
@@ -1137,61 +1182,91 @@ setInterval(() => {
 }, 15000);
 
 // Painel geral: metas + resumo de cada área
+// "sem dado" (coleta incompleta) é diferente de 0
+const nd = (v) => v == null ? '<span class="semDado" title="A coleta de conversas do LeadsOK ainda não trouxe esse dado">sem dado</span>' : num(v);
+const pctNd = (a, b) => a == null || b == null ? '<span class="semDado">sem dado</span>' : pct(a, b);
+const dataBr = (d) => d.split('-').reverse().slice(0, 2).join('/');
 async function carregarGeral() {
+  avisoLk();
   const per = $('#perGeral').per || { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje', chave: 'hoje' };
-  $('#perGeralRot').textContent = per.rotulo;
   const igQ = ['hoje', 'ontem', '7', '30'].includes(per.chave) ? `periodo=${per.chave}` : `de=${per.de}&ate=${per.ate}`;
-  const [g, ig, com, gHoje, comPer] = await Promise.all([
-    api(`/api/painel?de=${per.de}&ate=${per.ate}`), api('/api/instagram?' + igQ).catch(() => ({ conectado: false })), api('/api/comercial/hoje').catch(() => ({})),
-    api('/api/painel'), api(`/api/comercial/periodo?de=${per.de}&ate=${per.ate}`).catch(() => ({})),
+  const [c, g, ig] = await Promise.all([
+    api(`/api/comercial/painel?de=${per.de}&ate=${per.ate}`).catch(() => null),
+    api(`/api/painel?de=${per.de}&ate=${per.ate}`).catch(() => null),
+    api('/api/instagram?' + igQ).catch(() => ({ conectado: false })),
   ]);
-  const temCom = com.estado?.ativo && com.temDados;
-  $('#gLeads').textContent = temCom ? num(comPer.leads) : '—';
-  $('#gAgend').textContent = temCom ? num(comPer.agendamentos) : '—';
-  $('#gVendas').textContent = temCom ? num(comPer.vendas) : '—';
-  $('#gComObs').textContent = com.estado?.problema ? com.estado.problema : temCom ? 'Do LeadsOK, todos os canais (sem a base de resgate).' : 'Conecte o LeadsOK em Configurações → Integrações.';
-  $('#gComObs').className = 'sub' + (com.estado?.problema ? ' ruim' : '');
   if (!cfg) cfg = await api('/api/config');
-  const m = cfg.metas || {};
-  const h = g.hoje;
-  $('#gPost').textContent = num(h.postados); $('#gClq').textContent = num(h.cliques); $('#gLidos').textContent = num(h.lidos);
-  const t = ig.conectado ? ig.total : {};
-  const novos = t.seguidores != null && t.seguidoresOntem != null ? t.seguidores - t.seguidoresOntem : null;
-  $('#gSeg').textContent = t.seguidores == null ? '—' : num(t.seguidores);
-  $('#gAlc').textContent = t.alcance == null ? '—' : num(t.alcance);
-  $('#gInt').textContent = t.interacoes == null ? '—' : num(t.interacoes);
-  const dmG = t.direct;
-  $('#gIgObs').textContent = ig.conectado ? `${ig.contas.length} perfil(is)${novos != null ? ` · ${novos >= 0 ? '+' : ''}${num(novos)} seguidores desde ontem` : ''}${dmG ? ` · direct: ${num(dmG.conversas)} conversas, ${num(dmG.aguardando)} esperando` : ''}` : 'Conecte os perfis em Configurações → Integrações.';
-  const linhas = [
-    ['Posts nos grupos', gHoje.hoje.postados, m.postsDia || g.limiteDiario],
-    ['Cliques no WhatsApp', gHoje.hoje.cliques, m.cliquesDia],
-    // metas do Instagram são do dia: com outro período no filtro, ficam sem número
-    ['Alcance no Instagram', per.chave === 'hoje' ? t.alcance : null, m.alcanceDia, 'filtro "Hoje"'],
-    ['Interações no Instagram', per.chave === 'hoje' ? t.interacoes : null, m.interacoesDia, 'filtro "Hoje"'],
-    ['Novos seguidores', per.chave === 'hoje' ? novos : null, m.seguidoresDia, 'filtro "Hoje"'],
-    ['Leads (comercial)', temCom ? com.leadsHoje : null, m.leadsDia, 'aguardando LeadsOK'],
-  ].filter((x) => x[2] > 0);
-  const principais = [
-    ['Agendamentos hoje', temCom ? com.agendamentosFeitosHoje : null, m.agendamentosDia, 'feitos hoje no LeadsOK'],
-    ['Visitas hoje', temCom ? com.visitasHoje : null, m.visitasDia, 'marcadas na Agenda do dia'],
-    ['Vendas no mês', temCom ? com.vendasMes : null, m.vendasMes, 'arquivados como vendido'],
-  ];
-  $('#gPrincipais').innerHTML = principais.map(([nome, feito, meta, obs]) => {
-    const p = feito == null || !meta ? 0 : Math.min(100, (feito / meta) * 100);
-    return `<div class="kpi"><div class="eyebrow">${nome}</div><b>${feito == null ? '—' : num(feito)}${meta ? `<span class="de"> / ${num(meta)}</span>` : ''}</b><small>${feito == null ? 'conecte o LeadsOK' : meta ? (feito >= meta ? 'meta batida' : `faltam ${num(meta - feito)}`) : 'sem meta definida'} · ${obs}</small><div class="meta"><i style="width:${p}%;${p >= 100 ? 'background:var(--verde)' : ''}"></i></div></div>`;
+  const rot = rotuloCap(per.rotulo);
+  const semLk = !c || c.erro || !c.estado?.ativo;
+  const A = semLk ? null : c.alertas;
+  // ---------- 1. alertas
+  const direct = ig.conectado ? ig.total?.direct : null;
+  const alerta = (titulo, n, txt, quem, ir, nivel) => `<div class="alerta ${n == null ? '' : n > 0 ? nivel : 'okk'}" data-ir="${ir}"><div class="eyebrow">${titulo}</div><b>${n == null ? '<span class="semDado" style="font-size:20px">sem dado</span>' : num(n)}</b><small>${txt}</small>${quem ? `<span class="quem">${quem}</span>` : ''}<span class="ir">${n > 0 ? 'Resolver' : 'Ver'} →</span></div>`;
+  $('#pnAlertas').innerHTML = [
+    alerta('Leads esperando resposta', A ? A.esperando.total : null, A ? `há mais de ${String(A.horasParado).replace('.', ',')} h · LeadsOK` : 'conecte o LeadsOK', A ? A.esperando.porVendedor.slice(0, 4).map((v) => `${esc(v.vendedor)}: ${v.n}`).join(' · ') : '', 'comTime', 'urgente'),
+    alerta('Directs sem resposta', direct ? direct.aguardando : null, direct ? 'Instagram · 3 perfis' : 'conecte o Instagram', '', 'igDirect', 'urgente'),
+    alerta('Visitas sem resultado', A ? A.visitasPendentes : null, 'passaram do horário nos últimos 30 dias · Agenda', '', 'comAgenda', 'atencao'),
+    alerta('Leads de hoje sem vendedor', A ? A.semVendedorHoje : null, 'chegaram hoje e ninguém assumiu · LeadsOK', '', 'comSdr', 'urgente'),
+  ].join('');
+  $('#pnAlertas').querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => { if (a.dataset.ir === 'comAgenda') window.agSoPendentes = true; abrirAba(a.dataset.ir); });
+  if (semLk) {
+    for (const id of ['pnFunil', 'pnMetas', 'pnOrigem']) $('#' + id).innerHTML = '<div class="vazio">Conecte o LeadsOK em Configurações → Integrações.</div>';
+    $('#pnCanais').innerHTML = $('#pnTime').innerHTML = '<tr><td colspan="8" class="sub">Sem dados do LeadsOK.</td></tr>';
+    return;
+  }
+  // ---------- 2. funil
+  const F = c.funil.atual, FA = c.funil.anterior;
+  const etapas = [['Leads', 'leads'], ['Respondidos', 'respondidos'], ['Agendaram', 'agendou'], ['Compareceram', 'compareceu'], ['Compraram', 'comprou']];
+  let ant = null; // última etapa com dado, para a conversão
+  $('#pnFunil').innerHTML = etapas.map(([nome, k], i) => {
+    const v = F[k], va = FA[k];
+    const conv = i === 0 || v == null || ant == null ? '' : `${pct(v, ant)} da etapa anterior`;
+    const varia = v == null || va == null ? '' : va === 0 ? (v > 0 ? `<span class="bom">novo</span> · antes 0` : 'igual ao período anterior') : `<span class="${v >= va ? 'bom' : 'ruim'}">${v >= va ? '▲' : '▼'} ${Math.abs(Math.round(((v - va) / va) * 100))}%</span> · antes ${num(va)}`;
+    const larg = v == null || !F.leads ? 0 : (v / F.leads) * 100;
+    if (v != null) ant = v;
+    return `<div class="pnEtapa"><div class="eyebrow">${nome}</div><b class="${v == null ? 'semDado' : ''}">${v == null ? 'sem dado' : num(v)}</b><div class="conv">${conv || (i === 0 ? 'criados no período' : v == null ? 'conversas não carregadas' : '')}</div><div class="var">${varia}</div><div class="trilho"><i style="width:${larg}%"></i></div></div>`;
   }).join('');
-  $('#gPrincipais').style.gridTemplateColumns = 'repeat(auto-fit, minmax(220px, 1fr))';
-  $('#gOutras').hidden = !linhas.length; // sem meta definida (ex.: conteúdo), o cartão nem aparece
-  $('#gMetas').innerHTML = linhas.length ? linhas.map(([nome, feito, meta, obs]) => {
-    const pct = feito == null ? 0 : Math.min(100, (feito / meta) * 100);
-    return `<div class="metaLinha ${pct >= 100 ? 'ok' : ''}"><span>${nome}</span><div class="trilho"><i style="width:${pct}%"></i></div><b>${feito == null ? `<span class="sub">${obs || 'sem dados'}</span>` : `${num(feito)} / ${num(meta)}`}</b></div>`;
-  }).join('') : '<div class="vazio">Nenhuma meta definida ainda. Clique em "Definir metas".</div>';
+  $('#pnFunilObs').textContent = `${rot} (${dataBr(c.de)} a ${dataBr(c.ate)}) · leads criados no período e até onde chegaram · comparado com ${dataBr(c.anterior.de)} a ${dataBr(c.anterior.ate)} · LeadsOK + Agenda`;
+  const inferidos = F.compareceu - F.visitasMarcadas;
+  $('#pnFunilNota').innerHTML = [
+    F.semDadoConversa ? `<span class="semDado">Respondidos sem dado:</span> as conversas do LeadsOK estão carregadas para ${c.cobertura == null ? '0' : Math.round(c.cobertura * 100)}% dos leads do período. Veja Configurações → Integrações → LeadsOK → "Testar coleta de detalhes".` : '',
+    inferidos > 0 ? `<span class="semDado">${num(inferidos)} venda(s) sem visita marcada</span> contam como comparecimento. Marque o resultado das visitas na Agenda para o funil ficar exato.` : '',
+    `${num(c.agendamentosFeitos)} agendamento(s) feito(s) no período (pela data de criação).`,
+  ].filter(Boolean).join(' ');
+  // ---------- 3. meta x realizado (sempre o mês corrente)
+  const M = c.metas;
+  $('#pnMetaObs').textContent = `Este mês (${M.mes.split('-').reverse().join('/')}), dia ${M.diaDoMes} de ${M.diasMes} · agendamentos feitos, visitas que vieram e vendas · LeadsOK + Agenda`;
+  $('#pnMetas').innerHTML = [['Agendamentos feitos', M.agendamentos, 'agendamentos', 'meta diária × dias do mês'], ['Visitas', M.visitas, 'visitas', 'meta diária × dias do mês'], ['Vendas', M.vendas, 'vendas', 'meta do mês']].map(([nome, m, un, obs]) => {
+    if (!m.meta) return `<div class="pnMeta"><div class="eyebrow">${nome}</div><b>${num(m.feito)}</b><small>feito no mês · no ritmo atual, fecha o mês com ${num(m.projecao)} ${un}</small><p style="margin:10px 0 0"><button class="btn" data-ir="metas">Definir meta</button></p></div>`;
+    const p = (m.feito / m.meta) * 100, pp = (m.projecao / m.meta) * 100;
+    const cor = pp >= 100 ? 'var(--verde)' : pp >= 70 ? 'var(--amar)' : 'var(--verm)';
+    return `<div class="pnMeta"><div class="eyebrow">${nome}</div><b>${num(m.feito)}<span> / ${num(m.meta)}</span></b><div class="trilho"><i style="width:${Math.min(100, p)}%;background:${cor}"></i></div><small>${Math.round(p)}% da meta · ${obs}</small><div class="proj" style="color:${cor}">No ritmo atual, fecha o mês com ${num(m.projecao)} ${un} (${Math.round(pp)}% da meta).</div></div>`;
+  }).join('');
+  $('#pnMetas').querySelectorAll('[data-ir]').forEach((a) => a.onclick = () => abrirAba(a.dataset.ir));
+  // ---------- 4. canais
+  const inv = cfg.investimento || {};
+  const gasto = (o) => inv[o] > 0 ? (inv[o] * c.dias) / 30 : null;
+  const canais = [...c.canais].sort((a, b) => b.vendas - a.vendas || b.demanda - a.demanda);
+  $('#pnCanaisObs').textContent = `${rot} · leads criados no período, por canal de entrada · investimento mensal proporcional aos ${c.dias} dia(s) · LeadsOK`;
+  $('#pnCanais').innerHTML = canais.map((o) => { const gs = gasto(o.origem); return `<tr><td>${esc(canal(o.origem))}</td><td><b>${num(o.demanda)}</b></td><td>${num(o.agendados)}</td><td>${num(o.vendas)}</td><td>${pct(o.vendas, o.demanda)}</td><td>${gs == null ? (o.origem === 'direto' ? '<span class="sub">não se aplica</span>' : '<span class="semDado">não informado</span>') : reais(gs)}</td><td>${gs == null ? '—' : o.vendas ? '<b>' + reais(gs / o.vendas) + '</b>' : '<span class="sub">sem venda</span>'}</td></tr>`; }).join('') || '<tr><td colspan="7" class="sub">Nenhum lead no período.</td></tr>';
+  const semInv = canais.filter((o) => o.origem !== 'direto' && !(inv[o.origem] > 0)).map((o) => canal(o.origem));
+  $('#pnInvAviso').hidden = !semInv.length;
+  $('#pnInvAviso').innerHTML = semInv.length ? `<span class="semDado">Investimento não informado:</span> ${esc(semInv.join(', '))}. Preencha em Leads e canais → "Editar investimento" para ver o custo por venda.` : '';
+  // ---------- 5. time
+  $('#pnTimeObs').textContent = `${rot} · leads criados no período, pelo vendedor atual do lead · "Esperando agora" é a situação deste momento · LeadsOK + Agenda`;
+  $('#pnTime').innerHTML = [...c.time].sort((a, b) => b.vendas - a.vendas || b.recebidos - a.recebidos).map((v) => `<tr><td><b>${esc(v.vendedor)}</b>${v.ia ? ' <span class="tag">IA</span>' : ''}</td><td>${num(v.recebidos)}</td><td>${v.ia ? '—' : v.resposta_min == null ? '<span class="semDado">sem dado</span>' : fmtMin(v.resposta_min)}</td><td class="${v.esperandoAgora ? 'ruim' : ''}"><b>${num(v.esperandoAgora)}</b></td><td>${num(v.agendados)}</td><td>${num(v.visitas)}</td><td>${num(v.vendas)}</td><td>${pct(v.vendas, v.recebidos)}</td></tr>`).join('') || '<tr><td colspan="8" class="sub">Nenhum lead no período.</td></tr>';
+  // ---------- 6. origem dos leads (compacto)
+  $('#pnOrigemObs').textContent = `${rot} · quantos leads cada origem gerou`;
+  const novasDm = direct && direct.novas != null ? direct.novas : null;
+  $('#pnOrigem').innerHTML = [
+    ...canais.map((o) => [canal(o.origem), num(o.demanda), 'leads · LeadsOK']),
+    ['Grupos de WhatsApp', g ? num(g.hoje.cliques) : '<span class="semDado">sem dado</span>', 'cliques no "Chame no WhatsApp" · robô'],
+    ['Instagram', novasDm == null ? '<span class="semDado">sem dado</span>' : num(novasDm), 'conversas novas no Direct · Instagram'],
+  ].map(([n, v, f]) => `<div><b>${v}</b>${esc(n)}<br><span>${f}</span></div>`).join('');
 }
-
-
 // ---------- Comercial (LeadsOK) ----------
 const CORES_CANAL = ['#e2b350', '#60a5fa', '#34d399', '#f472b6', '#a78bfa', '#fbbf24', '#f87171', '#2dd4bf', '#94a3b8', '#fb923c'];
-const NOME_CANAL = { whatsapp: 'WhatsApp', webmotors: 'Webmotors', mercadolivre: 'Mercado Livre', faceads: 'Facebook Ads', instaads: 'Instagram Ads', napista: 'Napista', resgate: 'Resgate', manual: 'Manual', facebookparticular: 'Facebook (particular)', site: 'Site', teste: 'Teste', unknown: 'Desconhecido' };
+const NOME_CANAL = { whatsapp: 'WhatsApp', webmotors: 'Webmotors', mercadolivre: 'Mercado Livre', faceads: 'Facebook Ads', instaads: 'Instagram Ads', napista: 'Napista', resgate: 'Resgate', manual: 'Manual', facebookparticular: 'Facebook (particular)', site: 'Site', direto: 'Contato direto (WhatsApp e manual)', teste: 'Teste', unknown: 'Desconhecido' };
 const canal = (o) => NOME_CANAL[o] || o || '—';
 const pct = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '—');
 async function avisoLk() {
@@ -1213,12 +1288,13 @@ async function carregarLeads() {
   const t = r.total;
   const sel = $('#fOrigem').value;
   $('#fOrigem').innerHTML = '<option value="">Todos os canais</option>' + r.origens.filter((o) => o !== 'resgate').map((o) => `<option value="${esc(o)}" ${o === sel ? 'selected' : ''}>${esc(canal(o))}</option>`).join('');
-  const etapas = [['Demanda', t.demanda, 'var(--azul)'], ['Atendidos', t.atendidos, '#93c5fd'], ['Responderam', t.responderam, 'var(--verde)'], ['Fichas', t.fichas, '#a78bfa'], ['Agendaram', t.agendados, 'var(--ouro)'], ['Compareceram', t.visitas, 'var(--amar)'], ['Compraram', t.vendas, '#f472b6']];
+  const etapas = [['Leads', t.demanda, 'var(--azul)'], ['Atendidos', t.atendidos, '#93c5fd'], ['Respondidos', t.responderam, 'var(--verde)'], ['Agendaram', t.agendados, 'var(--ouro)'], ['Compareceram', t.visitas, 'var(--amar)'], ['Compraram', t.vendas, '#f472b6']];
   const max = Math.max(1, t.demanda);
   $('#lkFunil').className = 'funilLk';
-  $('#lkFunil').innerHTML = etapas.map(([n, v, c], i) => `<div class="etapa" style="--c:${c}"><span class="nome">${n}</span><div class="trilho"><i style="width:${(v / max) * 100}%"></i></div><b>${num(v)}</b><span class="taxa">${i ? pct(v, t.demanda) : ''}</span></div>`).join('');
+  $('#lkFunil').innerHTML = etapas.map(([n, v, c], i) => `<div class="etapa" style="--c:${c}"><span class="nome">${n}</span><div class="trilho"><i style="width:${v == null ? 0 : (v / max) * 100}%"></i></div><b>${nd(v)}</b><span class="taxa">${i && v != null ? pct(v, t.demanda) : ''}</span></div>`).join('');
   $('#lkFunil').innerHTML += `<div class="funilExtra"><div><b class="ruim">${num(t.naoVieram)}</b> não vieram (no-show)${t.agendados ? ` · ${pct(t.naoVieram, t.agendados)} dos agendados` : ''}</div><div><b>${num(t.vieramNaoCompraram)}</b> vieram e não compraram${t.visitas ? ` · ${pct(t.vieramNaoCompraram, t.visitas)} de quem veio` : ''}</div></div>`;
-  $('#lkCobertura').textContent = `Leads criados entre ${$('#fDe').value.split('-').reverse().join('/')} e ${$('#fAte').value.split('-').reverse().join('/')}. ${num(t.agendamentos)} agendamentos no total. Conversas e fichas carregadas para ${pct(t.detalhados, t.demanda)} dos leads. % = parte da demanda que chegou em cada etapa.`;
+  $('#lkFunil').innerHTML += `<div class="funilExtra"><div>Fichas de financiamento: <b>${nd(t.fichas)}</b></div><div><b>${num(t.agendamentos)}</b> agendamento(s) feito(s) no período (pela data de criação)</div>${t.visitas - t.visitasMarcadas > 0 ? `<div><span class="semDado">${num(t.visitas - t.visitasMarcadas)} venda(s) sem visita marcada</span> contam como comparecimento</div>` : ''}</div>`;
+  $('#lkCobertura').innerHTML = `Leads criados entre ${$('#fDe').value.split('-').reverse().join('/')} e ${$('#fAte').value.split('-').reverse().join('/')} e até onde chegaram (cada etapa conta quem chegou pelo menos até ela). % = parte dos leads. ${t.semDadoConversa ? `<span class="semDado">Conversas e fichas carregadas para ${pct(t.detalhados, t.demanda)} dos leads: Atendidos, Respondidos e Fichas ficam "sem dado".</span>` : `Conversas e fichas carregadas para ${pct(t.detalhados, t.demanda)} dos leads.`} Fonte: LeadsOK + Agenda.`;
   const origens = [...new Set(r.porDia.map((x) => x.origem))];
   const cor = (o) => CORES_CANAL[origens.indexOf(o) % CORES_CANAL.length];
   const dias = [...new Set(r.porDia.map((x) => x.dia))];
@@ -1228,12 +1304,12 @@ async function carregarLeads() {
   $('#lkDias').innerHTML = dias.map((d) => { const tot = porDia[d].reduce((a, x) => a + x.n, 0); return `<div class="col" title="${d.split('-').reverse().join('/')}: ${tot} leads"><div class="barras"><div class="empilhada" style="height:${(tot / maxD) * 100}%">${porDia[d].map((x) => `<i style="flex:${x.n};background:${cor(x.origem)}"></i>`).join('')}</div></div><span>${dias.length > 16 ? (Number(d.slice(8)) % 5 === 0 ? d.slice(8) : '') : d.slice(8) + '/' + d.slice(5, 7)}</span></div>`; }).join('') || '<div class="vazio">Sem leads no período.</div>';
   $('#lkDias').querySelectorAll('.empilhada').forEach((e) => { e.style.display = 'flex'; });
   $('#lkLegenda').innerHTML = origens.map((o) => `<span style="--c:${cor(o)}">${esc(canal(o))}</span>`).join('');
-  $('#lkOrigens').innerHTML = r.porOrigem.map((o) => `<tr><td>${esc(canal(o.origem))}</td><td><b>${num(o.demanda)}</b></td><td>${pct(o.responderam, o.demanda)}</td><td>${num(o.fichas)}</td><td>${num(o.agendados)}</td><td>${num(o.vendas)}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Sem dados.</td></tr>';
+  $('#lkOrigens').innerHTML = r.porOrigem.map((o) => `<tr><td>${esc(canal(o.origem))}</td><td><b>${num(o.demanda)}</b></td><td>${pctNd(o.responderam, o.demanda)}</td><td>${nd(o.fichas)}</td><td>${num(o.agendados)}</td><td>${num(o.vendas)}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Sem dados.</td></tr>';
   // custo: investimento mensal proporcional aos dias do período escolhido
   const diasPeriodo = Math.max(1, Math.round((Date.parse($('#fAte').value) - Date.parse($('#fDe').value)) / 864e5) + 1);
   if (!cfg) cfg = await api('/api/config');
   const inv = cfg.investimento || {};
-  const canaisInv = r.origens.filter((o) => o !== 'resgate');
+  const canaisInv = r.origens.filter((o) => o !== 'resgate' && o !== 'direto');
   $('#lkInvestCampos').innerHTML = canaisInv.map((o) => `<div><label>${esc(canal(o))} (R$ por mês)</label><input type="number" min="0" data-inv="${esc(o)}" value="${inv[o] || ''}"></div>`).join('');
   const reaisOu = (v) => (v == null || !isFinite(v) ? '—' : reais(v));
   const linhasCusto = r.porOrigem.filter((o) => inv[o.origem] > 0).map((o) => { const gasto = (inv[o.origem] * diasPeriodo) / 30; return `<tr><td>${esc(canal(o.origem))}</td><td>${reais(gasto)}</td><td><b>${reaisOu(o.demanda ? gasto / o.demanda : null)}</b></td><td>${reaisOu(o.agendados ? gasto / o.agendados : null)}</td><td>${reaisOu(o.vendas ? gasto / o.vendas : null)}</td></tr>`; });
@@ -1280,9 +1356,9 @@ async function carregarTime() {
   const tot = (k) => r.vendedores.reduce((a, v) => a + (v[k] || 0), 0);
   const corResp = (m) => m == null ? 'var(--borda2)' : m <= 15 ? 'var(--verde)' : m <= 60 ? 'var(--ouro)' : 'var(--verm)';
   $('#tmKpis').innerHTML = [
-    ['1ª resposta (média)', fmtMin(mediaResp), 'vendedores, sem a IA', mediaResp == null ? '' : mediaResp <= 15 ? 'ok' : mediaResp <= 60 ? 'ouro' : 'mau'],
+    ['1ª resposta (média)', r.semDadoConversa ? '<span class="semDado" style="font-size:22px">sem dado</span>' : fmtMin(mediaResp), r.semDadoConversa ? 'conversas do LeadsOK não carregadas' : 'vendedores, sem a IA · LeadsOK', mediaResp == null ? '' : mediaResp <= 15 ? 'ok' : mediaResp <= 60 ? 'ouro' : 'mau'],
     ['Esperando agora', num(r.esperandoTotal), `sem resposta há mais de ${String(r.horasParado).replace('.', ',')} h`, r.esperandoTotal ? 'mau' : 'ok'],
-    ['Agendamentos feitos', num(tot('agendamentosFeitos')), rotuloCap(per.rotulo), 'ouro'],
+    ['Agendamentos feitos', num(r.agendamentosFeitos), `${rotuloCap(per.rotulo)} · pela data de criação`, 'ouro'],
     ['Visitas', num(tot('vieram')), `${num(tot('naoVieram'))} não vieram`, 'ok'],
   ].map(([n, v, txt, c]) => `<div class="kpi ${c}"><div class="eyebrow">${n}</div><b>${v}</b><small>${txt}</small></div>`).join('');
   const dias = diasEntre(per.de, per.ate);
@@ -1292,7 +1368,7 @@ async function carregarTime() {
   $('#tmResp').innerHTML = dias.map((dd) => { const x = pd[dd] || {}; const m = x.resposta_min; return `<div class="col" title="${dd.split('-').reverse().join('/')}: ${fmtMin(m)} em média · ${x.leads || 0} leads"><div class="gr">${dias.length <= 10 && m != null ? `<em>${fmtMin(m)}</em>` : ''}<i style="height:${((m || 0) / maxR) * 100}%;background:${corResp(m)}"></i></div><span>${rotDia(dd, dias.length)}</span></div>`; }).join('');
   // faixas
   const f = r.faixasResposta || {};
-  $('#tmFaixas').innerHTML = barras([['Até 5 min', f.ate5 || 0], ['5 a 15 min', f.ate15 || 0], ['15 min a 1 h', f.ate60 || 0], ['1 a 3 h', f.ate180 || 0], ['Mais de 3 h', f.mais || 0]], 'var(--azul)');
+  $('#tmFaixas').innerHTML = r.semDadoConversa ? '<div class="vazio"><span class="semDado">Sem dado:</span> as conversas do LeadsOK ainda não foram carregadas. Veja Configurações → Integrações → LeadsOK → "Testar coleta de detalhes".</div>' : barras([['Até 5 min', f.ate5 || 0], ['5 a 15 min', f.ate15 || 0], ['15 min a 1 h', f.ate60 || 0], ['1 a 3 h', f.ate180 || 0], ['Mais de 3 h', f.mais || 0]], 'var(--azul)');
   // esperando 24 h
   const e24 = r.esperando24h || [];
   const maxE = Math.max(1, ...e24.map((x) => x.total));
@@ -1309,14 +1385,63 @@ async function carregarTime() {
   $('#tmRespVend').innerHTML = comResp.map((v) => { const max = Math.max(...comResp.map((x) => x.resposta_min)); return `<div class="barra" style="--c:${corResp(v.resposta_min)}"><span>${esc(v.vendedor)} <span class="sub">${num(v.recebidos)} leads</span></span><b>${fmtMin(v.resposta_min)}</b><div class="trilho"><i style="width:${(v.resposta_min / max) * 100}%"></i></div></div>`; }).join('') || '<div class="vazio">Sem respostas de vendedores no período.</div>';
   $('#tmObs').textContent = `Leads que chegaram ${per.rotulo}. "Esperando agora" = cliente mandou a última mensagem há mais de ${String(r.horasParado).replace('.', ',')} h (últimos 30 dias).`;
   $('#tmCartoes').innerHTML = r.vendedores.map((v) => `<div class="card conta"><div class="quem"><div><b>${esc(v.vendedor)}${v.ia ? ' <span class="tag">IA</span>' : ''}</b><span>${num(v.recebidos)} leads recebidos</span></div></div>
-    <div class="mini"><div><b>${v.ia ? '—' : fmtMin(v.resposta_min)}</b>1ª resposta</div><div><b>${pct(v.responderam, v.recebidos)}</b>responderam</div><div><b class="${v.esperandoAgora ? 'ruim' : ''}">${num(v.esperandoAgora)}</b>esperando agora</div></div>
-    <div class="mini"><div><b>${num(v.agendamentosFeitos)}</b>agendou no período</div><div><b>${num(v.vieram)}</b>visitas</div><div><b>${num(v.naoVieram)}</b>não vieram</div></div>
-    <div class="mini"><div><b>${num(v.fichas)}</b>fichas</div><div><b>${num(v.vendas)}</b>vendas</div><div><b>${pct(v.vendas, v.recebidos)}</b>conversão</div></div></div>`).join('') || '<div class="vazio">Sem dados no período.</div>';
+    <div class="mini"><div><b>${v.ia ? '—' : v.resposta_min == null && r.semDadoConversa ? '<span class="semDado" style="font-size:14px">sem dado</span>' : fmtMin(v.resposta_min)}</b>1ª resposta</div><div><b>${v.responderam == null ? '<span class="semDado" style="font-size:14px">sem dado</span>' : pct(v.responderam, v.recebidos)}</b>responderam</div><div><b class="${v.esperandoAgora ? 'ruim' : ''}">${num(v.esperandoAgora)}</b>esperando agora</div></div>
+    <div class="mini"><div><b>${num(v.agendados)}</b>agendaram</div><div><b>${num(v.visitas)}</b>compareceram</div><div><b>${num(v.agendamentosFeitos)}</b>agend. feitos no período</div></div>
+    <div class="mini"><div><b>${v.fichas == null ? '<span class="semDado" style="font-size:14px">sem dado</span>' : num(v.fichas)}</b>fichas</div><div><b>${num(v.vendas)}</b>vendas</div><div><b>${pct(v.vendas, v.recebidos)}</b>conversão</div></div></div>`).join('') || '<div class="vazio">Sem dados no período.</div>';
 }
 barraPeriodo($('#perTime'), () => carregarTime());
 // o Time abre nos últimos 7 dias (um dia só diz pouco sobre o time)
 $('#perTime').querySelectorAll('[data-p]').forEach((x) => x.classList.toggle('ativo', x.dataset.p === '7'));
 $('#perTime').per = { de: diaSP(6), ate: diaSP(0), rotulo: 'últimos 7 dias', chave: '7' };
+let gestorAtual = null;
+async function carregarGestor() {
+  avisoLk();
+  const g = await api('/api/comercial/gestor');
+  if (g.erro) return;
+  gestorAtual = g;
+  const hp = String(g.horasParado).replace('.', ',');
+  $('#gsObs').textContent = `Situação de agora (${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}) · LeadsOK + Agenda + Fila do SDR. Atualiza a cada coleta do LeadsOK (15 min).`;
+  const k = (titulo, n, txt, nivel) => `<div class="alerta ${n > 0 ? nivel : 'okk'}" style="cursor:default"><div class="eyebrow">${titulo}</div><b>${num(n)}</b><small>${txt}</small></div>`;
+  $('#gsKpis').innerHTML = [
+    k('Leads de hoje', g.hoje.leads, `${num(g.hoje.foraHorario)} fora do horário (antes das 8h, depois das 19h ou domingo)`, ''),
+    k('Sem resposta', g.semResposta.total, `cliente esperando há mais de ${hp} h`, 'urgente'),
+    k('Quentes parados', g.quentes.length, 'interesse real e mais de 24 h sem movimento', 'urgente'),
+    k('Visitas a confirmar', g.agenda.semConfirmar, `hoje e amanhã · ${num(g.agenda.iaSemConfirmar.length)} marcadas pela IA`, 'atencao'),
+    k('Visitas sem resultado', g.agenda.visitasPendentes, 'passaram do horário (30 dias)', 'atencao'),
+  ].join('');
+  $('#gsKpis').style.gridTemplateColumns = 'repeat(auto-fit, minmax(190px, 1fr))';
+  guardarLeadsSdr(g.semResposta.lista); guardarLeadsSdr(g.quentes); guardarLeadsSdr(g.semInfo.semVendedor);
+  const linha = (l, extra) => { const tel = soDigitos(l.whatsapp); return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor)}${l.ia ? ' (IA)' : ''} · ${extra}</span>${carroLinha(l)}<div class="sub">${tel ? '+' + tel : 'sem telefone'}</div></div><div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}">WhatsApp</a>` : ''}${BOTOES_SDR}</div></div>`; };
+  $('#gsRespN').textContent = `(${g.semResposta.total})`;
+  $('#gsRespObs').textContent = `O cliente mandou a última mensagem há mais de ${hp} h e ninguém respondeu (últimos 14 dias). Os mais recentes primeiro: ainda estão quentes.`;
+  $('#gsRespVend').innerHTML = g.semResposta.porVendedor.length ? barras(g.semResposta.porVendedor.map((v) => [v.vendedor, v.n]), 'var(--verm)') : '';
+  $('#gsResp').innerHTML = g.semResposta.lista.map((l) => linha(l, `<span class="ruim">esperando ${haTempo(l.ultima_msg_at)}</span>`)).join('') + (g.semResposta.total > g.semResposta.lista.length ? `<p class="sub">Mostrando os ${g.semResposta.lista.length} mais recentes de ${g.semResposta.total}.</p>` : '') || '<div class="vazio">Ninguém esperando resposta. </div>';
+  $('#gsQuenteN').textContent = `(${g.quentes.length})`;
+  $('#gsQuentes').innerHTML = g.quentes.map((l) => linha(l, `parado há ${l.diasParado} dia(s) · <span class="bom">${esc(l.motivos.join(' · '))}</span>${l.semSdr ? ' · <span class="ruim">nunca trabalhado pelo SDR</span>' : ''}`)).join('') || '<div class="vazio">Nenhum lead quente parado.</div>';
+  ligarBotoesSdr($('#comGestor'));
+  $('#gsAgN').textContent = `(hoje ${g.agenda.hoje} · amanhã ${g.agenda.amanha})`;
+  $('#gsAgenda').innerHTML = (g.agenda.iaSemConfirmar.map((a) => { const tel = soDigitos(a.whatsapp); return `<div class="sdLinha"><div><b>${esc(a.nome || 'Lead sem nome')}</b> <span class="sub">· ${quandoVisita(a.data)} às ${new Date(a.data).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })} · ${esc(a.vendedor || 'sem vendedor')} · agendado pela IA</span>${carroLinha(a)}<div class="sub">${tel ? '+' + tel : 'sem telefone'} · ${seloConfirmacao(a)}</div></div><div class="acoes"><button class="btn" data-ir="comAgenda">Abrir na Agenda</button></div></div>`; }).join('') || '<div class="vazio">Nenhuma visita da IA esperando confirmação.</div>')
+    + (g.agenda.visitasPendentes ? `<p style="margin:12px 0 0"><span class="ruim">${num(g.agenda.visitasPendentes)} visita(s) passaram do horário sem resultado.</span> <a id="gsPend" style="cursor:pointer">Marcar agora</a></p>` : '');
+  $('#gsAgenda').querySelectorAll('[data-ir]').forEach((b) => b.onclick = () => abrirAba('comAgenda'));
+  const gp = $('#gsPend'); if (gp) gp.onclick = () => { window.agSoPendentes = true; abrirAba('comAgenda'); };
+  $('#gsInfoN').textContent = `(${g.semInfo.total} leads)`;
+  $('#gsInfo').innerHTML = `<div class="funilExtra" style="border:0;margin:0;padding:0"><div><b class="${g.semInfo.semVendedor.length ? 'ruim' : ''}">${num(g.semInfo.semVendedor.length)}</b> sem vendedor</div><div><b>${num(g.semInfo.semNome)}</b> sem nome</div><div><b>${num(g.semInfo.semCarro)}</b> sem carro de interesse</div></div>`
+    + g.semInfo.semVendedor.slice(0, 30).map((l) => linha(l, `chegou ${haTempo(l.created_date)} · <span class="ruim">sem vendedor</span>`)).join('');
+  ligarBotoesSdr($('#gsInfo'));
+}
+$('#btnGsCopiar').onclick = async () => {
+  const g = gestorAtual; if (!g) return;
+  const hp = String(g.horasParado).replace('.', ',');
+  const t = [`*Gestor do dia · Choice Cars · ${g.dia.split('-').reverse().join('/')}*`, '',
+    `Leads de hoje: ${g.hoje.leads} (${g.hoje.foraHorario} fora do horário)`,
+    `Sem resposta há mais de ${hp} h: *${g.semResposta.total}*${g.semResposta.porVendedor.length ? ' (' + g.semResposta.porVendedor.map((v) => `${v.vendedor}: ${v.n}`).join(', ') + ')' : ''}`,
+    `Leads quentes parados: *${g.quentes.length}*`,
+    `Visitas hoje: ${g.agenda.hoje} · amanhã: ${g.agenda.amanha} · a confirmar: ${g.agenda.semConfirmar} (${g.agenda.iaSemConfirmar.length} marcadas pela IA)`,
+    `Visitas sem resultado marcado: ${g.agenda.visitasPendentes}`,
+    `Leads sem vendedor (3 dias): ${g.semInfo.semVendedor.length}`,
+    ...(g.quentes.length ? ['', '*Quentes para cobrar hoje:*', ...g.quentes.slice(0, 8).map((l) => `- ${l.nome || 'Sem nome'} (${l.vendedor}) · parado há ${l.diasParado} d · ${l.motivos[0]}`)] : [])].join('\n');
+  try { await navigator.clipboard.writeText(t); alert('Resumo copiado. É só colar no WhatsApp.'); } catch { prompt('Copie o resumo:', t); }
+};
 async function carregarSdrRes() {
   avisoLk();
   const per = $('#perSdrRes').per || { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje' };
@@ -1344,11 +1469,17 @@ $('#srPor').onchange = () => carregarSdrRes();
 const VISITA_BTNS = [['comprou', 'Veio e comprou', 'verde'], ['nao_comprou', 'Veio e não comprou', ''], ['nao_veio', 'Não veio', 'verm']];
 async function carregarAgenda() {
   avisoLk();
-  const per = $('#perAgenda').per || { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje' };
+  // "só pendentes": visitas dos últimos 30 dias que passaram do horário e estão sem resultado (vem do alerta do Painel)
+  const soPend = !!window.agSoPendentes;
+  const per = soPend ? { de: diaSP(30), ate: diaSP(0), rotulo: 'pendentes dos últimos 30 dias' } : $('#perAgenda').per || { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje' };
   const r = await api(`/api/agenda?de=${per.de}&ate=${per.ate}`);
   if (r.erro) return;
+  $('#perAgenda').hidden = soPend;
+  if (soPend) r.itens = r.itens.filter((a) => a.compareceu == null && !a.concluido && Date.parse(a.data) < Date.now());
   const z = r.resumo;
   const umDia = r.de === r.ate;
+  $('#agPend').hidden = !soPend;
+  $('#agKpis').hidden = soPend;
   $('#agKpis').innerHTML = [
     ['Agendados', z.agendados, '', umDia ? rotuloCap(per.rotulo) : rotuloCap(per.rotulo), 'ouro'],
     ['Vieram', z.vieram, pct(z.vieram, z.vieram + z.naoVieram), 'dos que já foram marcados', 'ok'],
@@ -1357,10 +1488,11 @@ async function carregarAgenda() {
     ['Vieram e não compraram', z.vieramNaoCompraram, pct(z.vieramNaoCompraram, z.vieram), 'de quem veio', ''],
   ].map(([n, v, p, txt, c]) => `<div class="kpi ${c}"><div class="eyebrow">${n}</div><b>${num(v)}</b><small>${p && p !== '—' ? p + ' · ' : ''}${txt}</small></div>`).join('')
     + (r.followupsLigacao ? `<p class="sub" style="grid-column:1/-1;margin:0">${num(r.followupsLigacao)} agendamento(s) do tipo "ligação" no LeadsOK ficaram fora: são lembretes de follow-up e aparecem na Fila do SDR.</p>` : '')
-    + (z.aMarcar ? `<p class="sub" style="grid-column:1/-1;margin:0"><span class="ruim">${num(z.aMarcar)} visita(s) já passaram do horário e ainda não foram marcadas.</span>${z.futuros ? ` ${num(z.futuros)} ainda vão acontecer.` : ''}</p>` : z.futuros ? `<p class="sub" style="grid-column:1/-1;margin:0">${num(z.futuros)} visita(s) ainda vão acontecer.</p>` : '');
+    + (z.aMarcar ? `<p class="sub" style="grid-column:1/-1;margin:0"><span class="ruim">${num(z.aMarcar)} visita(s) já passaram do horário e ainda não foram marcadas.</span> <a id="agVerPend" style="cursor:pointer">Ver todas as pendentes (30 dias)</a>${z.futuros ? ` ${num(z.futuros)} ainda vão acontecer.` : ''}</p>` : z.futuros ? `<p class="sub" style="grid-column:1/-1;margin:0">${num(z.futuros)} visita(s) ainda vão acontecer.</p>` : '');
+  const vp = $('#agVerPend'); if (vp) vp.onclick = () => { window.agSoPendentes = true; carregarAgenda(); };
   // gráfico por dia (só quando o período tem mais de um dia)
-  $('#agGrafCard').hidden = umDia;
-  if (!umDia) {
+  $('#agGrafCard').hidden = umDia || soPend;
+  if (!umDia && !soPend) {
     const dias = []; for (let t = Date.parse(r.de + 'T12:00:00Z'); t <= Date.parse(r.ate + 'T12:00:00Z'); t += 864e5) dias.push(new Date(t).toISOString().slice(0, 10));
     const pd = Object.fromEntries(r.porDia.map((x) => [x.dia, x]));
     const max = Math.max(1, ...r.porDia.map((x) => x.agendados));
@@ -1402,6 +1534,7 @@ async function carregarAgenda() {
   });
 }
 barraPeriodo($('#perAgenda'), () => carregarAgenda(), true);
+$('#agPendVoltar').onclick = () => { window.agSoPendentes = false; carregarAgenda(); };
 async function carregarEstoque() {
   avisoLk();
   const r = await api('/api/estoque');
@@ -1460,6 +1593,7 @@ $('#btnCkDesligar').onclick = async () => { if (confirm('Desligar a leitura do C
 // ---------- Fila do SDR ----------
 const LISTAS_SDR = [
   ['responder', 'Cliente respondeu', 'O cliente mandou mensagem e está sem resposta. Responda primeiro: ele está quente agora.'],
+  ['abandonados', 'Sem resposta de ninguém (outros vendedores)', 'O cliente mandou mensagem e o vendedor dele não respondeu. Ligue antes que esfrie e registre o que combinou.'],
   ['novos', 'Ligar agora', 'Leads dos últimos 7 dias que você ainda não trabalhou, do mais novo para o mais velho. Ligue pelo WhatsApp, depois no telefone; se não atender, deixe o recado.'],
   ['retornar', 'Follow-up: não responderam', 'Quem não atendeu há mais de 3 h, quem não respondeu o recado em 24 h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.'],
   ['visitas', 'Follow-up de visitas', 'Visitas agendadas (no LeadsOK ou aqui). Antes do horário: chame o cliente confirmando o horário. Depois: marque se veio e se comprou.'],
@@ -1737,6 +1871,17 @@ $('#lkNotas').onchange = async () => {
   await api('/api/leadsok/gravar-notas', { method:'POST', body: JSON.stringify({ ativo: $('#lkNotas').checked }) }); carregarLkCfg();
 };
 $('#btnLkTestar').onclick = async () => { try { const r = await api('/api/leadsok/testar', { method:'POST' }); alert(`Conexão ok: ${r.leadsNovos} leads novos no LeadsOK.`); } catch (e) { alert(e.message); } };
+$('#btnLkDiag').onclick = async () => {
+  const b = $('#btnLkDiag'); b.disabled = true; b.textContent = 'Testando…';
+  try {
+    const r = await api('/api/leadsok/testar-detalhes', { method:'POST' });
+    const linhas = [`Ações do LeadsOK encontradas: ${r.acoesEncontradas}`, ...Object.entries(r.necessarias).map(([k, v]) => `  ${k}: ${v}`), '',
+      ...r.passos.map((p) => `${p.ok ? 'OK  ' : 'ERRO'} ${p.acao}${p.ok ? ` · ${p.itens == null ? 'resposta sem a lista esperada' : p.itens + ' item(ns)'} · campos: ${Array.isArray(p.campos) ? p.campos.join(', ') : p.campos}` : ' · ' + p.erro}${p.resposta ? `\n       resposta: status ${p.resposta.status}, ${p.resposta.tipo || 'sem tipo'}, ${p.resposta.tamanho} caracteres${p.resposta.html ? ', veio uma PÁGINA HTML (não é resposta de ação)' : ''}, linhas: ${p.resposta.linhas.join(' ')}` : ''}`),
+      '', `Leads no banco: ${r.base.leads} · com detalhes: ${r.base.detalhados || 0}`, r.ultimoErro ? `Último erro da coleta: ${r.ultimoErro}` : ''];
+    $('#lkLog').textContent = linhas.join('\n'); $('#lkLog').closest('details').open = true;
+  } catch (e) { alert(e.message); }
+  b.disabled = false; b.textContent = 'Testar coleta de detalhes';
+};
 $('#btnLkSync').onclick = async () => { await api('/api/leadsok/sincronizar', { method:'POST' }); alert('Sincronização iniciada.'); setTimeout(carregarLkCfg, 1500); };
 $('#btnLkDesligar').onclick = async () => { if (confirm('Desligar a coleta do LeadsOK? Os dados já coletados ficam.')) { await api('/api/leadsok/desligar', { method:'POST' }); carregarLkCfg(); } };
 setInterval(() => { if ($('#integracoes').classList.contains('ativo')) carregarLkCfg().catch(() => {}); }, 10000);
