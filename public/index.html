@@ -162,6 +162,14 @@
   .avisoLigando { margin-top:6px; font-size:13px; color:var(--ouro); font-weight:600; }
   .modal.brf { max-width:760px; max-height:88vh; overflow:auto; } .brf h3 { font-size:15px; margin:18px 0 8px; }
   .brfGrade { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px 18px; } .brfGrade div { display:flex; flex-direction:column; gap:2px; } .brfGrade b { font-weight:600; font-size:14.5px; }
+  .brfChips { display:flex; flex-wrap:wrap; gap:8px 18px; margin:12px 0; font-size:14px; color:var(--sub); align-items:center; } .brfChips b { color:var(--txt); font-weight:600; }
+  .brfSituacao { border:1px solid rgba(226,179,80,.4); background:rgba(226,179,80,.07); border-radius:14px; padding:14px 16px; display:flex; flex-direction:column; gap:6px; } .brfSituacao > b { font-size:17px; }
+  .brfSituacao.verm { border-color:rgba(248,113,113,.5); background:rgba(248,113,113,.07); } .brfSituacao.verde { border-color:rgba(52,211,153,.45); background:rgba(52,211,153,.06); } .brfSituacao.sub { border-color:var(--borda2); background:transparent; }
+  .brfSituacao .eyebrow { font-size:10.5px; margin-right:6px; }
+  .brfCols { display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:14px; } .brfCols > div { display:flex; flex-direction:column; gap:6px; } .brfCols .ok { color:var(--verde); } .brfCols .falta { color:var(--sub); } .brfCols .eyebrow.ok { color:var(--verde); }
+  .brfAviso { border:1px solid rgba(251,191,36,.45); border-radius:12px; padding:10px 12px; font-size:14px; color:var(--amar); }
+  .brfMais { margin-top:14px; } .brfMais summary { font-weight:600; font-size:15px; }
+  @media (max-width:820px) { .brfCols { grid-template-columns:1fr; } }
   .brfFase { border:1px solid rgba(226,179,80,.35); background:rgba(226,179,80,.06); border-radius:14px; padding:12px 14px; margin:6px 0 14px; display:flex; flex-direction:column; gap:6px; } .brfFase b { font-size:16px; }
   .brfCheck { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:13.5px; color:var(--sub); } .brfCheck span.ok { color:var(--verde); } .brfCheck i { color:var(--sub); font-style:normal; font-size:12.5px; }
   .brfItem { border-left:2px solid var(--borda2); padding:6px 10px; margin:6px 0; font-size:14px; }
@@ -1758,28 +1766,49 @@ async function abrirBriefingLead(leadId) {
   let b;
   try { b = await api('/api/sdr/lead/' + encodeURIComponent(leadId)); } catch (e) { m.querySelector('.modal').innerHTML = `<h2>Briefing</h2><p class="ruim">${esc(e.message)}</p><p><button class="btn" id="brfX">Fechar</button></p>`; m.querySelector('#brfX').onclick = () => m.remove(); return; }
   const l = b.lead;
-  const RES = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'recado enviado', agendou: 'AGENDOU', interesse_visita: 'topou visitar (sem horário)', ja_comprou: 'já comprou', sem_interesse: 'sem interesse' };
-  const linhaInfo = (rot, val) => val ? `<div><span class="sub">${rot}</span><b>${val}</b></div>` : '';
-  m.querySelector('.modal').innerHTML = `<div class="cardTopo"><h2>Briefing · ${esc(l.nome || 'Lead')}</h2><button class="btn" id="brfX">Fechar</button></div>
-    <p class="sub" style="margin-top:0">O que já se sabe antes de falar com ele. Leia antes de ligar.</p>
-    ${b.fase ? `<div class="brfFase"><span class="eyebrow">Fase do lead (pela conversa no LeadsOK)</span><b>${esc(b.fase.fase)}</b>
-      <div class="brfCheck">${b.fase.itens.map((x) => `<span class="${x.ok ? 'ok' : ''}" title="${esc(x.detalhe)}">${x.ok ? '✓' : '·'} ${esc(x.item)}${x.ok && x.detalhe ? ` <i>${esc(x.detalhe)}</i>` : ''}</span>`).join('')}</div>
-      ${b.conversa.mensagens.length ? '' : '<span class="sub">Sem conversa no LeadsOK para analisar.</span>'}</div>` : ''}
-    <div class="brfGrade">
-      ${linhaInfo('Telefone', l.whatsapp ? esc('+' + soDigitos(l.whatsapp)) : '')}
-      ${linhaInfo('Canal', esc(canal(l.origem)) + (l.provavel ? ` <span class="sub">(provável: ${esc(canal(l.provavel))})</span>` : ''))}
-      ${linhaInfo('Carro de interesse', esc(l.carro || '—'))}
-      ${linhaInfo('Chegou', `${fmtDH(l.criado)} <span class="sub">(${haTempo(l.criado)})</span>`)}
-      ${linhaInfo('Vendedor', esc(l.vendedor || 'sem vendedor') + (l.ia ? ' (IA)' : ''))}
-      ${linhaInfo('Situação no LeadsOK', esc(l.arquivo ? 'arquivado: ' + l.arquivo : { leads_novos: 'novo', em_conversacao: 'em conversa', agendados: 'agendado' }[l.aba] || l.aba || '—'))}
-      ${linhaInfo('Última mensagem', l.ultimaMsgEm ? `${l.ultimaMsgDe === 'customers' ? '<span class="ruim">do cliente</span>' : 'da loja'} ${haTempo(l.ultimaMsgEm)}` : '')}
-      ${linhaInfo('Ficha de financiamento', b.fichas.length ? b.fichas.map((f) => `${esc(f.banco.toUpperCase())}: ${esc(f.statusNome)}`).join(' · ') : l.ficha ? 'sim' : 'não')}
-    </div>
-    ${b.agenda.length || b.visitas.length ? `<h3>Visitas</h3>${b.agenda.map((a) => `<div class="brfItem">${fmtDH(a.data)} · ${esc(a.modalidade || '')}${a.pela_ia ? ' · marcada pela IA' : ''}${a.concluido ? ' · concluído: ' + esc(a.motivo || '') : ''}</div>`).join('')}${b.visitas.map((v) => `<div class="brfItem">${fmtDH(v.data_agendada)} · ${v.comprou === 1 ? '<span class="bom">veio e comprou</span>' : v.compareceu === 1 ? 'veio e não comprou' : '<span class="ruim">não veio</span>'}</div>`).join('')}` : ''}
-    <h3>Debriefings anteriores</h3>${b.contatos.length ? b.contatos.map((c) => `<div class="brfItem"><span class="sub">${fmtDH(c.em)} · ${esc(c.por || '')} · ${c.tipo === 'mensagem' ? 'mensagem' : 'ligação'}</span> <b>${esc(RES[c.resultado] || c.resultado || '')}</b>${c.interesse ? ` <span class="tag">${esc(c.interesse)}</span>` : ''}${c.nota ? `<div>${esc(c.nota)}</div>` : ''}${c.proximo_em ? `<div class="sub">${c.resultado === 'agendou' ? 'visita' : 'retorno'}: ${fmtDH(c.proximo_em)}</div>` : ''}</div>`).join('') : '<div class="sub">Ninguém falou com ele pela Fila do SDR ainda.</div>'}
-    ${b.notasLeadsOK ? `<h3>Notas internas no LeadsOK</h3><div class="brfItem" style="white-space:pre-line">${esc(b.notasLeadsOK.slice(0, 1500))}</div>` : ''}
-    <h3>Conversa no LeadsOK <span class="sub">(últimas mensagens, lidas agora; o painel não guarda o texto)</span></h3>
-    ${b.conversa.mensagens.length ? `<div class="brfChat">${b.conversa.mensagens.map((x) => `<div class="msg ${x.de}"><span class="sub">${x.de === 'cliente' ? 'Cliente' : esc(x.nome || 'Loja')} · ${fmtDH(x.em)}</span><div>${esc(x.texto)}</div></div>`).join('')}</div>` : `<div class="sub">${esc(b.conversa.motivo || 'Nenhuma mensagem no LeadsOK para este lead.')}</div>`}`;
+  const tel = soDigitos(l.whatsapp);
+  const RES = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'recado enviado', agendou: 'agendou visita', interesse_visita: 'topou visitar (sem horário)', ja_comprou: 'já comprou', sem_interesse: 'sem interesse' };
+  // a conversa veio? (se o cliente já mandou mensagem e a lista veio vazia, é falha de leitura, não "não respondeu")
+  const msgs = b.conversa.mensagens;
+  const conversaFalhou = !msgs.length && (b.conversa.motivo || l.ultimaMsgDe === 'customers' || (b.mensagens && b.mensagens.total > 0));
+  // 1. situação em uma frase + próximo passo
+  const futura = b.agenda.filter((a) => a.modalidade !== 'ligacao' && !a.concluido && Date.parse(a.data) > Date.now()).sort((x, y) => (x.data < y.data ? -1 : 1))[0];
+  const ultimo = b.contatos[0];
+  const vendido = /vendid/i.test(l.arquivo || '') || b.visitas.some((v) => v.comprou === 1);
+  let situacao, passo, cor = 'ouro';
+  if (vendido) { situacao = 'Já comprou'; passo = 'Nada a fazer: lead fechado.'; cor = 'verde'; }
+  else if (l.arquivo) { situacao = `Arquivado no LeadsOK: ${l.arquivo}`; passo = 'Só retomar se fizer sentido (ex.: oferecer outro carro).'; cor = 'sub'; }
+  else if (futura) { situacao = `Visita marcada: ${fmtDH(futura.data)}${futura.pela_ia ? ' (marcada pela IA)' : ''}`; passo = futura.pela_ia ? 'Confirmar o horário com o cliente (botão de confirmação).' : 'Mandar a confirmação na véspera e o lembrete no dia.'; }
+  else if (ultimo?.resultado === 'interesse_visita') { situacao = 'Topou visitar, sem horário fechado'; passo = 'Ligar e fechar dia e hora da visita.'; }
+  else if (b.fase && !conversaFalhou && msgs.length) { situacao = b.fase.fase; passo = /topou/i.test(b.fase.fase) ? 'Ligar e fechar dia e hora da visita.' : /CPF/.test(b.fase.fase) ? 'Ligar com a simulação e convidar para a visita.' : /conversa/i.test(b.fase.fase) ? 'Ligar e convidar para a visita.' : 'Ligar; se não atender, deixar o recado.'; }
+  else if (l.ultimaMsgDe === 'customers') { situacao = `O cliente mandou mensagem ${haTempo(l.ultimaMsgEm)} e está sem resposta`; passo = 'Responder agora ou ligar.'; cor = 'verm'; }
+  else { situacao = ultimo ? `Último contato: ${RES[ultimo.resultado] || ultimo.resultado} ${haTempo(new Date(ultimo.em).toISOString())}` : 'Ainda não foi trabalhado pelo SDR'; passo = 'Ligar; se não atender, deixar o recado.'; }
+  // 2. checklist em duas colunas (só com conversa)
+  const temFase = b.fase && msgs.length;
+  const ja = temFase ? b.fase.itens.filter((x) => x.ok) : [];
+  const falta = temFase ? b.fase.itens.filter((x) => !x.ok) : [];
+  // 3. histórico em uma linha do tempo só (debriefings, visitas, agenda)
+  const linhaTempo = [
+    ...b.contatos.map((c) => ({ t: c.em, html: `<b>${esc(RES[c.resultado] || c.resultado || 'contato')}</b> <span class="sub">· ${c.tipo === 'mensagem' ? 'mensagem' : 'ligação'} · ${esc(c.por || '')}</span>${c.interesse ? ` <span class="tag">${esc(c.interesse)}</span>` : ''}${c.nota ? `<div>${esc(c.nota)}</div>` : ''}${c.proximo_em ? `<div class="sub">${c.resultado === 'agendou' ? 'visita' : 'retornar'}: ${fmtDH(c.proximo_em)}</div>` : ''}` })),
+    ...b.visitas.map((v) => ({ t: Date.parse(v.data_agendada), html: `<b>Visita</b> <span class="sub">· ${fmtDH(v.data_agendada)}</span> · ${v.comprou === 1 ? '<span class="bom">veio e comprou</span>' : v.compareceu === 1 ? 'veio e não comprou' : '<span class="ruim">não veio</span>'}` })),
+    ...b.agenda.filter((a) => !b.visitas.some((v) => v.data_agendada === a.data)).map((a) => ({ t: Date.parse(a.data), html: `<b>${a.modalidade === 'ligacao' ? 'Follow-up marcado (ligação)' : 'Agendamento'}</b> <span class="sub">· ${fmtDH(a.data)} · ${esc(a.modalidade || '')}${a.pela_ia ? ' · pela IA' : ''}</span>${a.concluido ? ` · concluído: ${esc(a.motivo || '')}` : ''}` })),
+  ].sort((x, y) => y.t - x.t);
+  m.querySelector('.modal').innerHTML = `
+    <div class="cardTopo"><div><h2 style="margin:0">${esc(l.nome || 'Lead sem nome')}</h2><div class="sub">${tel ? `+${tel} · ` : ''}${esc(canal(l.origem))}${l.provavel ? ` (provável: ${esc(canal(l.provavel))})` : ''} · chegou ${haTempo(l.criado)}</div></div><button class="btn" id="brfX">Fechar</button></div>
+    <div class="brfChips">${l.carro ? `<span class="carro"><svg class="i"><use href="#i-carro"/></svg>${esc(carroCurto(l.carro))}</span>` : '<span class="sub">sem carro de interesse</span>'}<span>Vendedor: <b>${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''}</b></span><span>Ficha: <b>${b.fichas.length ? b.fichas.map((f) => `${esc(f.banco.toUpperCase())} ${esc(f.statusNome.toLowerCase())}`).join(', ') : l.ficha ? 'sim' : 'não'}</b></span></div>
+
+    <div class="brfSituacao ${cor}"><span class="eyebrow">Onde ele está</span><b>${esc(situacao)}</b><div><span class="eyebrow">Próximo passo</span> ${esc(passo)}</div></div>
+
+    <h3>O que ele já passou na conversa</h3>
+    ${conversaFalhou ? `<div class="brfAviso">A conversa do LeadsOK não carregou${b.conversa.motivo ? `: ${esc(b.conversa.motivo)}` : ''}. Sem ela, não dá para saber se passou nome, CPF ou se topou visitar. Veja Integrações → LeadsOK → "Testar coleta de detalhes".</div>`
+      : !msgs.length ? '<div class="sub">Sem conversa no LeadsOK: o cliente ainda não escreveu para a loja.</div>'
+      : `<div class="brfCols"><div><span class="eyebrow ok">Já tem</span>${ja.map((x) => `<div class="ok">✓ ${esc(x.item)}${x.detalhe ? `<div class="sub">${esc(x.detalhe)}</div>` : ''}</div>`).join('') || '<div class="sub">nada ainda</div>'}</div><div><span class="eyebrow">Falta</span>${falta.map((x) => `<div class="falta">○ ${esc(x.item)}</div>`).join('') || '<div class="sub">nada: completo</div>'}</div></div>`}
+
+    <h3>Histórico</h3>
+    ${linhaTempo.length ? linhaTempo.map((x) => `<div class="brfItem"><span class="sub">${fmtDH(x.t)}</span> ${x.html}</div>`).join('') : '<div class="sub">Nenhum contato registrado nem visita ainda.</div>'}
+
+    ${b.notasLeadsOK ? `<details class="brfMais"><summary>Notas internas no LeadsOK</summary><div class="brfItem" style="white-space:pre-line">${esc(b.notasLeadsOK.slice(0, 1500))}</div></details>` : ''}
+    ${msgs.length ? `<details class="brfMais" open><summary>Conversa no LeadsOK <span class="sub">(últimas ${msgs.length} mensagens; o painel não guarda o texto)</span></summary><div class="brfChat">${msgs.map((x) => `<div class="msg ${x.de}"><span class="sub">${x.de === 'cliente' ? 'Cliente' : esc(x.nome || 'Loja')} · ${fmtDH(x.em)}</span><div>${esc(x.texto)}</div></div>`).join('')}</div></details>` : ''}`;
   m.querySelector('#brfX').onclick = () => m.remove();
   const chat = m.querySelector('.brfChat'); if (chat) chat.scrollTop = chat.scrollHeight;
 }
@@ -1977,10 +2006,11 @@ async function carregarLkCfg() {
     e.problema ? `<span class="ruim">${esc(e.problema)}</span>` : e.ultimoErro ? `Último aviso: ${esc(e.ultimoErro)}` : '',
     e.ultimoOk ? `Última sincronização ok: ${hora(e.ultimoOk)}` : '',
     e.rodando ? `Agora: ${esc(e.fase)}` : '',
-    b.leads ? `${num(b.leads)} leads no painel (${num(b.resgate)} da base de resgate) · detalhes carregados de ${num(b.detalhados)}` : '',
+    b.leads ? `${num(b.leads)} leads no painel (${num(b.resgate)} da base de resgate) · conversas e fichas carregadas de ${num(b.detalhados)}${e.faltamDetalhesEntrada ? ` · faltam ${num(e.faltamDetalhesEntrada)} leads de entrada` : ''}` : '',
     Object.keys(e.totaisLeadsOK || {}).length ? 'No LeadsOK: ' + Object.entries(e.totaisLeadsOK).map(([k, v]) => `${k.replace('_', ' ')} ${num(v)}`).join(' · ') : '',
   ].filter(Boolean).join('<br>');
-  $('#lkLog').textContent = ((b.ultimas || []).map((x) => `${hora(x.inicio)} ${x.tipo} ${x.ok ? 'ok' : 'ERRO: ' + x.erro} ${x.contagens}`).join('\n') || 'Nenhuma ainda.')
+  if (e.faltamDetalhesEntrada != null) $('#lkLog').dataset.faltam = e.faltamDetalhesEntrada;
+  $('#lkLog').textContent = (e.faltamDetalhesEntrada ? `Carregando conversas e fichas dos leads de entrada: faltam ${e.faltamDetalhesEntrada.toLocaleString('pt-BR')} (lotes de 80 a cada 2 minutos, os mais novos primeiro).\n\n` : '') + ((b.ultimas || []).map((x) => `${hora(x.inicio)} ${x.tipo} ${x.ok ? 'ok' : 'ERRO: ' + x.erro} ${x.contagens}`).join('\n') || 'Nenhuma ainda.')
     + (e.estruturaAgenda ? `\n\nCampos do agendamento (${e.agendaSemLead ?? '?'} sem lead identificado):\n${e.estruturaAgenda.join('  ')}` : '');
 }
 $('#btnLkSalvar').onclick = async () => {

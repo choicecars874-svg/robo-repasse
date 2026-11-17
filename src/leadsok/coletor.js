@@ -301,7 +301,7 @@ async function detalharPendentes(limite) {
   const c = obterCliente();
   // primeiro os leads de entrada mais recentes; a base de resgate fica por último
   const fila = d.prepare(`SELECT id, chat_completo FROM lk_leads WHERE detalhe_assinatura IS NULL OR detalhe_assinatura != assinatura
-    ORDER BY is_resgate ASC, ultima_msg_at DESC LIMIT ?`).all(limite);
+    ORDER BY is_resgate ASC, created_date DESC LIMIT ?`).all(limite);
   let feitos = 0;
   let erros = 0;
   for (const lead of fila) {
@@ -405,8 +405,31 @@ async function ciclo(tipo = 'incremental') {
   }
 }
 
+// Enquanto faltar detalhe (conversas e fichas) de lead de entrada, carrega mais um lote a cada 2 minutos,
+// em vez de esperar o ciclo de 15 min. Para sozinho quando os leads de entrada estiverem em dia.
+async function recuperarDetalhes() {
+  if (estado.rodando || !cfg.ativo || banco.erro() || !cfg.cargaInicialFeita || memoriaLivreMB() < 250) return;
+  const d = banco.abrir();
+  const faltam = d.prepare('SELECT COUNT(*) n FROM lk_leads WHERE is_resgate = 0 AND (detalhe_assinatura IS NULL OR detalhe_assinatura != assinatura)').get().n;
+  estado.faltamDetalhesEntrada = faltam;
+  if (!faltam) return;
+  estado.rodando = true;
+  const inicio = Date.now();
+  try {
+    const r = await detalharPendentes(Math.min(80, faltam));
+    registrar('detalhes', inicio, true, null, r);
+  } catch (e) {
+    estado.ultimoErro = e.message;
+    registrar('detalhes', inicio, false, e.message, {});
+  } finally {
+    estado.rodando = false;
+    estado.fase = '';
+  }
+}
+
 function iniciar() {
   setTimeout(() => ciclo().catch(() => {}), 2 * MIN);
+  setInterval(() => recuperarDetalhes().catch(() => {}), 2 * MIN);
   setInterval(() => {
     // reconciliação completa 1x por noite (entre 3h e 4h de Brasília)
     const h = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }));
