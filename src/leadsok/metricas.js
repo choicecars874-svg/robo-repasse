@@ -331,8 +331,79 @@ function briefingLead(leadId) {
     agenda: d.prepare('SELECT data, modalidade, pela_ia, concluido, motivo FROM lk_agenda WHERE lead_id = ? ORDER BY data DESC LIMIT 10').all(l.id),
     visitas: d.prepare('SELECT data_agendada, compareceu, comprou, marcado_por FROM lk_visitas WHERE lead_id = ? ORDER BY data_agendada DESC').all(l.id),
     contatos: d.prepare('SELECT em, tipo, resultado, por, nota, interesse, proximo_em FROM lk_contatos WHERE lead_id = ? ORDER BY em DESC LIMIT 30').all(l.id),
+    qualif: qualifDoLead(d, l.id),
     eventos: d.prepare("SELECT tipo, ts, actor FROM lk_eventos WHERE lead_id = ? AND tipo IN ('transfer', 'scheduled', 'archived', 'created') ORDER BY ts DESC LIMIT 10").all(l.id),
   };
+}
+
+// Planilha do SDR (o formato que o Marcos usava): uma linha por lead por dia, com o resultado das ligações,
+// a qualificação conhecida até aquele dia, visita, próximo contato, se visitou, se fechou e as observações.
+const SN = (v) => (v === 1 || v === true ? 'SIM' : v === 0 || v === false ? 'NÃO' : '');
+function planilhaSdr({ de, ate, por } = {}) {
+  const d = banco.abrir();
+  if (!d) return { erro: banco.erro() };
+  const args = por ? [de, ate, por] : [de, ate];
+  const contatos = d.prepare(`SELECT c.*, l.nome, l.whatsapp, l.carro FROM lk_contatos c LEFT JOIN lk_leads l ON l.id = c.lead_id
+    WHERE c.dia BETWEEN ? AND ? AND c.lead_id NOT LIKE 'teste-%' ${por ? 'AND c.por = ?' : ''} ORDER BY c.em`).all(...args);
+  const grupos = new Map();
+  for (const c of contatos) {
+    const k = `${c.dia}|${c.lead_id}`;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(c);
+  }
+  const visita = d.prepare('SELECT compareceu, comprou FROM lk_visitas WHERE lead_id = ? ORDER BY marcado_em DESC LIMIT 1');
+  const agendaFutura = d.prepare("SELECT data FROM lk_agenda WHERE lead_id = ? AND COALESCE(modalidade, 'presencial') != 'ligacao' ORDER BY data DESC LIMIT 1");
+  const RES = { atendeu: 'ATENDIDA', agendou: 'ATENDIDA', interesse_visita: 'ATENDIDA', ja_comprou: 'ATENDIDA', sem_interesse: 'ATENDIDA', nao_atendeu: 'NÃO ATENDIDA' };
+  const fmtD = (t) => (t ? new Date(t).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '');
+  const linhas = [];
+  for (const cs of grupos.values()) {
+    const c0 = cs[0];
+    const ligs = cs.filter((c) => c.tipo === 'ligacao');
+    const q = qualifDoLead(d, c0.lead_id, cs[cs.length - 1].em);
+    const agendou = cs.find((c) => c.resultado === 'agendou');
+    const ag = agendou ? null : agendaFutura.get(c0.lead_id);
+    const ultimoComRetorno = [...cs].reverse().find((c) => c.proximo_em && c.resultado !== 'agendou');
+    const v = visita.get(c0.lead_id) || {};
+    const encerrou = cs.find((c) => ['ja_comprou', 'sem_interesse'].includes(c.resultado));
+    linhas.push({
+      leadId: c0.lead_id,
+      data: c0.dia.split('-').reverse().join('/'),
+      cliente: c0.nome || '',
+      contato: c0.whatsapp ? '+' + String(c0.whatsapp).replace(/\D/g, '') : '',
+      chamada: ligs[0] ? RES[ligs[0].resultado] || '' : cs.some((c) => c.tipo === 'mensagem') ? 'MENSAGEM' : '',
+      recontato: ligs[1] ? RES[ligs[1].resultado] || '' : '',
+      cidade: q.cidade || '', orcamento: q.orcamento || '', modelo: q.modelo || c0.carro || '',
+      troca: q.troca || '', trocaModelo: q.trocaModelo || '', trocaKm: q.trocaKm || '', trocaQuitado: q.trocaQuitado || '', trocaLeilao: q.trocaLeilao || '',
+      pagamento: q.pagamento || '', entrada: q.entrada || '', parcela: q.parcela || '', preAprovado: q.preAprovado || '', cnh: q.cnh || '',
+      visitaMarcada: agendou || ag ? 'SIM' : '',
+      dataVisita: agendou ? fmtD(agendou.proximo_em) : ag ? fmtD(Date.parse(ag.data)) : '',
+      proximoContato: ultimoComRetorno ? fmtD(ultimoComRetorno.proximo_em) : '',
+      visitou: SN(v.compareceu), fechou: v.comprou === 1 ? 'SIM' : encerrou?.resultado === 'ja_comprou' ? 'JÁ COMPROU' : '',
+      observacoes: cs.map((c) => [c.resultado === 'sem_interesse' ? 'Sem interesse' : c.resultado === 'interesse_visita' ? 'Topou visitar, sem horário' : '', c.nota || ''].filter(Boolean).join(': ')).filter(Boolean).join(' | '),
+      por: [...new Set(cs.map((c) => c.por).filter(Boolean))].join(', '),
+    });
+  }
+  // totais do topo da planilha
+  const agora = Date.now();
+  const t = {
+    clientes: linhas.length,
+    atendidas: linhas.filter((l) => l.chamada === 'ATENDIDA' || l.recontato === 'ATENDIDA').length,
+    naoAtendidas: linhas.filter((l) => l.chamada === 'NÃO ATENDIDA' && l.recontato !== 'ATENDIDA').length,
+    recontato: linhas.filter((l) => l.recontato).length,
+    preAprovados: linhas.filter((l) => /sim|aprov/i.test(l.preAprovado)).length,
+    visitasMarcadas: linhas.filter((l) => l.visitaMarcada === 'SIM').length,
+    retornosPendentes: d.prepare(`SELECT COUNT(DISTINCT lead_id) n FROM lk_contatos c WHERE c.proximo_em > ? AND c.resultado != 'agendou' ${por ? 'AND c.por = ?' : ''}
+      AND c.em = (SELECT MAX(em) FROM lk_contatos WHERE lead_id = c.lead_id)`).get(...(por ? [agora, por] : [agora])).n,
+    visitados: linhas.filter((l) => l.visitou === 'SIM').length,
+    fechados: linhas.filter((l) => l.fechou === 'SIM').length,
+  };
+  return { de, ate, por: por || null, totais: t, linhas };
+}
+const COLUNAS_PLANILHA = [['data', 'Data'], ['cliente', 'Cliente'], ['contato', 'Contato'], ['chamada', 'Chamada'], ['recontato', 'Recontato'], ['cidade', 'Cidade'], ['orcamento', 'Orçamento'], ['modelo', 'Modelo desejado'], ['troca', 'Veículo na troca?'], ['trocaModelo', 'Modelo (troca)'], ['trocaKm', 'Km'], ['trocaQuitado', 'Quitado?'], ['trocaLeilao', 'Leilão?'], ['pagamento', 'Pagamento'], ['entrada', 'Entrada'], ['parcela', 'Parcela'], ['preAprovado', 'Pré aprovado?'], ['cnh', 'CNH?'], ['visitaMarcada', 'Visita marcada?'], ['dataVisita', 'Data da visita'], ['proximoContato', 'Próximo contato'], ['visitou', 'Visitou?'], ['fechou', 'Fechou?'], ['observacoes', 'Observações'], ['por', 'SDR']];
+// CSV (separador ";" e BOM, para abrir certo no Excel e no Google Sheets)
+function planilhaCsv(p) {
+  const esc = (v) => { const t = String(v ?? ''); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  return '\ufeff' + [COLUNAS_PLANILHA.map((c) => c[1]).join(';'), ...p.linhas.map((l) => COLUNAS_PLANILHA.map(([k]) => esc(l[k])).join(';'))].join('\r\n');
 }
 
 // Gestor do dia: a varredura que um gestor faria toda manhã. Tudo o que está largado, em listas prontas para cobrar.
@@ -611,8 +682,32 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   return { dia: hoje, horasSemResposta, vendedor, vendedores, listas, etapas, resumo, cadencia: { horasTentarDeNovo: hTentar, horasAguardandoRecado: hRecado, tentativasMax: maxTent, diasNovos, horasSemRespostaResgate: hResgate } };
 }
 
+// Qualificação do lead (os campos da planilha do SDR). Só estes campos, com tamanho limitado.
+const CAMPOS_QUALIF = {
+  cidade: 60, orcamento: 20, modelo: 80, troca: 3, trocaModelo: 60, trocaKm: 20, trocaQuitado: 3, trocaLeilao: 3,
+  pagamento: 20, entrada: 20, parcela: 20, preAprovado: 12, cnh: 3,
+};
+function limparQualif(q) {
+  if (!q || typeof q !== 'object') return null;
+  const out = {};
+  for (const [k, max] of Object.entries(CAMPOS_QUALIF)) {
+    const v = q[k] == null ? '' : String(q[k]).trim().slice(0, max);
+    if (v) out[k] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
+// junta as qualificações de um lead ao longo do tempo (a mais nova vale)
+function qualifDoLead(d, leadId, ate = Infinity) {
+  const out = {};
+  for (const c of d.prepare('SELECT qualif, em FROM lk_contatos WHERE lead_id = ? AND qualif IS NOT NULL ORDER BY em').all(String(leadId))) {
+    if (c.em > ate) break;
+    try { Object.assign(out, JSON.parse(c.qualif)); } catch {}
+  }
+  return out;
+}
+
 const RESULTADOS = ['atendeu', 'nao_atendeu', 'enviada', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse'];
-function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proximoEm }) {
+function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proximoEm, qualif }) {
   const d = banco.abrir();
   if (!d) throw new Error(banco.erro());
   if (!['ligacao', 'mensagem'].includes(tipo)) throw new Error('Tipo de contato inválido');
@@ -621,8 +716,9 @@ function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proxi
   if (interesse && !['quente', 'morno', 'frio'].includes(interesse)) throw new Error('Interesse inválido');
   const proximo = proximoEm ? Number(proximoEm) : null;
   if (proximo && !(proximo > Date.now() - 3600000)) throw new Error('Data de retorno inválida');
-  const r = d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em, por, nota, interesse, proximo_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(String(leadId), diaSP(), tipo, resultado || null, Date.now(), por || null, nota ? String(nota).slice(0, 2000) : null, interesse || null, proximo);
+  const q = limparQualif(qualif);
+  const r = d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em, por, nota, interesse, proximo_em, qualif) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(String(leadId), diaSP(), tipo, resultado || null, Date.now(), por || null, nota ? String(nota).slice(0, 2000) : null, interesse || null, proximo, q ? JSON.stringify(q) : null);
   return { ok: true, id: Number(r.lastInsertRowid) };
 }
 function marcarNoLeadsOK(id, situacao) {
@@ -731,4 +827,4 @@ function removerLeadsTeste() {
   return { ok: true, removidos: Number(d.prepare("DELETE FROM lk_leads WHERE id LIKE 'teste-%'").run().changes) };
 }
 
-module.exports = { briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+module.exports = { planilhaSdr, planilhaCsv, qualifDoLead, COLUNAS_PLANILHA, briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

@@ -113,6 +113,15 @@ function iniciarPainel() {
     res.set('Cache-Control', 'no-store').redirect(l?.destino || `https://wa.me/${numero}`);
   });
 
+  // Planilha do SDR por link com chave (para o Google Sheets puxar com IMPORTDATA). Sem chave configurada, não existe.
+  app.get('/planilha-sdr/:chave.csv', (req, res) => {
+    const chave = (config.get().sdr || {}).chavePlanilha;
+    if (!chave || !igual(String(req.params.chave), chave)) return res.sendStatus(404);
+    const hoje = comercial.diaSP();
+    const de = /^\d{4}-\d{2}-\d{2}$/.test(req.query.de || '') ? req.query.de : comercial.diaSP(Date.now() - 29 * 86400000);
+    const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : hoje;
+    res.set('Content-Type', 'text/csv; charset=utf-8').set('Cache-Control', 'no-store').send(comercial.planilhaCsv(comercial.planilhaSdr({ de, ate })));
+  });
   app.get('/sair', (_, res) => res.clearCookie('painel').redirect('/login'));
 
   app.use((req, res, next) => {
@@ -407,7 +416,7 @@ function iniciarPainel() {
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
     const objecoes = (Array.isArray(b.objecoes) ? b.objecoes : []).map((o) => ({ objecao: String(o.objecao || '').trim().slice(0, 120), resposta: String(o.resposta || '').trim().slice(0, 1500) })).filter((o) => o.objecao).slice(0, 40);
     const atual = config.get();
-    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 24), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), horasSemRespostaResgate: n(b.horasSemRespostaResgate, 0.25, 48, 1), vendedoresFora: (Array.isArray(b.vendedoresFora) ? b.vendedoresFora : atual.sdr.vendedoresFora || []).map((v) => String(v).trim().slice(0, 60)).filter(Boolean).slice(0, 20), foraIniciado: true, recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, lembreteDia: String(b.lembreteDia || '').slice(0, 1000) || atual.sdr.lembreteDia, naoVeio: String(b.naoVeio || '').slice(0, 1000) || atual.sdr.naoVeio, objecoes } }).sdr);
+    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 2), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), horasSemRespostaResgate: n(b.horasSemRespostaResgate, 0.25, 48, 1), vendedoresFora: (Array.isArray(b.vendedoresFora) ? b.vendedoresFora : atual.sdr.vendedoresFora || []).map((v) => String(v).trim().slice(0, 60)).filter(Boolean).slice(0, 20), foraIniciado: true, chavePlanilha: atual.sdr.chavePlanilha || null, recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, lembreteDia: String(b.lembreteDia || '').slice(0, 1000) || atual.sdr.lembreteDia, naoVeio: String(b.naoVeio || '').slice(0, 1000) || atual.sdr.naoVeio, objecoes } }).sdr);
   });
   app.post('/api/sdr/lead-teste', (req, res) => {
     try {
@@ -436,6 +445,22 @@ function iniciarPainel() {
       res.status(400).json({ erro: e.message });
     }
   });
+  app.get('/api/sdr/planilha', (req, res) => {
+    const hoje = comercial.diaSP();
+    const por = req.usuario.papel === 'admin' ? String(req.query.por || '') : req.usuario.nome;
+    const p = comercial.planilhaSdr({ de: req.query.de || hoje, ate: req.query.ate || hoje, por });
+    if (req.query.formato === 'csv') return res.set('Content-Type', 'text/csv; charset=utf-8').set('Content-Disposition', `attachment; filename="planilha-sdr-${p.de}-a-${p.ate}.csv"`).send(comercial.planilhaCsv(p));
+    res.json(p);
+  });
+  // chave do link da planilha para o Google Sheets (só o administrador; trocar a chave derruba o link antigo)
+  app.post('/api/sdr/planilha/chave', (req, res) => {
+    if (req.usuario.papel !== 'admin') return res.status(403).json({ erro: 'Só o administrador' });
+    const c = config.get();
+    const chave = req.body.remover ? null : crypto.randomBytes(18).toString('base64url');
+    config.salvar({ ...c, sdr: { ...c.sdr, chavePlanilha: chave } });
+    res.json({ chave });
+  });
+  app.get('/api/sdr/planilha/chave', (req, res) => res.json({ chave: req.usuario.papel === 'admin' ? (config.get().sdr || {}).chavePlanilha || null : null }));
   app.get('/api/sdr/historico', (req, res) => res.json(comercial.historicoContatos({ dia: req.query.dia, por: req.query.por })));
   app.get('/api/sdr/buscar', (req, res) => res.json(comercial.buscarLead(req.query.q)));
   app.post('/api/sdr/contato', (req, res) => {

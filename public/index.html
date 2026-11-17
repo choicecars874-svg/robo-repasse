@@ -176,6 +176,10 @@
   .brfChat { max-height:320px; overflow:auto; display:flex; flex-direction:column; gap:8px; padding:4px; } .brfChat .msg { max-width:80%; padding:8px 12px; border-radius:12px; background:rgba(255,255,255,.05); font-size:14px; }
   .brfChat .msg.cliente { align-self:flex-start; } .brfChat .msg.loja { align-self:flex-end; background:rgba(226,179,80,.12); }
   @media (max-width:820px) { .brfGrade { grid-template-columns:1fr; } }
+  .qualif { margin:10px 0 4px; border:1px solid var(--borda); border-radius:12px; padding:10px 12px; } .qualif summary { cursor:pointer; }
+  .qGrade { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px 10px; margin-top:10px; } .qGrade label { font-size:12px; margin:0 0 3px; } .qGrade input, .qGrade select { padding:7px 9px; font-size:14px; } .qGrade .q2 { grid-column:span 2; }
+  @media (max-width:820px) { .qGrade { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+  .planilhaSdr { overflow-x:auto; } .planilhaSdr table { font-size:13px; white-space:nowrap; } .planilhaSdr td.obs { white-space:normal; min-width:280px; max-width:420px; }
   .objecao { border-bottom:1px solid var(--borda); padding:10px 0; } .objecao:last-child { border:0; } .objecao p { margin:8px 0 2px; color:var(--txt); line-height:1.55; white-space:pre-line; }
   .funilExtra { display:flex; gap:24px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--borda); font-size:14px; } .funilExtra b { font-size:20px; margin-right:4px; }
   .agItem { display:grid; grid-template-columns:70px minmax(0, 1fr) auto; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--borda); } .agItem:last-child { border:0; }
@@ -427,6 +431,11 @@
     <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Por dia</h2><p class="sub">Ligações, quem atendeu e agendamentos de cada dia.</p></div><div class="legenda"><span style="--c:var(--azul)">Ligações</span><span style="--c:var(--verde)">Atenderam</span><span style="--c:var(--ouro)">Agendou</span></div></div><div class="tmGraf" id="srDias"></div></div>
     <div class="card"><h2>Que horas mais atendem</h2><p class="sub">Ligações por hora do dia e quantas foram atendidas.</p><div id="srHoras"></div></div>
   </div>
+  <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Planilha do SDR</h2><p class="sub" id="plObs">Uma linha por lead trabalhado em cada dia, montada com o que foi registrado na Fila do SDR. Substitui a planilha preenchida à mão.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn verde" id="btnPlBaixar">Baixar para Excel</button><button class="btn soAdmin" id="btnPlLink">Link para Google Sheets</button></div></div>
+    <div class="kpis" id="plTotais" style="grid-template-columns:repeat(auto-fit, minmax(110px, 1fr));gap:10px"></div>
+    <div class="planilhaSdr"><table><thead id="plCab"></thead><tbody id="plLinhas"></tbody></table></div>
+    <div id="plLink" hidden class="brfAviso" style="margin-top:12px"></div></div>
   <div class="card"><h2>Por pessoa</h2><p class="sub">Agendou = agendamentos feitos no período. Vieram e compraram = visitas desses agendamentos marcadas na Agenda.</p>
     <table><thead><tr><th>Pessoa</th><th>Ligações</th><th>Atenderam</th><th>Recados</th><th>Leads</th><th>Agendou</th><th>Vieram</th><th>Não vieram</th><th>Compraram</th></tr></thead><tbody id="srPessoas"></tbody></table></div>
 </section>
@@ -1473,6 +1482,30 @@ $('#btnGsCopiar').onclick = async () => {
     ...(g.quentes.length ? ['', '*Quentes para cobrar hoje:*', ...g.quentes.slice(0, 8).map((l) => `- ${l.nome || 'Sem nome'} (${l.vendedor}) · parado há ${l.diasParado} d · ${l.motivos[0]}`)] : [])].join('\n');
   try { await navigator.clipboard.writeText(t); alert('Resumo copiado. É só colar no WhatsApp.'); } catch { prompt('Copie o resumo:', t); }
 };
+const COLS_PL = [['data', 'Data'], ['cliente', 'Cliente'], ['contato', 'Contato'], ['chamada', 'Chamada'], ['recontato', 'Recontato'], ['cidade', 'Cidade'], ['orcamento', 'Orçamento'], ['modelo', 'Modelo desejado'], ['troca', 'Troca?'], ['trocaModelo', 'Modelo troca'], ['trocaKm', 'Km'], ['trocaQuitado', 'Quitado?'], ['trocaLeilao', 'Leilão?'], ['pagamento', 'Pagamento'], ['entrada', 'Entrada'], ['parcela', 'Parcela'], ['preAprovado', 'Pré aprov.?'], ['cnh', 'CNH?'], ['visitaMarcada', 'Visita marcada?'], ['dataVisita', 'Data visita'], ['proximoContato', 'Próximo contato'], ['visitou', 'Visitou?'], ['fechou', 'Fechou?'], ['observacoes', 'Observações'], ['por', 'SDR']];
+async function carregarPlanilhaSdr(per) {
+  const q = `de=${per.de}&ate=${per.ate}&por=${encodeURIComponent($('#srPor').value)}`;
+  const p = await api('/api/sdr/planilha?' + q).catch(() => null);
+  if (!p || p.erro) return;
+  const t = p.totais;
+  $('#plTotais').innerHTML = [['Total de clientes', t.clientes], ['Atendidas', t.atendidas], ['Não atendidas', t.naoAtendidas], ['Recontato', t.recontato], ['Pré-aprovados', t.preAprovados], ['Visitas marcadas', t.visitasMarcadas], ['Retornos pendentes', t.retornosPendentes], ['Visitados', t.visitados], ['Fechados', t.fechados]]
+    .map(([n, v]) => `<div class="kpi" style="padding:12px 14px"><div class="eyebrow" style="font-size:10px">${n}</div><b style="font-size:24px;margin:6px 0 0">${num(v)}</b></div>`).join('');
+  $('#plCab').innerHTML = '<tr>' + COLS_PL.map(([, n]) => `<th>${n}</th>`).join('') + '</tr>';
+  const cor = (k, v) => (k === 'chamada' || k === 'recontato') ? (v === 'ATENDIDA' ? 'bom' : v === 'NÃO ATENDIDA' ? 'ruim' : '') : (v === 'SIM' && ['visitaMarcada', 'visitou', 'fechou', 'preAprovado'].includes(k)) ? 'bom' : '';
+  $('#plLinhas').innerHTML = p.linhas.map((l) => '<tr>' + COLS_PL.map(([k]) => `<td class="${k === 'observacoes' ? 'obs' : ''} ${cor(k, l[k])}">${esc(l[k] || '')}</td>`).join('') + '</tr>').join('') || `<tr><td colspan="${COLS_PL.length}" class="sub">Nenhum contato registrado no período.</td></tr>`;
+  $('#plObs').textContent = `${rotuloCap(per.rotulo)} · uma linha por lead trabalhado em cada dia, montada com o que foi registrado na Fila do SDR. Substitui a planilha preenchida à mão.`;
+  $('#btnPlBaixar').onclick = () => { location.href = '/api/sdr/planilha?formato=csv&' + q; };
+}
+$('#btnPlLink').onclick = async () => {
+  let { chave } = await api('/api/sdr/planilha/chave');
+  if (!chave && !confirm('Criar um link secreto da planilha? Quem tiver o link vê nomes e telefones dos leads trabalhados. Dá para desligar depois.')) return;
+  if (!chave) chave = (await api('/api/sdr/planilha/chave', { method:'POST', body: '{}' })).chave;
+  const url = `${location.origin}/planilha-sdr/${chave}.csv`;
+  $('#plLink').hidden = false;
+  $('#plLink').innerHTML = `<b>Google Sheets que se atualiza sozinho:</b> crie uma planilha no Google Sheets e, na célula A1, cole:<br><code style="user-select:all;word-break:break-all">=IMPORTDATA("${url}")</code><br><span class="sub">Traz os últimos 30 dias e o Google atualiza a cada hora mais ou menos. O link é secreto: não compartilhe fora da loja.</span> <button class="btn" id="btnPlCopiar">Copiar fórmula</button> <button class="btn verm" id="btnPlDesligar">Desligar link</button>`;
+  $('#btnPlCopiar').onclick = async () => { try { await navigator.clipboard.writeText(`=IMPORTDATA("${url}")`); alert('Fórmula copiada.'); } catch { prompt('Copie:', `=IMPORTDATA("${url}")`); } };
+  $('#btnPlDesligar').onclick = async () => { if (!confirm('Desligar o link? A planilha do Google para de atualizar.')) return; await api('/api/sdr/planilha/chave', { method:'POST', body: JSON.stringify({ remover: true }) }); $('#plLink').hidden = true; alert('Link desligado.'); };
+};
 async function carregarSdrRes() {
   avisoLk();
   const per = $('#perSdrRes').per || { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje' };
@@ -1484,6 +1517,7 @@ async function carregarSdrRes() {
   const etF = [['Ativação', fu.ativados, 'leads que receberam ligação ou mensagem'], ['Conexão', fu.conectados, 'atenderam ou responderam'], ['Agendamento', fu.agendaram, 'agendaram visita'], ['Comparecimento', fu.compareceram, 'vieram à loja'], ['Compra', fu.compraram, 'compraram']];
   $('#srFunil').innerHTML = etF.map(([n, v, txt], i) => `<div class="pnEtapa"><div class="eyebrow">${n}</div><b>${num(v)}</b><div class="conv">${i ? pct(v, etF[i - 1][1]) + ' da etapa anterior' : 'no período'}</div><div class="var">${txt}</div><div class="trilho"><i style="width:${fu.ativados ? (v / fu.ativados) * 100 : 0}%"></i></div></div>`).join('');
   $('#srFunilObs').textContent = `${rotuloCap(per.rotulo)} · por lead, pelo dia do contato · cada etapa conta quem chegou pelo menos até ela · Fila do SDR + Agenda`;
+  carregarPlanilhaSdr(per);
   const t = r.total;
   $('#srKpis').innerHTML = [
     ['Ligações', num(t.ligacoes), `${num(t.leads)} leads trabalhados`, ''],
@@ -1809,6 +1843,7 @@ async function abrirBriefingLead(leadId) {
     <div class="cardTopo"><div><h2 style="margin:0">${esc(l.nome || 'Lead sem nome')}</h2><div class="sub">${tel ? `+${tel} · ` : ''}${esc(canal(l.origem))}${l.provavel ? ` (provável: ${esc(canal(l.provavel))})` : ''} · chegou ${haTempo(l.criado)}</div></div><button class="btn" id="brfX">Fechar</button></div>
     <div class="brfChips">${l.carro ? `<span class="carro"><svg class="i"><use href="#i-carro"/></svg>${esc(carroCurto(l.carro))}</span>` : '<span class="sub">sem carro de interesse</span>'}<span>Vendedor: <b>${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''}</b></span><span>Ficha: <b>${b.fichas.length ? b.fichas.map((f) => `${esc(f.banco.toUpperCase())} ${esc(f.statusNome.toLowerCase())}`).join(', ') : l.ficha ? 'sim' : 'não'}</b></span></div>
 
+    ${Object.keys(b.qualif || {}).length ? `<div class="brfChips">${[['cidade', 'Cidade'], ['orcamento', 'Orçamento'], ['modelo', 'Quer'], ['pagamento', 'Pagamento'], ['entrada', 'Entrada'], ['parcela', 'Parcela'], ['preAprovado', 'Pré-aprovado'], ['cnh', 'CNH'], ['troca', 'Troca']].filter(([k]) => b.qualif[k]).map(([k, n]) => `<span>${n}: <b>${esc(b.qualif[k])}${k === 'troca' && b.qualif.trocaModelo ? ` (${esc(b.qualif.trocaModelo)}${b.qualif.trocaKm ? ', ' + esc(b.qualif.trocaKm) + ' km' : ''}${b.qualif.trocaQuitado === 'NÃO' ? ', não quitado' : ''})` : ''}</b></span>`).join('')}</div>` : ''}
     <div class="brfSituacao ${cor}"><span class="eyebrow">Onde ele está</span><b>${esc(situacao)}</b><div><span class="eyebrow">Próximo passo</span> ${esc(passo)}</div></div>
 
     <h3>O que ele já passou na conversa</h3>
@@ -1845,6 +1880,22 @@ function abrirBriefing(leadId, nome, resultado, tipo = 'ligacao') {
   m.className = 'modalFundo';
   m.innerHTML = `<div class="modal card"><div class="cardTopo"><h2>${tipo === 'mensagem' ? 'Debriefing da conversa' : 'Debriefing da ligação'} · ${esc(nome)}</h2><button class="btn" data-briefing="1" type="button">Ver briefing</button></div>
     <label>O que o lead falou (carro, troca, pagamento, objeção)</label><textarea id="bfNota" style="min-height:130px;font-family:inherit" placeholder="${tipo === 'mensagem' ? 'Buscando a conversa no LeadsOK…' : 'Escreva o que ele disse na ligação'}"></textarea><p class="sub" id="bfAviso" style="margin:4px 0 0"></p>
+    <details class="qualif" open><summary><b>Qualificação</b> <span class="sub">· o que era a planilha: preencha o que souber, o resto fica em branco</span></summary>
+      <div class="qGrade">
+        <div><label>Cidade</label><input data-q="cidade"></div>
+        <div><label>Orçamento (R$)</label><input data-q="orcamento" inputmode="numeric"></div>
+        <div class="q2"><label>Modelo desejado</label><input data-q="modelo"></div>
+        <div><label>Pagamento</label><select data-q="pagamento"><option value=""></option><option>FINANCIAR</option><option>À VISTA</option><option>CARTA DE CRÉDITO</option><option>CONSÓRCIO</option></select></div>
+        <div><label>Entrada (R$)</label><input data-q="entrada" inputmode="numeric"></div>
+        <div><label>Parcela (R$)</label><input data-q="parcela" inputmode="numeric"></div>
+        <div><label>Pré-aprovado?</label><select data-q="preAprovado"><option value=""></option><option>SIM</option><option>NÃO</option><option>EM ANÁLISE</option><option>RESTRIÇÃO</option></select></div>
+        <div><label>CNH?</label><select data-q="cnh"><option value=""></option><option>SIM</option><option>NÃO</option></select></div>
+        <div><label>Carro na troca?</label><select data-q="troca"><option value=""></option><option>SIM</option><option>NÃO</option></select></div>
+        <div class="qTroca"><label>Modelo da troca</label><input data-q="trocaModelo"></div>
+        <div class="qTroca"><label>Km</label><input data-q="trocaKm"></div>
+        <div class="qTroca"><label>Quitado?</label><select data-q="trocaQuitado"><option value=""></option><option>SIM</option><option>NÃO</option></select></div>
+        <div class="qTroca"><label>Leilão?</label><select data-q="trocaLeilao"><option value=""></option><option>SIM</option><option>NÃO</option></select></div>
+      </div></details>
     <label>Interesse</label><div class="opcoes">${['quente', 'morno', 'frio'].map((x) => `<label><input type="radio" name="bfInt" value="${x}" ${x === 'morno' ? 'checked' : ''}> ${x}</label>`).join('')}</div>
     <label>Próximo passo</label><div class="opcoes coluna">
       <label><input type="radio" name="bfProx" value="retornar" ${resultado === 'atendeu' ? 'checked' : ''}> Ligar de novo em <input type="datetime-local" id="bfData" value="${local(amanha10)}" style="width:auto;margin-left:6px"></label>
@@ -1857,6 +1908,15 @@ function abrirBriefing(leadId, nome, resultado, tipo = 'ligacao') {
     <p style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn" id="bfCancelar">Cancelar</button><button class="btn verde" id="bfSalvar">Salvar briefing</button></p></div>`;
   m.dataset.lead = leadId;
   document.body.appendChild(m);
+  // qualificação: já vem com o que se sabe do lead (debriefings anteriores; modelo = carro de interesse do LeadsOK)
+  const mostrarTroca = () => m.querySelectorAll('.qTroca').forEach((e) => { e.hidden = m.querySelector('[data-q="troca"]').value !== 'SIM'; });
+  m.querySelector('[data-q="troca"]').onchange = mostrarTroca; mostrarTroca();
+  api('/api/sdr/lead/' + encodeURIComponent(leadId)).then((b) => {
+    const q = { ...(b.qualif || {}) };
+    if (!q.modelo && b.lead?.carro) q.modelo = carroCurto(b.lead.carro);
+    for (const [k, v] of Object.entries(q)) { const i = m.querySelector(`[data-q="${k}"]`); if (i && !i.value) i.value = v; }
+    mostrarTroca();
+  }).catch(() => {});
   m.querySelector('#bfNota').focus();
   // chat: preenche sozinho com o que o cliente escreveu
   if (tipo === 'mensagem') rascunhoDoChat(leadId).then((r) => { const t = m.querySelector('#bfNota'); if (r.texto && !t.value.trim()) { t.value = r.texto; t.setSelectionRange(t.value.length, t.value.length); } m.querySelector('#bfAviso').textContent = r.aviso; t.placeholder = 'Escreva o que ele disse'; }).catch(() => { m.querySelector('#bfAviso').textContent = 'Não consegui ler a conversa no LeadsOK agora. Escreva o que ele disse.'; m.querySelector('#bfNota').placeholder = 'Escreva o que ele disse'; });
@@ -1866,7 +1926,9 @@ function abrirBriefing(leadId, nome, resultado, tipo = 'ligacao') {
     if (!prox) return alert('Escolha o próximo passo.');
     const nota = m.querySelector('#bfNota').value.trim();
     if (!nota) return alert('Escreva o que o lead falou (debriefing).');
-    const corpo = { leadId, tipo, nota, interesse: m.querySelector('input[name=bfInt]:checked').value, resultado: prox === 'retornar' ? 'atendeu' : prox };
+    const qualif = {};
+    m.querySelectorAll('[data-q]').forEach((i) => { if (i.value.trim()) qualif[i.dataset.q] = i.value.trim(); });
+    const corpo = { leadId, tipo, nota, qualif, interesse: m.querySelector('input[name=bfInt]:checked').value, resultado: prox === 'retornar' ? 'atendeu' : prox };
     if (prox === 'retornar') {
       const t = lerSP(m.querySelector('#bfData').value);
       if (!t || t < Date.now() - 60000) return alert('Escolha uma data de retorno no futuro.');
