@@ -352,7 +352,8 @@ function planilhaSdr({ de, ate, por } = {}) {
     grupos.get(k).push(c);
   }
   const visita = d.prepare('SELECT compareceu, comprou FROM lk_visitas WHERE lead_id = ? ORDER BY marcado_em DESC LIMIT 1');
-  const agendaFutura = d.prepare("SELECT data FROM lk_agenda WHERE lead_id = ? AND COALESCE(modalidade, 'presencial') != 'ligacao' ORDER BY data DESC LIMIT 1");
+  // visita que já estava marcada no LeadsOK (pela IA ou pelo vendedor) para depois do dia do contato: vai só nas observações
+  const agendaLeadsOK = d.prepare("SELECT data, pela_ia FROM lk_agenda WHERE lead_id = ? AND COALESCE(modalidade, 'presencial') != 'ligacao' AND date(data, '-3 hours') >= ? ORDER BY data LIMIT 1");
   const RES = { atendeu: 'ATENDIDA', agendou: 'ATENDIDA', interesse_visita: 'ATENDIDA', ja_comprou: 'ATENDIDA', sem_interesse: 'ATENDIDA', nao_atendeu: 'NÃO ATENDIDA' };
   const fmtD = (t) => (t ? new Date(t).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '');
   const linhas = [];
@@ -360,8 +361,9 @@ function planilhaSdr({ de, ate, por } = {}) {
     const c0 = cs[0];
     const ligs = cs.filter((c) => c.tipo === 'ligacao');
     const q = qualifDoLead(d, c0.lead_id, cs[cs.length - 1].em);
-    const agendou = cs.find((c) => c.resultado === 'agendou');
-    const ag = agendou ? null : agendaFutura.get(c0.lead_id);
+    // "Visita marcada?" = este contato do SDR marcou a visita (como na planilha do Marcos)
+    const agendou = [...cs].reverse().find((c) => c.resultado === 'agendou');
+    const ag = agendou ? null : agendaLeadsOK.get(c0.lead_id, c0.dia);
     const ultimoComRetorno = [...cs].reverse().find((c) => c.proximo_em && c.resultado !== 'agendou');
     const v = visita.get(c0.lead_id) || {};
     const encerrou = cs.find((c) => ['ja_comprou', 'sem_interesse'].includes(c.resultado));
@@ -375,11 +377,14 @@ function planilhaSdr({ de, ate, por } = {}) {
       cidade: q.cidade || '', orcamento: q.orcamento || '', modelo: q.modelo || c0.carro || '',
       troca: q.troca || '', trocaModelo: q.trocaModelo || '', trocaKm: q.trocaKm || '', trocaQuitado: q.trocaQuitado || '', trocaLeilao: q.trocaLeilao || '',
       pagamento: q.pagamento || '', entrada: q.entrada || '', parcela: q.parcela || '', preAprovado: q.preAprovado || '', cnh: q.cnh || '',
-      visitaMarcada: agendou || ag ? 'SIM' : '',
-      dataVisita: agendou ? fmtD(agendou.proximo_em) : ag ? fmtD(Date.parse(ag.data)) : '',
+      visitaMarcada: agendou ? 'SIM' : '',
+      dataVisita: agendou ? fmtD(agendou.proximo_em) : '',
       proximoContato: ultimoComRetorno ? fmtD(ultimoComRetorno.proximo_em) : '',
       visitou: SN(v.compareceu), fechou: v.comprou === 1 ? 'SIM' : encerrou?.resultado === 'ja_comprou' ? 'JÁ COMPROU' : '',
-      observacoes: cs.map((c) => [c.resultado === 'sem_interesse' ? 'Sem interesse' : c.resultado === 'interesse_visita' ? 'Topou visitar, sem horário' : '', c.nota || ''].filter(Boolean).join(': ')).filter(Boolean).join(' | '),
+      observacoes: [
+        ...cs.map((c) => [c.resultado === 'sem_interesse' ? 'Sem interesse' : c.resultado === 'interesse_visita' ? 'Topou visitar, sem horário' : '', c.nota || ''].filter(Boolean).join(': ')),
+        ag ? `Já tinha visita no LeadsOK em ${fmtD(Date.parse(ag.data))}${ag.pela_ia ? ' (marcada pela IA)' : ''}` : '',
+      ].filter(Boolean).join(' | '),
       por: [...new Set(cs.map((c) => c.por).filter(Boolean))].join(', ') || 'Sem responsável (registro antigo)',
     });
   }
