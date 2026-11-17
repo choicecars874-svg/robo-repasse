@@ -335,7 +335,7 @@
     <div class="atalhos" id="sdEtapasBtns"></div><div id="sdEtapa"></div></div>
   <div class="card"><details id="sdObjDet"><summary><h2 style="display:inline">Argumentário de objeções</h2> <span class="sub">· o que responder quando o cliente trava</span></summary><div id="sdObjecoes" style="margin-top:12px"></div></details></div>
   <div class="card soAdmin" id="sdCfgCard"><details><summary><h2 style="display:inline">Configuração do SDR</h2> <span class="sub">· prazos da cadência, texto do recado e objeções</span></summary>
-    <div class="linha" style="margin-top:12px"><div><label>Não atendeu: tentar de novo depois de (horas)</label><input type="number" step="0.5" min="0.5" id="cfTentar"></div><div><label>Recado sem resposta: follow-up depois de (horas)</label><input type="number" min="1" id="cfRecado"></div><div><label>Tentativas até "Sem contato"</label><input type="number" min="1" max="10" id="cfMax"></div><div><label>"Ligar agora": leads de até (dias)</label><input type="number" min="1" max="30" id="cfDias"></div><div><label>Lead de outro vendedor sem resposta cai na fila depois de (horas)</label><input type="number" step="0.25" min="0.25" id="cfResgate"></div></div>
+    <div class="linha" style="margin-top:12px"><div><label>Não atendeu: tentar de novo depois de (horas)</label><input type="number" step="0.5" min="0.5" id="cfTentar"></div><div><label>Recado sem resposta: follow-up depois de (horas)</label><input type="number" min="1" id="cfRecado"></div><div><label>Tentativas até "Sem contato"</label><input type="number" min="1" max="10" id="cfMax"></div><div><label>"Ligar agora": leads de até (dias)</label><input type="number" min="1" max="30" id="cfDias"></div><div><label>Lead de outro vendedor sem resposta cai na fila depois de (horas)</label><input type="number" step="0.25" min="0.25" id="cfResgate"></div><div><label>Vendedores fora do processo (ex.: consignado), separados por vírgula</label><input id="cfFora" placeholder="ex.: Lucas Ribeiro"></div></div>
     <label>Texto do recado de "Não atendeu" ({lead} = nome do cliente, {sdr} = quem está logado, {carro} = "no Corolla XEi" ou "em um dos nossos carros")</label><textarea id="cfRecadoTxt" style="min-height:110px;font-family:inherit"></textarea>
     <label>Mensagem de confirmação da visita ({lead}, {sdr}, {quando} = "amanhã" / "hoje" / "sexta (21/11)", {hora}, {carro} = "o Corolla XEi" ou "nossos carros")</label><textarea id="cfConfTxt" style="min-height:90px;font-family:inherit"></textarea>
     <label>Objeções: uma por bloco. 1ª linha = objeção, linhas seguintes = resposta. Deixe uma linha em branco entre as objeções.</label><textarea id="cfObj" style="min-height:260px;font-family:inherit"></textarea>
@@ -392,7 +392,7 @@
   <div class="cardTopo" style="margin-bottom:12px;flex-wrap:wrap;gap:8px"><p class="sub" id="gsObs" style="margin:0"></p><button class="btn verde" id="btnGsCopiar">Copiar resumo para o WhatsApp</button></div>
   <div class="alertas" id="gsKpis"></div>
   <div class="card"><h2>1. Sem resposta <span class="sub" id="gsRespN"></span></h2><p class="sub" id="gsRespObs"></p><div id="gsRespVend" style="margin-bottom:10px"></div><div id="gsResp"></div></div>
-  <div class="card"><h2>2. Leads quentes parados <span class="sub" id="gsQuenteN"></span></h2><p class="sub">Mostraram interesse de verdade (ficha de financiamento, muita conversa, já agendou ou já veio) e estão há mais de 24 h sem movimento e sem visita marcada. Os de maior pontuação primeiro.</p><div id="gsQuentes"></div></div>
+  <div class="card"><h2>2. Leads quentes parados <span class="sub" id="gsQuenteN"></span></h2><p class="sub">Quente = respondeu, tentou agendar visita, passou CPF (ficha de financiamento) ou o SDR marcou como quente. Parado = mais de 24 h sem mensagem e sem visita marcada. Os de mais sinais primeiro.</p><div id="gsQuentes"></div></div>
   <div class="card"><h2>3. Agenda <span class="sub" id="gsAgN"></span></h2><p class="sub">Visitas de hoje e amanhã que a IA marcou e o cliente ainda não confirmou: sem confirmação humana, é só interesse em agendar.</p><div id="gsAgenda"></div></div>
   <div class="card"><h2>4. Leads sem informação <span class="sub" id="gsInfoN"></span></h2><p class="sub">Leads dos últimos 3 dias, ainda abertos.</p><div id="gsInfo"></div></div>
 </section>
@@ -1418,7 +1418,7 @@ async function carregarGestor() {
   ].join('');
   $('#gsKpis').style.gridTemplateColumns = 'repeat(auto-fit, minmax(190px, 1fr))';
   guardarLeadsSdr(g.semResposta.lista); guardarLeadsSdr(g.quentes); guardarLeadsSdr(g.semInfo.semVendedor);
-  const linha = (l, extra) => { const tel = soDigitos(l.whatsapp); return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor)}${l.ia ? ' (IA)' : ''} · ${extra}</span>${carroLinha(l)}<div class="sub">${tel ? '+' + tel : 'sem telefone'}</div></div><div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}">WhatsApp</a>` : ''}${BOTOES_SDR}</div></div>`; };
+  const linha = (l, extra) => { const tel = soDigitos(l.whatsapp); return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor)}${l.ia ? ' (IA)' : ''} · ${extra}</span>${carroLinha(l)}<div class="sub">${tel ? '+' + tel : 'sem telefone'}</div></div><div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}">WhatsApp</a>` : ''}${BOTOES_SDR}</div></div>`; };
   $('#gsRespN').textContent = `(${g.semResposta.total})`;
   $('#gsRespObs').textContent = `O cliente mandou a última mensagem há mais de ${hp} h e ninguém respondeu (últimos 14 dias). Os mais recentes primeiro: ainda estão quentes.`;
   $('#gsRespVend').innerHTML = g.semResposta.porVendedor.length ? barras(g.semResposta.porVendedor.map((v) => [v.vendedor, v.n]), 'var(--verm)') : '';
@@ -1621,6 +1621,17 @@ const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'm
 // "Não atendeu" já abre a mensagem de recado (cadência: ligação WhatsApp, ligação telefone, mensagem, follow-up)
 const BOTOES_SDR = `<button class="btn verde" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button>`;
 const leadsSdr = {};
+// "Ligar": no celular abre o discador; no computador copia o número (o SDR liga pelo celular ou pelo WhatsApp do computador)
+const ehCelular = () => matchMedia('(pointer: coarse)').matches;
+document.addEventListener('click', async (ev) => {
+  const b = ev.target.closest('[data-ligar]');
+  if (!b) return;
+  const tel = b.dataset.ligar;
+  if (ehCelular()) { location.href = `tel:+${tel}`; return; }
+  const bonito = `+${tel.slice(0, 2)} (${tel.slice(2, 4)}) ${tel.slice(4, -4)}-${tel.slice(-4)}`;
+  try { await navigator.clipboard.writeText(bonito); } catch {}
+  alert(`Número copiado: ${bonito}. Ligue pelo seu celular, ou abra o WhatsApp do computador (botão WhatsApp) e use o ícone de ligação.`);
+});
 const guardarLeadsSdr = (lista) => (lista || []).forEach((l) => { leadsSdr[l.id] = l; });
 const carroCurto = (c) => String(c || '').replace(/\s*\|.*$/, '').trim();
 const COPY_NAO_ATENDEU = 'Fala {lead}, aqui é {sdr} da Choice Cars, prazer falar com você! Notamos seu interesse {carro} e tentei te ligar pra entender melhor se é esse veículo mesmo que você procura. Vai ser um prazer te atender e te dar uma atenção especial. Qual o melhor horário pra gente conversar?';
@@ -1751,7 +1762,7 @@ function carteiraSdr() {
 $('#btnCfSdr').onclick = async () => {
   const objecoes = $('#cfObj').value.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).map((b) => { const [o, ...r] = b.split('\n'); return { objecao: o.trim(), resposta: r.join('\n').trim() }; });
   try {
-    await api('/api/sdr/config', { method:'POST', body: JSON.stringify({ horasTentarDeNovo: $('#cfTentar').value, horasAguardandoRecado: $('#cfRecado').value, tentativasMax: $('#cfMax').value, diasNovos: $('#cfDias').value, horasSemRespostaResgate: $('#cfResgate').value, recado: $('#cfRecadoTxt').value, confirmacao: $('#cfConfTxt').value, objecoes }) });
+    await api('/api/sdr/config', { method:'POST', body: JSON.stringify({ horasTentarDeNovo: $('#cfTentar').value, horasAguardandoRecado: $('#cfRecado').value, tentativasMax: $('#cfMax').value, diasNovos: $('#cfDias').value, horasSemRespostaResgate: $('#cfResgate').value, vendedoresFora: $('#cfFora').value.split(',').map((v) => v.trim()).filter(Boolean), recado: $('#cfRecadoTxt').value, confirmacao: $('#cfConfTxt').value, objecoes }) });
     alert('Configuração do SDR salva.'); delete $('#sdCfgCard').dataset.ok; carregarSdr();
   } catch (e) { alert(e.message); }
 };
@@ -1771,7 +1782,7 @@ async function carregarSdr() {
   $('#sdObjecoes').innerHTML = (r.objecoes || []).map((o) => `<details class="objecao"><summary><b>"${esc(o.objecao)}"</b></summary><p>${esc(o.resposta)}</p></details>`).join('') || '<div class="vazio">Nenhuma objeção cadastrada.</div>';
   if (eu?.papel === 'admin' && !$('#sdCfgCard').dataset.ok) {
     $('#sdCfgCard').dataset.ok = '1';
-    $('#cfTentar').value = r.cadencia.horasTentarDeNovo; $('#cfRecado').value = r.cadencia.horasAguardandoRecado; $('#cfMax').value = r.cadencia.tentativasMax; $('#cfDias').value = r.cadencia.diasNovos; $('#cfResgate').value = r.cadencia.horasSemRespostaResgate;
+    $('#cfTentar').value = r.cadencia.horasTentarDeNovo; $('#cfRecado').value = r.cadencia.horasAguardandoRecado; $('#cfMax').value = r.cadencia.tentativasMax; $('#cfDias').value = r.cadencia.diasNovos; $('#cfResgate').value = r.cadencia.horasSemRespostaResgate; $('#cfFora').value = (r.vendedoresFora || []).join(', ');
     $('#cfRecadoTxt').value = r.recado || COPY_NAO_ATENDEU;
     $('#cfConfTxt').value = r.confirmacao || COPY_CONFIRMACAO;
     $('#cfObj').value = (r.objecoes || []).map((o) => `${o.objecao}\n${o.resposta}`).join('\n\n');
@@ -1794,7 +1805,7 @@ async function carregarSdr() {
           <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>${carroLinha(l)}${kv && !l.passou ? `<div style="margin-top:4px">${seloConfirmacao(l)}</div>` : ''}${kv && l.agenda_obs ? `<div class="briefing">${esc(l.agenda_obs)}</div>` : ''}
             <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}${l.tentativas ? ` · ${l.tentativas} tentativa(s) sem atender` : ''}</div>
             ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : uc.resultado === 'interesse_visita' ? 'confirmar até' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
-          <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
+          <div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
             ${kv && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') : kv ? `<button class="btn verde" data-conf="mensagem">Mandar confirmação</button>${l.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : BOTOES_SDR}</div></div>`;
       }).join('') || '<div class="vazio">Nada nesta lista agora.</div>'}</div>`;
   }).join('');
@@ -1818,7 +1829,7 @@ async function carregarSdr() {
     const uc = l.ultimoContato || {}; const tel = soDigitos(l.whatsapp);
     return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || '')} · ${tel ? '+' + tel : ''}</span>
       <div class="briefing">${uc.interesse ? `<span class="tag">${esc(uc.interesse)}</span> ` : ''}${esc(RESULTADO[uc.resultado] || '')}${uc.nota ? ' · ' + esc(uc.nota) : ''}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : uc.resultado === 'interesse_visita' ? 'confirmar até' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${uc.em ? haTempo(new Date(uc.em).toISOString()) : ''}</span></div></div>
-      <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a>` : ''}${BOTOES_SDR}</div></div>`;
+      <div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button>` : ''}${BOTOES_SDR}</div></div>`;
   }).join('') || '<div class="vazio">Nenhum lead nesta etapa.</div>';
   ligarBotoesSdr($('#sdEtapa'));
   carregarHistSdr();
@@ -1848,7 +1859,7 @@ async function buscarLeadSdr() {
     return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')} · entrou ${haTempo(l.created_date)} · ${esc(situacao)}${l.is_resgate ? ' · base de resgate' : ''}</span>${carroLinha(l)}
       <div class="sub">${tel ? '+' + tel : ''}${l.agenda.length ? ' · agenda: ' + l.agenda.map((a) => new Date(a.data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })).join(', ') : ''}</div>
       <div class="sub">${l.contatos.length ? 'Contatos: ' + l.contatos.map((c) => `${new Date(c.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} ${esc(c.por || '')} ${c.tipo === 'ligacao' ? 'ligação' : 'msg'} ${esc(RESULTADO[c.resultado] || '')}`).join(' · ') : 'Nenhum contato registrado ainda.'}</div></div>
-      <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a>` : ''}${BOTOES_SDR}</div></div>`;
+      <div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button>` : ''}${BOTOES_SDR}</div></div>`;
   }).join('') || '<div class="vazio">Nenhum lead encontrado com esse telefone ou nome (os dados vêm do LeadsOK).</div>'}</div>`;
   ligarBotoesSdr($('#sdResultado'));
 }

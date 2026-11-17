@@ -1,5 +1,13 @@
 // Números do comercial a partir do banco do LeadsOK. Datas no fuso de Brasília (UTC−3, sem horário de verão).
 const banco = require('./banco');
+const config = require('../config');
+
+// Vendedores fora do processo de cobrança (ex.: consignado): não entram em alertas, Gestor do dia nem Fila do SDR
+const foraDoProcesso = () => ((config.get().sdr || {}).vendedoresFora || []).map((v) => String(v).trim().toLowerCase()).filter(Boolean);
+const semFora = (col = 'l.vendedor') => {
+  const f = foraDoProcesso();
+  return f.length ? `AND lower(trim(COALESCE(${col}, ''))) NOT IN (${f.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})` : '';
+};
 
 const diaSP = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 const VENDIDO = "COALESCE(lower(l.archive_reason), '') LIKE 'vendido%'";
@@ -180,7 +188,7 @@ function time(filtro, horasParado = 2) {
 function esperandoAgora(d, horasParado) {
   const limite = new Date(Date.now() - horasParado * 3600 * 1000).toISOString();
   return d.prepare(`SELECT COALESCE(vendedor, 'Sem vendedor') vendedor, COUNT(*) n FROM lk_leads
-    WHERE aba_atual != 'arquivados' AND is_resgate = 0 AND ultima_msg_owner = 'customers' AND ultima_msg_at < ? AND ultima_msg_at > ? GROUP BY vendedor ORDER BY n DESC`).all(limite, new Date(Date.now() - 30 * 86400000).toISOString());
+    WHERE aba_atual != 'arquivados' AND is_resgate = 0 AND ultima_msg_owner = 'customers' AND ultima_msg_at < ? AND ultima_msg_at > ? ${semFora('vendedor')} GROUP BY vendedor ORDER BY n DESC`).all(limite, new Date(Date.now() - 30 * 86400000).toISOString());
 }
 // Foto dos leads esperando, tirada a cada coleta (guarda 60 dias)
 function registrarEsperando(horasParado = 2) {
@@ -316,7 +324,7 @@ function gestorDoDia({ horasParado = 2 } = {}) {
   const hoje = diaSP();
   const iso = (ms) => new Date(agora - ms).toISOString();
   const campos = `l.id, l.nome, l.whatsapp, l.carro, ${ORIGEM} origem, COALESCE(l.vendedor, 'Sem vendedor') vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.tem_financiamento`;
-  const aberto = "l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND COALESCE(l.origem, '') != 'teste' AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))";
+  const aberto = `l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND COALESCE(l.origem, '') != 'teste' ${semFora()} AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))`;
   // 1) leads de hoje: quantos, de onde, quantos fora do horário (antes das 8h, depois das 19h ou domingo) e sem informação
   const deHoje = d.prepare(`SELECT ${campos}, CAST(strftime('%H', l.created_date, '-3 hours') AS INTEGER) hora, CAST(strftime('%w', l.created_date, '-3 hours') AS INTEGER) semana
     FROM lk_leads l WHERE l.is_resgate = 0 AND COALESCE(l.origem, '') != 'teste' AND date(l.created_date, '-3 hours') = ? ORDER BY l.created_date DESC`).all(hoje);
@@ -337,26 +345,29 @@ function gestorDoDia({ horasParado = 2 } = {}) {
   // 4) leads sem informação (últimos 3 dias, ainda abertos): sem vendedor, sem nome, sem carro
   const recentes = d.prepare(`SELECT ${campos}, l.vendedor vendedor_real FROM lk_leads l WHERE ${aberto} AND l.created_date > ? ORDER BY l.created_date DESC`).all(iso(3 * 86400000));
   const semInfo = { semVendedor: recentes.filter((l) => !l.vendedor_real), semNome: recentes.filter((l) => !l.nome), semCarro: recentes.filter((l) => !l.carro).length, total: recentes.length };
-  // 5) leads quentes parados: demonstraram interesse (ficha, muita conversa, já agendou) e estão há mais de 24 h sem movimento
+  // 5) leads quentes parados. Quente = respondeu (o cliente falou com a loja), tentou agendar visita (agenda do LeadsOK,
+  // inclusive a IA, ou "topou visitar" no SDR), passou CPF (ficha de financiamento) ou o SDR marcou interesse "quente".
+  // Parado = mais de 24 h sem mensagem e sem visita marcada para frente.
   const quentes = d.prepare(`SELECT ${campos},
       (SELECT COUNT(*) FROM lk_mensagens m WHERE m.lead_id = l.id AND m.owner = 'customers') msgsCliente,
-      (SELECT COUNT(*) FROM lk_mensagens m WHERE m.lead_id = l.id) msgs,
-      ${AGENDOU_VISITA} jaAgendou, ${VISITOU} jaVeio,
+      EXISTS (SELECT 1 FROM lk_agenda a WHERE a.lead_id = l.id) OR EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.resultado IN ('agendou', 'interesse_visita')) tentouAgendar,
+      ${VISITOU} jaVeio,
+      EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.interesse = 'quente') sdrQuente,
       (SELECT MAX(em) FROM lk_contatos c WHERE c.lead_id = l.id) ultimoSdr
     FROM lk_leads l WHERE ${aberto} AND l.ultima_msg_at BETWEEN ? AND ?
       AND NOT EXISTS (SELECT 1 FROM lk_agenda a WHERE a.lead_id = l.id AND a.data > ? AND COALESCE(a.concluido, 0) = 0)`).all(iso(21 * 86400000), iso(24 * 3600000), new Date(agora).toISOString())
     .map((l) => {
       const motivos = [];
       let pontos = 0;
-      if (l.tem_financiamento) { pontos += 4; motivos.push('fez ficha de financiamento'); }
+      if (l.tem_financiamento) { pontos += 4; motivos.push('passou CPF (ficha de financiamento)'); }
       if (l.jaVeio) { pontos += 4; motivos.push('já veio à loja'); }
-      else if (l.jaAgendou) { pontos += 3; motivos.push('já agendou visita'); }
-      if (l.msgsCliente >= 8) { pontos += 3; motivos.push(`${l.msgsCliente} mensagens do cliente`); }
-      else if (l.msgsCliente >= 4) { pontos += 2; motivos.push(`${l.msgsCliente} mensagens do cliente`); }
-      if (l.ultima_msg_owner === 'customers') { pontos += 1; motivos.push('cliente falou por último'); }
+      else if (l.tentouAgendar) { pontos += 3; motivos.push('tentou agendar visita'); }
+      if (l.sdrQuente) { pontos += 3; motivos.push('SDR marcou como quente'); }
+      // respondeu: mensagens do cliente (quando as conversas estão carregadas) ou o cliente falou por último
+      if (l.msgsCliente > 0 || l.ultima_msg_owner === 'customers') { pontos += l.msgsCliente >= 4 ? 3 : 2; motivos.push(l.msgsCliente > 0 ? `respondeu (${l.msgsCliente} mensagens)` : 'respondeu'); }
       const dias = Math.floor((agora - Date.parse(l.ultima_msg_at)) / 86400000);
       return { ...l, pontos, motivos, diasParado: dias, semSdr: !l.ultimoSdr };
-    }).filter((l) => l.pontos >= 3).sort((a, b) => b.pontos - a.pontos || a.diasParado - b.diasParado).slice(0, 40);
+    }).filter((l) => l.motivos.length).sort((a, b) => b.pontos - a.pontos || a.diasParado - b.diasParado).slice(0, 60);
   const curto = (l) => ({ id: l.id, nome: l.nome, whatsapp: l.whatsapp, carro: l.carro, origem: l.origem, vendedor: l.vendedor, ia: l.ia, ultima_msg_at: l.ultima_msg_at, created_date: l.created_date });
   return {
     dia: hoje, horasParado,
@@ -431,7 +442,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   const iso = (ms) => new Date(agora - ms).toISOString();
   const campos = `l.id, l.nome, l.whatsapp, l.carro, l.origem, l.vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.aba_atual`;
   // lead encerrado pelo SDR (já comprou / sem interesse) sai da fila; quem agendou sai das listas de prospecção
-  const base = `l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND l.whatsapp IS NOT NULL
+  const base = `l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND l.whatsapp IS NOT NULL ${semFora()}
     AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))`;
   const semAgendar = `AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado = 'agendou' AND em > ${agora - 14 * 86400000})`;
   // carteira: só os leads que estão no nome do vendedor no LeadsOK (o Elyas transfere para o SDR o que ele não dá conta)
