@@ -215,7 +215,8 @@ function agenda({ de, ate } = {}) {
       COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, COALESCE(l.vendedor, a.vendedor) vendedor, l.origem, l.aba_atual,
       a.obs, a.confirmado, a.motivo, v.compareceu, v.comprou, v.marcado_por, v.marcado_em,
       (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'mensagem') confirmacao_enviada,
-      (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'cliente') cliente_confirmou
+      (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'cliente') cliente_confirmou,
+      (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'lembrete') lembrete_enviado
     FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id LEFT JOIN lk_visitas v ON v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data
     WHERE COALESCE(a.modalidade, 'presencial') != 'ligacao' AND date(a.data, '-3 hours') BETWEEN ? AND ? ORDER BY a.data`).all(de, ate);
   // agendamentos tipo "ligação" no LeadsOK são lembretes de follow-up, não visita: ficam fora, só contados
@@ -546,7 +547,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   const conf = d.prepare('SELECT tipo, MAX(em) em FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? GROUP BY tipo');
   for (const l of listas.visitas) {
     l.passou = l.agenda_data < agoraIso;
-    for (const c of conf.all(l.id, l.agenda_data)) l[c.tipo === 'cliente' ? 'cliente_confirmou' : 'confirmacao_enviada'] = c.em;
+    for (const c of conf.all(l.id, l.agenda_data)) l[{ cliente: 'cliente_confirmou', lembrete: 'lembrete_enviado', nao_veio: 'msg_nao_veio' }[c.tipo] || 'confirmacao_enviada'] = c.em;
   }
   listas.visitas.sort((a, b) => (a.passou !== b.passou ? (a.passou ? -1 : 1) : a.agenda_data < b.agenda_data ? -1 : 1));
   // interesse em agendar: a IA marcou, a visita ainda não aconteceu e o cliente não confirmou o horário
@@ -653,7 +654,7 @@ function resultadoSdr({ de, ate, por } = {}) {
 function confirmarVisita({ leadId, data, tipo, por }) {
   const d = banco.abrir();
   if (!d) throw new Error(banco.erro());
-  if (!leadId || !data || !['mensagem', 'cliente'].includes(tipo)) throw new Error('Dados da confirmação inválidos');
+  if (!leadId || !data || !['mensagem', 'cliente', 'lembrete', 'nao_veio'].includes(tipo)) throw new Error('Dados da confirmação inválidos');
   d.prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(leadId), String(data), tipo, por || null, Date.now());
   return { ok: true };
 }

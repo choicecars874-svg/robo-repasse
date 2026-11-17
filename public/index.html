@@ -338,6 +338,8 @@
     <div class="linha" style="margin-top:12px"><div><label>Não atendeu: tentar de novo depois de (horas)</label><input type="number" step="0.5" min="0.5" id="cfTentar"></div><div><label>Recado sem resposta: follow-up depois de (horas)</label><input type="number" min="1" id="cfRecado"></div><div><label>Tentativas até "Sem contato"</label><input type="number" min="1" max="10" id="cfMax"></div><div><label>"Ligar agora": leads de até (dias)</label><input type="number" min="1" max="30" id="cfDias"></div><div><label>Lead de outro vendedor sem resposta cai na fila depois de (horas)</label><input type="number" step="0.25" min="0.25" id="cfResgate"></div><div><label>Vendedores fora do processo (ex.: consignado), separados por vírgula</label><input id="cfFora" placeholder="ex.: Lucas Ribeiro"></div></div>
     <label>Texto do recado de "Não atendeu" ({lead} = nome do cliente, {sdr} = quem está logado, {carro} = "no Corolla XEi" ou "em um dos nossos carros")</label><textarea id="cfRecadoTxt" style="min-height:110px;font-family:inherit"></textarea>
     <label>Mensagem de confirmação da visita ({lead}, {sdr}, {quando} = "amanhã" / "hoje" / "sexta (21/11)", {hora}, {carro} = "o Corolla XEi" ou "nossos carros")</label><textarea id="cfConfTxt" style="min-height:90px;font-family:inherit"></textarea>
+    <label>Lembrete no dia da visita ({lead}, {sdr}, {hora}, {carro})</label><textarea id="cfLembTxt" style="min-height:80px;font-family:inherit"></textarea>
+    <label>Mensagem para quem não veio ({lead}, {sdr}, {quando} = "ontem" / "hoje" / "sexta (21/11)", {hora}, {carro})</label><textarea id="cfNaoVeioTxt" style="min-height:90px;font-family:inherit"></textarea>
     <label>Objeções: uma por bloco. 1ª linha = objeção, linhas seguintes = resposta. Deixe uma linha em branco entre as objeções.</label><textarea id="cfObj" style="min-height:260px;font-family:inherit"></textarea>
     <p><button class="btn verde" id="btnCfSdr">Salvar configuração do SDR</button></p></details></div>
   <div class="card" id="sdHistCard"><div class="cardTopo"><div><h2>Histórico de contatos</h2><p class="sub">Tudo o que foi registrado na fila, com quem fez e quando.</p></div></div>
@@ -1529,13 +1531,13 @@ async function carregarAgenda() {
         ${a.concluido && !st ? `<div style="margin-top:4px"><span class="tag">concluído no LeadsOK${a.motivo ? ': ' + esc(a.motivo) : ''}</span></div>` : !passou && !st ? `<div style="margin-top:4px">${seloConfirmacao(a)}</div>` : ''}
         ${a.obs ? `<div class="briefing">${esc(a.obs)}</div>` : ''}
         ${a.nome ? '' : '<span class="tag ruimTag">LeadsOK não enviou o nome</span> '}${a.vendedor ? '' : '<span class="tag ruimTag">sem vendedor responsável</span>'}</div>
-      <div class="acoes">${!passou && !st && !a.concluido ? `<button class="btn verde" data-conf="mensagem">Mandar confirmação</button>${a.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('') + (st ? '<button class="btn" data-v="">Limpar</button>' : '')}</div></div>`;
+      <div class="acoes">${!passou && !st && !a.concluido ? `<button class="btn verde" data-conf="${tipoMsgVisita(a.data, false)}">${ROTULO_MSG[tipoMsgVisita(a.data, false)]}</button>${a.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('') + (st ? '<button class="btn" data-v="">Limpar</button>' : '') + ((!st && passou && !a.concluido) || st === 'nao_veio' ? '<button class="btn" data-conf="nao_veio">Mandar mensagem: não veio</button>' : '')}</div></div>`;
   }).join('') || '<div class="vazio">Nenhum agendamento no período.</div>';
   document.querySelectorAll('.agItem [data-conf]').forEach((b) => b.onclick = () => {
     const it = b.closest('.agItem');
     if (b.dataset.conf === 'cliente') return clienteConfirmou(it.dataset.lead, it.dataset.data, carregarAgenda);
-    window.confirmacaoSdr = r.confirmacao || window.confirmacaoSdr;
-    abrirConfirmacao({ leadId: it.dataset.lead, data: it.dataset.data, nome: it.dataset.nome, whatsapp: it.dataset.tel, carro: it.dataset.carro }, carregarAgenda);
+    window.confirmacaoSdr = r.confirmacao || window.confirmacaoSdr; window.lembreteSdr = r.lembreteDia || window.lembreteSdr; window.naoVeioSdr = r.naoVeio || window.naoVeioSdr;
+    abrirConfirmacao({ leadId: it.dataset.lead, data: it.dataset.data, nome: it.dataset.nome, whatsapp: it.dataset.tel, carro: it.dataset.carro }, carregarAgenda, b.dataset.conf);
   });
   document.querySelectorAll('.agItem .acoes button[data-v]').forEach((b) => b.onclick = async () => {
     const item = b.closest('.agItem');
@@ -1641,17 +1643,27 @@ function quandoVisita(iso) {
   const dia = new Date(Date.parse(iso) - 3 * 3600000).toISOString().slice(0, 10);
   if (dia === diaSP(0)) return 'hoje';
   if (dia === diaSP(-1)) return 'amanhã';
+  if (dia === diaSP(1)) return 'ontem';
   return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: '2-digit' }).replace(/-feira/, '').replace(/^(\S+), (.*)$/, '$1 ($2)');
 }
-function abrirConfirmacao(v, depois) {
+// tipo: "confirmacao" (antes do dia), "lembrete" (no dia da visita) ou "nao_veio" (passou e o cliente não apareceu)
+const MSG_VISITA = {
+  confirmacao: ['Confirmar visita', () => window.confirmacaoSdr || COPY_CONFIRMACAO, 'mensagem'],
+  lembrete: ['Lembrete da visita de hoje', () => window.lembreteSdr || 'Fala {lead}, bom dia! Aqui é {sdr} da Choice Cars. Passando pra lembrar que hoje às {hora} você tem a visita marcada pra ver {carro}. Já estamos te esperando! Qualquer imprevisto, é só me avisar por aqui.', 'lembrete'],
+  nao_veio: ['Cliente não veio', () => window.naoVeioSdr || 'Fala {lead}, tudo bem? Aqui é {sdr} da Choice Cars. A gente estava te esperando {quando} às {hora} pra ver {carro} e acabou que não deu pra você vir. Aconteceu alguma coisa? Se quiser, já deixo um novo horário reservado pra você. Qual dia fica melhor?', 'nao_veio'],
+};
+const tipoMsgVisita = (iso, passou) => passou ? 'nao_veio' : quandoVisita(iso) === 'hoje' ? 'lembrete' : 'confirmacao';
+const ROTULO_MSG = { confirmacao: 'Mandar confirmação', lembrete: 'Mandar lembrete de hoje', nao_veio: 'Mandar mensagem: não veio' };
+function abrirConfirmacao(v, depois, tipo = 'confirmacao') {
   const tel = soDigitos(v.whatsapp);
   const primeiro = (t) => String(t || '').trim().split(/\s+/)[0] || '';
   const carro = carroCurto(v.carro);
   const hora = new Date(v.data).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-  const texto = (window.confirmacaoSdr || COPY_CONFIRMACAO).replace('{lead}', primeiro(v.nome) || 'tudo bem').replace('{sdr}', primeiro(eu?.nome) || 'o time').replace('{quando}', quandoVisita(v.data)).replace('{hora}', hora).replace('{carro}', carro ? `o ${carro}` : 'nossos carros');
+  const [tituloMsg, modelo, registro] = MSG_VISITA[tipo] || MSG_VISITA.confirmacao;
+  const texto = modelo().replace('{lead}', primeiro(v.nome) || 'tudo bem').replace('{sdr}', primeiro(eu?.nome) || 'o time').replace('{quando}', quandoVisita(v.data)).replace('{hora}', hora).replace('{carro}', carro ? `o ${carro}` : 'nossos carros');
   const m = document.createElement('div');
   m.className = 'modalFundo';
-  m.innerHTML = `<div class="modal card"><h2>Confirmar visita · ${esc(v.nome || 'cliente')}</h2>
+  m.innerHTML = `<div class="modal card"><h2>${tituloMsg} · ${esc(v.nome || 'cliente')}</h2>
     <p class="sub" style="margin-top:0">${tel ? '+' + tel + ' · ' : ''}visita ${quandoVisita(v.data)} às ${hora}. Ajuste o texto se quiser.</p>
     <textarea id="cfmTexto" style="min-height:130px;font-family:inherit">${esc(texto)}</textarea>
     <p style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap"><button class="btn" id="cfmFechar">Cancelar</button>${tel ? '<button class="btn verde" id="cfmEnviar">Abrir WhatsApp com a mensagem</button>' : '<span class="ruim">Sem telefone neste agendamento</span>'}</p></div>`;
@@ -1661,7 +1673,7 @@ function abrirConfirmacao(v, depois) {
   if (env) env.onclick = async () => {
     window.open(`https://wa.me/${tel}?text=${encodeURIComponent(m.querySelector('#cfmTexto').value)}`, '_blank', 'noopener');
     m.remove();
-    try { await api('/api/agenda/confirmar', { method:'POST', body: JSON.stringify({ leadId: v.leadId, data: v.data, tipo: 'mensagem' }) }); } catch {}
+    try { await api('/api/agenda/confirmar', { method:'POST', body: JSON.stringify({ leadId: v.leadId, data: v.data, tipo: registro }) }); } catch {}
     depois?.();
   };
 }
@@ -1669,7 +1681,7 @@ async function clienteConfirmou(leadId, data, depois) {
   try { await api('/api/agenda/confirmar', { method:'POST', body: JSON.stringify({ leadId, data, tipo: 'cliente' }) }); depois?.(); } catch (e) { alert(e.message); }
 }
 // selo do status da confirmação
-const seloConfirmacao = (x) => x.cliente_confirmou ? `<span class="tag vendido">cliente confirmou</span>` : x.confirmacao_enviada ? `<span class="tag">confirmação enviada ${new Date(x.confirmacao_enviada).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : (x.agenda_confirmado ?? x.confirmado) === 1 ? '<span class="tag">confirmado no LeadsOK</span>' : '<span class="tag ruimTag">confirmação ainda não enviada</span>';
+const seloConfirmacao = (x) => x.lembrete_enviado ? `<span class="tag">lembrete de hoje enviado</span>` : x.cliente_confirmou ? `<span class="tag vendido">cliente confirmou</span>` : x.confirmacao_enviada ? `<span class="tag">confirmação enviada ${new Date(x.confirmacao_enviada).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : (x.agenda_confirmado ?? x.confirmado) === 1 ? '<span class="tag">confirmado no LeadsOK</span>' : '<span class="tag ruimTag">confirmação ainda não enviada</span>';
 function abrirRecado(leadId) {
   const l = leadsSdr[leadId] || {};
   const tel = soDigitos(l.whatsapp);
@@ -1762,7 +1774,7 @@ function carteiraSdr() {
 $('#btnCfSdr').onclick = async () => {
   const objecoes = $('#cfObj').value.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).map((b) => { const [o, ...r] = b.split('\n'); return { objecao: o.trim(), resposta: r.join('\n').trim() }; });
   try {
-    await api('/api/sdr/config', { method:'POST', body: JSON.stringify({ horasTentarDeNovo: $('#cfTentar').value, horasAguardandoRecado: $('#cfRecado').value, tentativasMax: $('#cfMax').value, diasNovos: $('#cfDias').value, horasSemRespostaResgate: $('#cfResgate').value, vendedoresFora: $('#cfFora').value.split(',').map((v) => v.trim()).filter(Boolean), recado: $('#cfRecadoTxt').value, confirmacao: $('#cfConfTxt').value, objecoes }) });
+    await api('/api/sdr/config', { method:'POST', body: JSON.stringify({ horasTentarDeNovo: $('#cfTentar').value, horasAguardandoRecado: $('#cfRecado').value, tentativasMax: $('#cfMax').value, diasNovos: $('#cfDias').value, horasSemRespostaResgate: $('#cfResgate').value, vendedoresFora: $('#cfFora').value.split(',').map((v) => v.trim()).filter(Boolean), recado: $('#cfRecadoTxt').value, confirmacao: $('#cfConfTxt').value, lembreteDia: $('#cfLembTxt').value, naoVeio: $('#cfNaoVeioTxt').value, objecoes }) });
     alert('Configuração do SDR salva.'); delete $('#sdCfgCard').dataset.ok; carregarSdr();
   } catch (e) { alert(e.message); }
 };
@@ -1777,7 +1789,7 @@ async function carregarSdr() {
   selV.innerHTML = '<option value="">Todos os vendedores</option>' + [...new Set([...r.vendedores.map((v) => v.vendedor), ...(atualV ? [atualV] : [])])].map((v) => { const n = r.vendedores.find((x) => x.vendedor === v)?.n; return `<option value="${esc(v)}" ${v === atualV ? 'selected' : ''}>${esc(v)}${n ? ` (${n})` : ''}</option>`; }).join('');
   window.vendedoresSdr = r.vendedores.map((v) => v.vendedor);
   Object.values(r.listas).forEach(guardarLeadsSdr); Object.values(r.etapas).forEach(guardarLeadsSdr);
-  window.recadoSdr = r.recado || null; window.confirmacaoSdr = r.confirmacao || null;
+  window.recadoSdr = r.recado || null; window.confirmacaoSdr = r.confirmacao || null; window.lembreteSdr = r.lembreteDia || null; window.naoVeioSdr = r.naoVeio || null;
   window.cfgSdr = { ...r.cadencia, recado: r.recado, objecoes: r.objecoes };
   $('#sdObjecoes').innerHTML = (r.objecoes || []).map((o) => `<details class="objecao"><summary><b>"${esc(o.objecao)}"</b></summary><p>${esc(o.resposta)}</p></details>`).join('') || '<div class="vazio">Nenhuma objeção cadastrada.</div>';
   if (eu?.papel === 'admin' && !$('#sdCfgCard').dataset.ok) {
@@ -1785,6 +1797,7 @@ async function carregarSdr() {
     $('#cfTentar').value = r.cadencia.horasTentarDeNovo; $('#cfRecado').value = r.cadencia.horasAguardandoRecado; $('#cfMax').value = r.cadencia.tentativasMax; $('#cfDias').value = r.cadencia.diasNovos; $('#cfResgate').value = r.cadencia.horasSemRespostaResgate; $('#cfFora').value = (r.vendedoresFora || []).join(', ');
     $('#cfRecadoTxt').value = r.recado || COPY_NAO_ATENDEU;
     $('#cfConfTxt').value = r.confirmacao || COPY_CONFIRMACAO;
+    $('#cfLembTxt').value = r.lembreteDia || MSG_VISITA.lembrete[1](); $('#cfNaoVeioTxt').value = r.naoVeio || MSG_VISITA.nao_veio[1]();
     $('#cfObj').value = (r.objecoes || []).map((o) => `${o.objecao}\n${o.resposta}`).join('\n\n');
   }
   $('#sdLig').textContent = num(r.resumo.ligacoes); $('#sdAtend').textContent = `atenderam: ${num(r.resumo.atenderam)}`;
@@ -1798,6 +1811,7 @@ async function carregarSdr() {
       ${itens.map((l) => {
         const tel = soDigitos(l.whatsapp); const nome = (l.nome || 'Cliente').split(' ')[0];
         const kv = (k === 'visitas' || k === 'interesseIa') && !!l.agenda_data; // visita com data: botões de confirmação / resultado
+        const kpv = k === 'posVisita' && l.compareceu === 0;
         const quando = k === 'posVisita' ? `${l.compareceu === 0 ? '<span class="ruim">não veio</span>' : 'veio e não comprou'} · visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : kv ? `visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${l.agenda_origem === 'sdr' ? ' · agendada pelo SDR' : ''}${l.passou ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}` : l.topouSemHorario ? '<span class="bom">topou visitar</span> · <span class="ruim">falta fechar dia e hora</span>' : k === 'novos' ? `chegou ${haTempo(l.created_date)}` : k === 'retornar' && l.followLeadsOK ? `follow-up marcado no LeadsOK ${new Date(l.followLeadsOK).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : `chegou ${haTempo(l.created_date)} · última msg ${haTempo(l.ultima_msg_at)}`;
         const feitos = l.contatosHoje.map((c) => (c.tipo === 'ligacao' ? 'ligação: ' : '') + (RESULTADO[c.resultado] || c.resultado)).join(' · ');
         const uc = l.ultimoContato;
@@ -1806,14 +1820,14 @@ async function carregarSdr() {
             <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}${l.tentativas ? ` · ${l.tentativas} tentativa(s) sem atender` : ''}</div>
             ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : uc.resultado === 'interesse_visita' ? 'confirmar até' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
           <div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
-            ${kv && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') : kv ? `<button class="btn verde" data-conf="mensagem">Mandar confirmação</button>${l.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : BOTOES_SDR}</div></div>`;
+            ${kpv ? '<button class="btn verde" data-conf="nao_veio">Mandar mensagem: não veio</button>' : ''}${kv && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') + '<button class="btn" data-conf="nao_veio">Mandar mensagem: não veio</button>' : kv ? `<button class="btn verde" data-conf="${tipoMsgVisita(l.agenda_data, false)}">${ROTULO_MSG[tipoMsgVisita(l.agenda_data, false)]}</button>${l.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : BOTOES_SDR}</div></div>`;
       }).join('') || '<div class="vazio">Nada nesta lista agora.</div>'}</div>`;
   }).join('');
   ligarBotoesSdr($('#sdListas'));
   $('#sdListas').querySelectorAll('[data-conf]').forEach((b) => b.onclick = () => {
     const linha = b.closest('.sdLinha'); const l = leadsSdr[linha.dataset.lead] || {};
     if (b.dataset.conf === 'cliente') return clienteConfirmou(linha.dataset.lead, linha.dataset.data, carregarSdr);
-    abrirConfirmacao({ leadId: linha.dataset.lead, data: linha.dataset.data, nome: l.nome, whatsapp: l.whatsapp, carro: l.carro }, carregarSdr);
+    abrirConfirmacao({ leadId: linha.dataset.lead, data: linha.dataset.data, nome: l.nome, whatsapp: l.whatsapp, carro: l.carro }, carregarSdr, b.dataset.conf);
   });
   $('#sdListas').querySelectorAll('[data-visita]').forEach((b) => b.onclick = async () => {
     const linha = b.closest('.sdLinha');
