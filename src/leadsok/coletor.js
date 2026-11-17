@@ -231,6 +231,26 @@ async function sincronizarListas(paginasMax) {
 }
 
 // ---------- Detalhes de cada lead (histórico, conversa sem texto, ficha só com bancos) ----------
+// Canal provável de um lead que o LeadsOK marcou como WhatsApp/manual, pela 1ª mensagem do cliente.
+// Só o resultado (canal + qual regra bateu) é guardado; o texto da mensagem não.
+const PISTAS_CANAL = [
+  ['webmotors', /webmotors/i, 'cita Webmotors'],
+  ['mercadolivre', /mercado ?livre|mercadolivre|\bmlb-?\d/i, 'cita Mercado Livre'],
+  ['olx', /\bolx\b/i, 'cita OLX'],
+  ['icarros', /icarros/i, 'cita iCarros'],
+  ['napista', /na ?pista/i, 'cita Napista'],
+  ['site', /choicecars\.com|pelo site|no site/i, 'cita o site'],
+  ['marketplace', /este item (ainda )?est[aá] dispon[ií]vel|is this (item )?still available/i, 'texto padrão do Marketplace'],
+  ['instaads', /instagram|vi no insta|\binsta\b|reels|story|stories/i, 'cita Instagram'],
+  ['metaads', /tenho interesse e queria mais informa|quero mais informa[cç][oõ]es sobre isso|vi (seu|o) an[uú]ncio|olá! posso obter mais informa/i, 'texto padrão de anúncio Meta (clique para WhatsApp)'],
+  ['faceads', /facebook|\bface\b/i, 'cita Facebook'],
+];
+function canalPelaMensagem(texto) {
+  const t = String(texto || '');
+  for (const [canal, re, pista] of PISTAS_CANAL) if (re.test(t)) return { canal, pista: `1ª mensagem: ${pista}` };
+  return null;
+}
+
 async function detalharLead(c, d, lead) {
   // histórico (paginado por limit/offset)
   const evs = [];
@@ -254,6 +274,9 @@ async function detalharLead(c, d, lead) {
     paginas++;
   }
   const chatCompleto = lead.chat_completo || !r?.hasMore ? 1 : 0;
+  // 1ª mensagem do cliente -> canal provável (o texto não sai desta função)
+  const primeiraCliente = msgs.filter((m) => m.messenger_owner === 'customers').sort((x, y) => (x.created_at < y.created_at ? -1 : 1))[0];
+  const inferido = primeiraCliente ? canalPelaMensagem([primeiraCliente.content_message, primeiraCliente.caption, primeiraCliente.quoted_message_content].filter(Boolean).join(' ')) : null;
   await esperar(PAUSA_MS);
   // ficha: só os bancos (sem CPF, nome da mãe, nascimento, e-mail, dados do veículo)
   const f = await c.acao('getCustomerFinancing', [{ customerId: lead.id }]);
@@ -268,6 +291,7 @@ async function detalharLead(c, d, lead) {
     const fi = d.prepare('INSERT OR REPLACE INTO lk_fichas (lead_id, banco, status, created_at, valor_financiado) VALUES (?, ?, ?, ?, ?)');
     for (const b of f?.banks || []) fi.run(lead.id, String(b.bank || '').toLowerCase(), String(b.status ?? ''), b.created_at || '', Number(b.value_financed) || null);
     d.prepare('UPDATE lk_leads SET detalhe_em = ?, detalhe_assinatura = assinatura, chat_completo = ? WHERE id = ?').run(Date.now(), chatCompleto, lead.id);
+    if (inferido) d.prepare("UPDATE lk_leads SET canal_provavel = ?, canal_pista = ? WHERE id = ? AND origem IN ('whatsapp', 'manual')").run(inferido.canal, inferido.pista, lead.id);
   });
   return { eventos: evs.length, mensagens: msgs.length, bancos: (f?.banks || []).length };
 }
@@ -529,4 +553,4 @@ function definirHorasParado(h) {
   salvarCfg();
 }
 
-module.exports = { testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };
+module.exports = { canalPelaMensagem, testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };

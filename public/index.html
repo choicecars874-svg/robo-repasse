@@ -1184,6 +1184,12 @@ setInterval(() => {
 
 // Painel geral: metas + resumo de cada área
 // "sem dado" (coleta incompleta) é diferente de 0
+// de onde provavelmente vieram os leads "diretos" (mesmo telefone em outro canal ou 1ª mensagem)
+function linhaDiretos(dir, colunas) {
+  if (!dir || !dir.total) return '';
+  const partes = dir.porCanal.map((x) => `${esc(canal(x.provavel))}: <b>${num(x.n)}</b> <span class="sub">(${x.pista === 'telefone' ? 'mesmo telefone' : '1ª mensagem'})</span>`);
+  return `<tr><td colspan="${colunas}" class="sub" style="padding-top:0">↳ Contato direto, de onde provavelmente vieram: ${partes.length ? partes.join(' · ') + ' · ' : ''}sem pista: <b>${num(dir.semPista)}</b>${dir.semPista === dir.total ? ' (as pistas pela 1ª mensagem aparecem quando a coleta de conversas do LeadsOK funcionar)' : ''}</td></tr>`;
+}
 const nd = (v) => v == null ? '<span class="semDado" title="A coleta de conversas do LeadsOK ainda não trouxe esse dado">sem dado</span>' : num(v);
 const pctNd = (a, b) => a == null || b == null ? '<span class="semDado">sem dado</span>' : pct(a, b);
 const dataBr = (d) => d.split('-').reverse().slice(0, 2).join('/');
@@ -1249,7 +1255,7 @@ async function carregarGeral() {
   const gasto = (o) => inv[o] > 0 ? (inv[o] * c.dias) / 30 : null;
   const canais = [...c.canais].sort((a, b) => b.vendas - a.vendas || b.demanda - a.demanda);
   $('#pnCanaisObs').textContent = `${rot} · leads criados no período, por canal de entrada · investimento mensal proporcional aos ${c.dias} dia(s) · LeadsOK`;
-  $('#pnCanais').innerHTML = canais.map((o) => { const gs = gasto(o.origem); return `<tr><td>${esc(canal(o.origem))}</td><td><b>${num(o.demanda)}</b></td><td>${num(o.agendados)}</td><td>${num(o.vendas)}</td><td>${pct(o.vendas, o.demanda)}</td><td>${gs == null ? (o.origem === 'direto' ? '<span class="sub">não se aplica</span>' : '<span class="semDado">não informado</span>') : reais(gs)}</td><td>${gs == null ? '—' : o.vendas ? '<b>' + reais(gs / o.vendas) + '</b>' : '<span class="sub">sem venda</span>'}</td></tr>`; }).join('') || '<tr><td colspan="7" class="sub">Nenhum lead no período.</td></tr>';
+  $('#pnCanais').innerHTML = canais.map((o) => { const gs = gasto(o.origem); return `<tr><td>${esc(canal(o.origem))}</td><td><b>${num(o.demanda)}</b></td><td>${num(o.agendados)}</td><td>${num(o.vendas)}</td><td>${pct(o.vendas, o.demanda)}</td><td>${gs == null ? (o.origem === 'direto' ? '<span class="sub">não se aplica</span>' : '<span class="semDado">não informado</span>') : reais(gs)}</td><td>${gs == null ? '—' : o.vendas ? '<b>' + reais(gs / o.vendas) + '</b>' : '<span class="sub">sem venda</span>'}</td></tr>${o.origem === 'direto' ? linhaDiretos(c.diretos, 7) : ''}`; }).join('') || '<tr><td colspan="7" class="sub">Nenhum lead no período.</td></tr>';
   const semInv = canais.filter((o) => o.origem !== 'direto' && !(inv[o.origem] > 0)).map((o) => canal(o.origem));
   $('#pnInvAviso').hidden = !semInv.length;
   $('#pnInvAviso').innerHTML = semInv.length ? `<span class="semDado">Investimento não informado:</span> ${esc(semInv.join(', '))}. Preencha em Leads e canais → "Editar investimento" para ver o custo por venda.` : '';
@@ -1267,7 +1273,7 @@ async function carregarGeral() {
 }
 // ---------- Comercial (LeadsOK) ----------
 const CORES_CANAL = ['#e2b350', '#60a5fa', '#34d399', '#f472b6', '#a78bfa', '#fbbf24', '#f87171', '#2dd4bf', '#94a3b8', '#fb923c'];
-const NOME_CANAL = { whatsapp: 'WhatsApp', webmotors: 'Webmotors', mercadolivre: 'Mercado Livre', faceads: 'Facebook Ads', instaads: 'Instagram Ads', napista: 'Napista', resgate: 'Resgate', manual: 'Manual', facebookparticular: 'Facebook (particular)', site: 'Site', direto: 'Contato direto (WhatsApp e manual)', teste: 'Teste', unknown: 'Desconhecido' };
+const NOME_CANAL = { whatsapp: 'WhatsApp', webmotors: 'Webmotors', mercadolivre: 'Mercado Livre', faceads: 'Facebook Ads', instaads: 'Instagram Ads', napista: 'Napista', resgate: 'Resgate', manual: 'Manual', facebookparticular: 'Facebook (particular)', site: 'Site', direto: 'Contato direto (WhatsApp e manual)', metaads: 'Anúncio Meta (Instagram ou Facebook)', marketplace: 'Facebook Marketplace', olx: 'OLX', icarros: 'iCarros', teste: 'Teste', unknown: 'Desconhecido' };
 const canal = (o) => NOME_CANAL[o] || o || '—';
 const pct = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '—');
 async function avisoLk() {
@@ -1305,7 +1311,7 @@ async function carregarLeads() {
   $('#lkDias').innerHTML = dias.map((d) => { const tot = porDia[d].reduce((a, x) => a + x.n, 0); return `<div class="col" title="${d.split('-').reverse().join('/')}: ${tot} leads"><div class="barras"><div class="empilhada" style="height:${(tot / maxD) * 100}%">${porDia[d].map((x) => `<i style="flex:${x.n};background:${cor(x.origem)}"></i>`).join('')}</div></div><span>${dias.length > 16 ? (Number(d.slice(8)) % 5 === 0 ? d.slice(8) : '') : d.slice(8) + '/' + d.slice(5, 7)}</span></div>`; }).join('') || '<div class="vazio">Sem leads no período.</div>';
   $('#lkDias').querySelectorAll('.empilhada').forEach((e) => { e.style.display = 'flex'; });
   $('#lkLegenda').innerHTML = origens.map((o) => `<span style="--c:${cor(o)}">${esc(canal(o))}</span>`).join('');
-  $('#lkOrigens').innerHTML = r.porOrigem.map((o) => `<tr><td>${esc(canal(o.origem))}</td><td><b>${num(o.demanda)}</b></td><td>${pctNd(o.responderam, o.demanda)}</td><td>${nd(o.fichas)}</td><td>${num(o.agendados)}</td><td>${num(o.vendas)}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">Sem dados.</td></tr>';
+  $('#lkOrigens').innerHTML = r.porOrigem.map((o) => `<tr><td>${esc(canal(o.origem))}</td><td><b>${num(o.demanda)}</b></td><td>${pctNd(o.responderam, o.demanda)}</td><td>${nd(o.fichas)}</td><td>${num(o.agendados)}</td><td>${num(o.vendas)}</td></tr>${o.origem === 'direto' ? linhaDiretos(r.diretos, 6) : ''}`).join('') || '<tr><td colspan="6" class="sub">Sem dados.</td></tr>';
   // custo: investimento mensal proporcional aos dias do período escolhido
   const diasPeriodo = Math.max(1, Math.round((Date.parse($('#fAte').value) - Date.parse($('#fDe').value)) / 864e5) + 1);
   if (!cfg) cfg = await api('/api/config');

@@ -11,6 +11,14 @@ const nomeStatus = (s) => STATUS_FICHA[s] || 'Outros';
 // mas contam como lead em todas as telas (senão o Painel, o Time e os canais não bateriam entre si)
 const DIRETOS = ['whatsapp', 'manual'];
 const ORIGEM = "CASE WHEN l.origem IN ('whatsapp', 'manual') THEN 'direto' ELSE l.origem END";
+// Canal provável dos leads "diretos": 1º pela 1ª mensagem (guardado na coleta), 2º pelo mesmo telefone em outro lead com canal
+const MESMO_TEL = "(SELECT o.origem FROM lk_leads o WHERE o.id != l.id AND o.origem NOT IN ('whatsapp', 'manual', 'resgate', 'teste', 'unknown') AND l.whatsapp IS NOT NULL AND substr(replace(replace(o.whatsapp, '+', ''), ' ', ''), -9) = substr(replace(replace(l.whatsapp, '+', ''), ' ', ''), -9) ORDER BY o.created_date DESC LIMIT 1)";
+const CANAL_PROVAVEL = `CASE WHEN l.origem IN ('whatsapp', 'manual') THEN COALESCE(l.canal_provavel, ${MESMO_TEL}) END`;
+function canaisProvaveis(d, onde, args) {
+  const linhas = d.prepare(`SELECT ${CANAL_PROVAVEL} provavel, CASE WHEN l.canal_provavel IS NOT NULL THEN 'mensagem' WHEN ${CANAL_PROVAVEL} IS NOT NULL THEN 'telefone' END pista, COUNT(*) n
+    FROM lk_leads l WHERE ${onde} AND l.origem IN ('whatsapp', 'manual') GROUP BY 1, 2 ORDER BY n DESC`).all(...args);
+  return { total: linhas.reduce((a, x) => a + x.n, 0), semPista: linhas.filter((x) => !x.provavel).reduce((a, x) => a + x.n, 0), porCanal: linhas.filter((x) => x.provavel) };
+}
 function coorte({ de, ate, origem, base = 'entrada' }) {
   const filtros = ["date(l.created_date, '-3 hours') BETWEEN ? AND ?", 'l.is_resgate = ?', "COALESCE(l.origem, '') != 'teste'"];
   const args = [de, ate, base === 'resgate' ? 1 : 0];
@@ -102,7 +110,7 @@ function leads(filtro) {
   const fichas = d.prepare(`SELECT f.banco, f.status, COUNT(DISTINCT f.lead_id) n FROM lk_fichas f JOIN lk_leads l ON l.id = f.lead_id WHERE ${onde} GROUP BY f.banco, f.status`).all(...args)
     .map((x) => ({ ...x, statusNome: nomeStatus(x.status) }));
   const origens = [...new Set(d.prepare('SELECT DISTINCT origem FROM lk_leads WHERE origem IS NOT NULL ORDER BY origem').all().map((x) => (DIRETOS.includes(x.origem) ? 'direto' : x.origem)).filter((o) => o !== 'teste'))];
-  return { filtro, total: { ...total, agendamentos }, porOrigem, porDia, fichas, origens, cobertura: total.demanda ? total.detalhados / total.demanda : null };
+  return { filtro, total: { ...total, agendamentos }, porOrigem, porDia, fichas, origens, diretos: canaisProvaveis(d, onde, args), cobertura: total.demanda ? total.detalhados / total.demanda : null };
 }
 
 // Por vendedor: o vendedor atual do lead (o LeadsOK não guarda quem estava com o lead em cada etapa
@@ -401,6 +409,7 @@ function painelComercial({ de, ate, horasParado = 2, metas = {} }) {
       vendas: linhaMeta(mes.vendas, metas.vendasMes || 0),
     },
     canais: L.porOrigem,
+    diretos: L.diretos,
     time: T.vendedores,
     semDadoConversa: !!L.total.semDadoConversa,
   };
