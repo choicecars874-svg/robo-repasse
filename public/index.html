@@ -1496,15 +1496,26 @@ async function carregarPlanilhaSdr(per) {
   $('#plObs').textContent = `${rotuloCap(per.rotulo)} · uma linha por lead trabalhado em cada dia, montada com o que foi registrado na Fila do SDR. Substitui a planilha preenchida à mão.`;
   $('#btnPlBaixar').onclick = () => { location.href = '/api/sdr/planilha?formato=csv&' + q; };
 }
-$('#btnPlLink').onclick = async () => {
-  let { chave } = await api('/api/sdr/planilha/chave');
-  if (!chave && !confirm('Criar um link secreto da planilha? Quem tiver o link vê nomes e telefones dos leads trabalhados. Dá para desligar depois.')) return;
-  if (!chave) chave = (await api('/api/sdr/planilha/chave', { method:'POST', body: '{}' })).chave;
+// Link do Google Sheets: tudo dentro da página (sem caixa de confirmação do navegador, que trava automações)
+function mostrarLinkPlanilha(chave) {
   const url = `${location.origin}/planilha-sdr/${chave}.csv`;
+  const formula = `=IMPORTDATA("${url}"; ","; "pt_BR")`;
   $('#plLink').hidden = false;
-  $('#plLink').innerHTML = `<b>Google Sheets que se atualiza sozinho:</b> na planilha do Google, abra a aba <b>Dados do painel</b> e cole na célula A1:<br><code style="user-select:all;word-break:break-all">=IMPORTDATA("${url}"; ","; "pt_BR")</code><br><span class="sub">Traz os últimos 30 dias e o Google atualiza a cada hora mais ou menos. O link é secreto: não compartilhe fora da loja.</span> <button class="btn" id="btnPlCopiar">Copiar fórmula</button> <button class="btn verm" id="btnPlDesligar">Desligar link</button>`;
-  $('#btnPlCopiar').onclick = async () => { try { await navigator.clipboard.writeText(`=IMPORTDATA("${url}"; ","; "pt_BR")`); alert('Fórmula copiada.'); } catch { prompt('Copie:', `=IMPORTDATA("${url}"; ","; "pt_BR")`); } };
-  $('#btnPlDesligar').onclick = async () => { if (!confirm('Desligar o link? A planilha do Google para de atualizar.')) return; await api('/api/sdr/planilha/chave', { method:'POST', body: JSON.stringify({ remover: true }) }); $('#plLink').hidden = true; alert('Link desligado.'); };
+  $('#plLink').innerHTML = `<b>Google Sheets que se atualiza sozinho:</b> na planilha do Google, abra a aba <b>Dados do painel</b> e cole na célula A1:<br><code id="plFormula" style="user-select:all;word-break:break-all">${esc(formula)}</code><br><span class="sub">Traz os últimos 30 dias e o Google atualiza mais ou menos a cada hora. O link é secreto: não compartilhe fora da loja.</span> <button class="btn" id="btnPlCopiar">Copiar fórmula</button> <button class="btn verm" id="btnPlDesligar">Desligar link</button>`;
+  $('#btnPlCopiar').onclick = async () => { try { await navigator.clipboard.writeText(formula); $('#btnPlCopiar').textContent = 'Copiada'; } catch { $('#btnPlCopiar').textContent = 'Selecione e copie a fórmula acima'; } };
+  $('#btnPlDesligar').onclick = async () => {
+    const b = $('#btnPlDesligar');
+    if (!b.dataset.conf) { b.dataset.conf = '1'; b.textContent = 'Clique de novo para desligar (a planilha do Google para de atualizar)'; return; }
+    await api('/api/sdr/planilha/chave', { method:'POST', body: JSON.stringify({ remover: true }) });
+    $('#plLink').innerHTML = '<b>Link desligado.</b> A planilha do Google parou de atualizar. Para religar, clique em "Link para Google Sheets".';
+  };
+}
+$('#btnPlLink').onclick = async () => {
+  const { chave } = await api('/api/sdr/planilha/chave');
+  if (chave) return mostrarLinkPlanilha(chave);
+  $('#plLink').hidden = false;
+  $('#plLink').innerHTML = `<b>Criar o link secreto da planilha?</b> Quem tiver o link vê nomes e telefones dos leads trabalhados, sem precisar de login. Dá para desligar depois. <button class="btn verde" id="btnPlCriar">Criar link</button>`;
+  $('#btnPlCriar').onclick = async () => { const r = await api('/api/sdr/planilha/chave', { method:'POST', body: '{}' }); mostrarLinkPlanilha(r.chave); };
 };
 async function carregarSdrRes() {
   avisoLk();
