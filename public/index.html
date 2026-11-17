@@ -1621,7 +1621,7 @@ const soDigitos = (t) => String(t || '').replace(/\D/g, '');
 const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem enviada', agendou: 'agendou', interesse_visita: 'topou visitar, sem horário', ja_comprou: 'já comprou', sem_interesse: 'sem interesse' };
 // Na linha só o resultado da ligação. Agendou / sem interesse / já comprou ficam no briefing de "Atendeu";
 // "Não atendeu" já abre a mensagem de recado (cadência: ligação WhatsApp, ligação telefone, mensagem, follow-up)
-const BOTOES_SDR = `<button class="btn verde" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button>`;
+const BOTOES_SDR = `<button class="btn verde" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button><button class="btn" data-c="mensagem:atendeu" title="O cliente respondeu a mensagem (no seu WhatsApp ou no LeadsOK)">Respondeu msg</button>`;
 const leadsSdr = {};
 // "Ligar": no celular abre o discador; no computador copia o número (o SDR liga pelo celular ou pelo WhatsApp do computador)
 const ehCelular = () => matchMedia('(pointer: coarse)').matches;
@@ -1708,7 +1708,7 @@ function ligarBotoesSdr(raiz) {
   raiz.querySelectorAll('[data-c]').forEach((b) => b.onclick = async () => {
     const [tipo, resultado] = b.dataset.c.split(':');
     const linha = b.closest('[data-lead]');
-    if (['atendeu', 'agendou'].includes(resultado)) return abrirBriefing(linha.dataset.lead, linha.querySelector('b')?.textContent || 'Lead', resultado);
+    if (['atendeu', 'agendou'].includes(resultado)) return abrirBriefing(linha.dataset.lead, linha.querySelector('b')?.textContent || 'Lead', resultado, tipo);
     if (['ja_comprou', 'sem_interesse'].includes(resultado) && !confirm('Encerrar este lead (sai da fila do SDR)?')) return;
     await api('/api/sdr/contato', { method:'POST', body: JSON.stringify({ leadId: linha.dataset.lead, tipo, resultado }) });
     if (resultado === 'nao_atendeu') abrirRecado(linha.dataset.lead);
@@ -1716,14 +1716,14 @@ function ligarBotoesSdr(raiz) {
   });
 }
 // Briefing da ligação: resumo, interesse e próximo passo (o lead muda de etapa conforme a escolha)
-function abrirBriefing(leadId, nome, resultado) {
+function abrirBriefing(leadId, nome, resultado, tipo = 'ligacao') {
   // datas sempre no horário de Brasília, seja qual for o fuso do aparelho
   const amanha10 = diaSP(-1) + 'T10:00';
   const local = (x) => x;
   const lerSP = (v) => (v ? Date.parse(v.slice(0, 16) + ':00-03:00') : NaN);
   const m = document.createElement('div');
   m.className = 'modalFundo';
-  m.innerHTML = `<div class="modal card"><h2>Briefing da ligação · ${esc(nome)}</h2>
+  m.innerHTML = `<div class="modal card"><h2>${tipo === 'mensagem' ? 'Briefing da conversa no WhatsApp' : 'Briefing da ligação'} · ${esc(nome)}</h2>
     <label>O que conversou (carro, troca, pagamento, objeção)</label><textarea id="bfNota" style="min-height:110px;font-family:inherit"></textarea>
     <label>Interesse</label><div class="opcoes">${['quente', 'morno', 'frio'].map((x) => `<label><input type="radio" name="bfInt" value="${x}" ${x === 'morno' ? 'checked' : ''}> ${x}</label>`).join('')}</div>
     <label>Próximo passo</label><div class="opcoes coluna">
@@ -1743,7 +1743,7 @@ function abrirBriefing(leadId, nome, resultado) {
     if (!prox) return alert('Escolha o próximo passo.');
     const nota = m.querySelector('#bfNota').value.trim();
     if (!nota) return alert('Escreva o resumo da conversa.');
-    const corpo = { leadId, tipo: 'ligacao', nota, interesse: m.querySelector('input[name=bfInt]:checked').value, resultado: prox === 'retornar' ? 'atendeu' : prox };
+    const corpo = { leadId, tipo, nota, interesse: m.querySelector('input[name=bfInt]:checked').value, resultado: prox === 'retornar' ? 'atendeu' : prox };
     if (prox === 'retornar') {
       const t = lerSP(m.querySelector('#bfData').value);
       if (!t || t < Date.now() - 60000) return alert('Escolha uma data de retorno no futuro.');
