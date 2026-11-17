@@ -480,10 +480,22 @@ function iniciarPainel() {
     const b = req.body || {};
     const c = config.get();
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
-    const lembreteAuto = { ativo: !!b.ativo, horasAntes: n(b.horasAntes, 0.5, 12, 2), horaInicio: n(b.horaInicio, 6, 12, 8), horaFim: n(b.horaFim, 14, 22, 20), maxDia: n(b.maxDia, 1, 30, 15), comFoto: b.comFoto !== false };
+    const lembreteAuto = { ativo: !!b.ativo, horasAntes: n(b.horasAntes, 0.5, 12, 2), horaInicio: n(b.horaInicio, 6, 12, 8), horaFim: n(b.horaFim, 14, 22, 20), maxDia: n(b.maxDia, 1, 30, 15), comFoto: b.comFoto !== false, estiloCard: b.estiloCard === 'cor' ? 'cor' : 'pb' };
     const nomeSdr = String(b.nomeSdr ?? c.sdr.nomeSdr ?? '').trim().slice(0, 40);
     config.salvar({ ...c, sdr: { ...c.sdr, lembreteAuto, nomeSdr } });
     res.json(sdrWhats.status());
+  });
+  // exemplo do card com um carro do estoque (para ver antes de ligar o automático)
+  app.get('/api/sdr/whats/card-exemplo.png', async (req, res) => {
+    try {
+      const d = require('./leadsok/banco').abrir();
+      const carro = d?.prepare('SELECT * FROM lk_estoque WHERE ativo = 1 AND imagem IS NOT NULL ORDER BY ultima_vez DESC LIMIT 1').get();
+      if (!carro) return res.status(404).json({ erro: 'Nenhum carro com foto no estoque ainda (veja Comercial → Estoque)' });
+      const png = await sdrWhats.cardDaVisita({ nome: 'João', carro, data: new Date(Date.now() + 2 * 3600000).toISOString() });
+      res.set('Content-Type', 'image/png').set('Cache-Control', 'no-store').send(png);
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
   });
   // teste: manda o lembrete de exemplo para o próprio número conectado
   app.post('/api/sdr/whats/teste', async (_, res) => {

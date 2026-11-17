@@ -22,7 +22,7 @@ let sock = null;
 let enviando = false;
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
-const cfg = () => ({ ativo: false, horasAntes: 2, horaInicio: 8, horaFim: 20, maxDia: 15, comFoto: true, ...((config.get().sdr || {}).lembreteAuto || {}) });
+const cfg = () => ({ ativo: false, horasAntes: 2, horaInicio: 8, horaFim: 20, maxDia: 15, comFoto: true, estiloCard: 'pb', ...((config.get().sdr || {}).lembreteAuto || {}) });
 const horaSP = (t = Date.now()) => Number(new Date(t).toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false })) % 24;
 const diaSP = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 function registrar(tipo, texto) {
@@ -111,6 +111,21 @@ function carroNoEstoque(textoCarro) {
   return melhor && melhor.pontos >= 2 ? melhor : null;
 }
 
+// ---------- Card da visita ----------
+// "João, seu Jeep Compass está pronto te esperando" + "HOJE · 15H"
+function fraseDoCard({ nome, carro, data }) {
+  const primeiro = String(nome || '').trim().split(/\s+/)[0] || '';
+  const modelo = carro ? `${carro.marca || ''} ${carro.modelo || ''}`.trim() : '';
+  const hora = new Date(data).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }).replace(':00', 'h').replace(':', 'h');
+  const dia = diaSP(Date.parse(data)) === diaSP() ? 'Hoje' : new Date(data).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long' }).replace('-feira', '');
+  return { titulo: `${primeiro ? primeiro + ', s' : 'S'}eu ${modelo || 'carro'} está pronto te esperando`, subtitulo: `${dia} · ${hora}` };
+}
+async function cardDaVisita({ nome, carro, data }) {
+  const { gerarCard } = require('./card');
+  const f = fraseDoCard({ nome, carro, data });
+  return gerarCard({ foto: carro.imagem, ...f, pb: cfg().estiloCard !== 'cor' });
+}
+
 // ---------- Texto do lembrete ----------
 function textoLembrete({ nome, carro, data, sdr }) {
   const modelo = (config.get().sdr || {}).lembreteDia ||
@@ -166,10 +181,14 @@ async function enviarLembrete(v, { por = 'automático', teste = false } = {}) {
   const sdr = (config.get().sdr || {}).nomeSdr || por;
   const texto = textoLembrete({ nome: v.nome, carro: v.carro, data: v.data, sdr });
   const carro = cfg().comFoto ? carroNoEstoque(v.carro) : null;
-  if (carro?.imagem) await sock.sendMessage(existe.jid, { image: { url: carro.imagem }, caption: texto });
-  else await sock.sendMessage(existe.jid, { text: texto });
+  let card = null;
+  if (carro?.imagem) {
+    // card no estilo story (foto do carro + frase + logo); se falhar, manda a foto do carro como está
+    card = await cardDaVisita({ nome: v.nome, carro, data: v.data }).catch((e) => { registrar('aviso', `Card não foi montado (${e.message}): vai a foto simples`); return null; });
+    await sock.sendMessage(existe.jid, card ? { image: card, caption: texto } : { image: { url: carro.imagem }, caption: texto });
+  } else await sock.sendMessage(existe.jid, { text: texto });
   if (!teste) banco.abrir().prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(v.lead_id), v.data, 'lembrete', 'automático', Date.now());
-  return { comFoto: !!carro?.imagem, texto };
+  return { comFoto: !!carro?.imagem, comCard: !!card, texto };
 }
 
 async function rodada() {
@@ -217,4 +236,4 @@ function status() {
 // só para teste automatizado: usa um socket falso
 const _usarSock = (s) => { sock = s; estado.status = 'conectado'; estado.numero = '5511999990000'; };
 
-module.exports = { _usarSock, rodada, iniciar, conectar, desconectar, status, enviarLembrete, carroNoEstoque, textoLembrete, pendentesHoje };
+module.exports = { cardDaVisita, fraseDoCard, _usarSock, rodada, iniciar, conectar, desconectar, status, enviarLembrete, carroNoEstoque, textoLembrete, pendentesHoje };
