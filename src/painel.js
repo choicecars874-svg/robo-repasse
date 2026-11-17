@@ -315,6 +315,13 @@ function iniciarPainel() {
   });
 
   // LeadsOK (comercial): a senha nunca volta para o navegador
+  app.post('/api/leadsok/acoes-manuais', (req, res) => {
+    try {
+      res.json({ ok: true, acoes: leadsok.definirAcoesManuais(String(req.body.texto || '')) });
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
   app.post('/api/leadsok/testar-detalhes', async (_, res) => {
     try {
       res.json(await leadsok.testarDetalhes());

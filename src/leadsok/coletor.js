@@ -68,7 +68,25 @@ const estado = {
   agendaSemLead: null,
 };
 let cliente = null;
-const obterCliente = () => (cliente ||= criarCliente(credenciais()));
+const obterCliente = () => (cliente ||= criarCliente({ ...credenciais(), acoesManuais: () => cfg.acoesManuais || {} }));
+// ids de ações informados à mão: "nome=id" por linha (ou JSON). Só aceita nomes que o painel usa.
+function definirAcoesManuais(texto) {
+  const { PERMITIDAS, ESCRITAS } = require('./cliente');
+  const validos = new Set([...PERMITIDAS, ...ESCRITAS]);
+  const out = {};
+  let obj = null;
+  try { obj = JSON.parse(texto); } catch {}
+  const pares = obj && typeof obj === 'object' ? Object.entries(obj) : String(texto || '').split(/\n+/).map((l) => l.split(/[=:\s]+/).filter(Boolean));
+  for (const [nome, id] of pares) {
+    if (!nome || !id) continue;
+    if (!validos.has(nome)) throw new Error(`Ação desconhecida: ${nome}`);
+    if (!/^[0-9a-f]{40,44}$/i.test(id)) throw new Error(`Id inválido para ${nome} (precisa ter 40 a 44 caracteres hexadecimais)`);
+    out[nome] = id.toLowerCase();
+  }
+  cfg.acoesManuais = out;
+  salvarCfg();
+  return out;
+}
 
 function registrar(tipo, inicio, ok, erro, contagens) {
   try {
@@ -614,6 +632,7 @@ function status() {
     cargaInicialFeita: !!cfg.cargaInicialFeita,
     horasParado: cfg.horasParado,
     gravarNotas: !!cfg.gravarNotas,
+    acoesManuais: cfg.acoesManuais || {},
     formatoNotas: cfg.formatoNotas || null,
     erroBanco: banco.erro(),
     problema: estado.falhasSeguidas >= 2 ? `Integração LeadsOK com problema: ${estado.ultimoErro}` : null,
@@ -626,4 +645,4 @@ function definirHorasParado(h) {
   salvarCfg();
 }
 
-module.exports = { atualizarAgora, conversaRecente, notasDoLead, canalPelaMensagem, testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };
+module.exports = { definirAcoesManuais, atualizarAgora, conversaRecente, notasDoLead, canalPelaMensagem, testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };

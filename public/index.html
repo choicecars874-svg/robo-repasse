@@ -705,6 +705,10 @@
     <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn verde" id="btnLkSalvar">Salvar e conectar</button><button class="btn" id="btnLkTestar">Testar conexão</button><button class="btn" id="btnLkSync">Sincronizar agora</button><button class="btn" id="btnLkDiag">Testar coleta de detalhes</button><button class="btn verm" id="btnLkDesligar">Desligar</button></p>
     <label style="display:flex;gap:8px;align-items:center;color:var(--txt);margin:14px 0 4px"><input type="checkbox" id="lkNotas" style="width:auto"> Gravar o briefing da Fila do SDR nas <b>Notas internas</b> do lead no LeadsOK (o cliente não vê; só acrescenta, nunca apaga)</label>
     <p class="sub" id="lkNotasInfo" style="margin:0 0 10px"></p>
+    <details><summary class="sub">Ids das ações (avançado: só se o "Testar coleta de detalhes" disser que a ação não foi achada)</summary>
+      <p class="sub" style="margin:8px 0">Um por linha, no formato <code>nome=id</code>. O id é o valor do cabeçalho <code>Next-Action</code> que o LeadsOK manda ao abrir uma conversa. Ele muda quando o LeadsOK publica uma versão nova: aí a busca automática volta a valer.</p>
+      <textarea id="lkAcoesManuais" style="min-height:90px;font-family:var(--mono);font-size:13px" placeholder="getChatMessages=7f1a…&#10;getCustomerJourneyLog=40b2…"></textarea>
+      <p><button class="btn" id="btnLkAcoes">Salvar ids</button></p></details>
     <details><summary class="sub">Últimas sincronizações</summary><pre id="lkLog" style="max-height:220px;overflow:auto;margin-top:10px"></pre></details>
   </div>
   <div class="card">
@@ -2005,6 +2009,7 @@ async function carregarLkCfg() {
   $('#lkDot').className = 'dot ' + (ok ? 'on' : e.configurado ? 'off' : '');
   $('#lkStatus').textContent = e.erroBanco ? 'Erro' : !e.configurado ? 'Não conectado' : !e.ativo ? 'Desligado' : e.rodando ? 'Sincronizando…' : e.problema ? 'Com problema' : 'Conectado';
   if (document.activeElement !== $('#lkEmail')) $('#lkEmail').value = e.email || '';
+  if (document.activeElement !== $('#lkAcoesManuais')) $('#lkAcoesManuais').value = Object.entries(e.acoesManuais || {}).map(([k, v]) => `${k}=${v}`).join('\n');
   if (document.activeElement !== $('#lkHoras')) $('#lkHoras').value = e.horasParado;
   $('#lkNotas').checked = !!e.gravarNotas;
   $('#lkNotasInfo').textContent = e.gravarNotas ? (e.formatoNotas ? 'Ligado e confirmado: as notas estão sendo gravadas no LeadsOK.' : 'Ligado: a primeira gravação vai conferir se o LeadsOK aceitou. Veja no Histórico de contatos da Fila do SDR.') : 'Desligado: o briefing fica só no painel.';
@@ -2035,6 +2040,10 @@ $('#lkNotas').onchange = async () => {
   await api('/api/leadsok/gravar-notas', { method:'POST', body: JSON.stringify({ ativo: $('#lkNotas').checked }) }); carregarLkCfg();
 };
 $('#btnLkTestar').onclick = async () => { try { const r = await api('/api/leadsok/testar', { method:'POST' }); alert(`Conexão ok: ${r.leadsNovos} leads novos no LeadsOK.`); } catch (e) { alert(e.message); } };
+$('#btnLkAcoes').onclick = async () => {
+  try { const r = await api('/api/leadsok/acoes-manuais', { method:'POST', body: JSON.stringify({ texto: $('#lkAcoesManuais').value }) }); alert(`${Object.keys(r.acoes).length} id(s) salvos. Clique em "Testar coleta de detalhes".`); }
+  catch (e) { alert(e.message); }
+};
 $('#btnLkDiag').onclick = async () => {
   const b = $('#btnLkDiag'); b.disabled = true; b.textContent = 'Testando…';
   try {

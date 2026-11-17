@@ -12,7 +12,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 class SessaoExpirada extends Error {}
 
-function criarCliente({ email, senha }) {
+function criarCliente({ email, senha, acoesManuais = () => ({}) }) {
   const cookies = new Map();
   let acoes = null; // nome -> id
 
@@ -174,11 +174,13 @@ function criarCliente({ email, senha }) {
   // ---------- Server actions (só leitura) ----------
   async function acao(nome, args = [], tentativa = 0) {
     if (!ESCRITAS.has(nome) && (!PERMITIDAS.has(nome) || PROIBIDAS.test(nome.replace(/^get|^list/, '')))) throw new Error(`Ação ${nome} não é permitida (só leitura)`);
-    if (!acoes) await descobrirAcoes();
-    const id = acoes[nome];
+    // id informado à mão (Integrações → LeadsOK) vale quando a busca automática não acha a ação
+    const manual = (acoesManuais() || {})[nome];
+    if (!acoes) await descobrirAcoes().catch((e) => { if (!manual) throw e; acoes = {}; });
+    const id = acoes[nome] || manual;
     if (!id) {
-      if (tentativa) throw new Error(`Ação ${nome} não existe mais no LeadsOK`);
-      await descobrirAcoes();
+      if (tentativa) throw new Error(`Ação ${nome} não existe mais no LeadsOK (a busca automática não achou; dá para informar o id em Integrações → LeadsOK → "Ids das ações")`);
+      await descobrirAcoes().catch(() => {});
       return acao(nome, args, 1);
     }
     const r = await req(paginaDaAcao[nome] || '/atendimentos', {
@@ -304,4 +306,4 @@ function extrairArray(texto, chave) {
   return null;
 }
 
-module.exports = { criarCliente, extrairLeads, extrairArray, resolverRefs, camposDoFormulario, SessaoExpirada };
+module.exports = { PERMITIDAS, ESCRITAS, criarCliente, extrairLeads, extrairArray, resolverRefs, camposDoFormulario, SessaoExpirada };
