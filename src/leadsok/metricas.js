@@ -400,10 +400,10 @@ function planilhaSdr({ de, ate, por } = {}) {
   return { de, ate, por: por || null, totais: t, linhas };
 }
 const COLUNAS_PLANILHA = [['data', 'Data'], ['cliente', 'Cliente'], ['contato', 'Contato'], ['chamada', 'Chamada'], ['recontato', 'Recontato'], ['cidade', 'Cidade'], ['orcamento', 'Orçamento'], ['modelo', 'Modelo desejado'], ['troca', 'Veículo na troca?'], ['trocaModelo', 'Modelo (troca)'], ['trocaKm', 'Km'], ['trocaQuitado', 'Quitado?'], ['trocaLeilao', 'Leilão?'], ['pagamento', 'Pagamento'], ['entrada', 'Entrada'], ['parcela', 'Parcela'], ['preAprovado', 'Pré aprovado?'], ['cnh', 'CNH?'], ['visitaMarcada', 'Visita marcada?'], ['dataVisita', 'Data da visita'], ['proximoContato', 'Próximo contato'], ['visitou', 'Visitou?'], ['fechou', 'Fechou?'], ['observacoes', 'Observações'], ['por', 'SDR']];
-// CSV (separador ";" e BOM, para abrir certo no Excel e no Google Sheets)
-function planilhaCsv(p) {
-  const esc = (v) => { const t = String(v ?? ''); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-  return '\ufeff' + [COLUNAS_PLANILHA.map((c) => c[1]).join(';'), ...p.linhas.map((l) => COLUNAS_PLANILHA.map(([k]) => esc(l[k])).join(';'))].join('\r\n');
+// CSV: para o Excel, separador ";" e BOM; para o Google Sheets (IMPORTDATA), vírgula e sem BOM
+function planilhaCsv(p, { sep = ';', bom = true } = {}) {
+  const esc = (v) => { const t = String(v ?? '').replace(/\r?\n/g, ' '); return /[";,]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  return (bom ? '\ufeff' : '') + [COLUNAS_PLANILHA.map((c) => c[1]).join(sep), ...p.linhas.map((l) => COLUNAS_PLANILHA.map(([k]) => esc(l[k])).join(sep))].join('\r\n');
 }
 
 // Gestor do dia: a varredura que um gestor faria toda manhã. Tudo o que está largado, em listas prontas para cobrar.

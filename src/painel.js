@@ -120,7 +120,7 @@ function iniciarPainel() {
     const hoje = comercial.diaSP();
     const de = /^\d{4}-\d{2}-\d{2}$/.test(req.query.de || '') ? req.query.de : comercial.diaSP(Date.now() - 29 * 86400000);
     const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : hoje;
-    res.set('Content-Type', 'text/csv; charset=utf-8').set('Cache-Control', 'no-store').send(comercial.planilhaCsv(comercial.planilhaSdr({ de, ate })));
+    res.set('Content-Type', 'text/csv; charset=utf-8').set('Cache-Control', 'no-store').send(comercial.planilhaCsv(comercial.planilhaSdr({ de, ate }), { sep: ',', bom: false }));
   });
   app.get('/sair', (_, res) => res.clearCookie('painel').redirect('/login'));
 
