@@ -415,10 +415,12 @@ function iniciarPainel() {
     const b = comercial.briefingLead(req.params.id);
     if (b.erro) return res.status(404).json(b);
     const [conv, notas] = await Promise.all([
-      leadsok.conversaRecente(req.params.id, 30).catch((e) => ({ mensagens: [], motivo: e.message })),
+      leadsok.conversaRecente(req.params.id, 120).catch((e) => ({ mensagens: [], motivo: e.message })),
       leadsok.notasDoLead(req.params.id).catch(() => ''),
     ]);
-    res.set('Cache-Control', 'no-store').json({ ...b, conversa: conv, notasLeadsOK: notas });
+    // fase do lead pela conversa (checklist); na tela vão só as últimas 30 mensagens
+    const fase = require('./leadsok/fase').faseDoLead(conv.mensagens, { agenda: b.agenda, ficha: b.lead.ficha, nome: b.lead.nome });
+    res.set('Cache-Control', 'no-store').json({ ...b, conversa: { ...conv, mensagens: conv.mensagens.slice(-30) }, notasLeadsOK: notas, fase });
   });
   app.get('/api/sdr/historico', (req, res) => res.json(comercial.historicoContatos({ dia: req.query.dia, por: req.query.por })));
   app.get('/api/sdr/buscar', (req, res) => res.json(comercial.buscarLead(req.query.q)));

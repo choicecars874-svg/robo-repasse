@@ -74,7 +74,7 @@ const PADRAO = {
   // cadência do SDR (Fila do SDR), texto do recado de "Não atendeu" e argumentário de objeções
   sdr: {
     horasTentarDeNovo: 3, // não atendeu: volta para o follow-up depois disso
-    horasAguardandoRecado: 24, // mandou recado e o cliente não respondeu: volta para o follow-up
+    horasAguardandoRecado: 2, // mandou recado e o cliente não respondeu: volta para o follow-up
     tentativasMax: 3, // tentativas seguidas sem atender até ir para "Sem contato"
     diasNovos: 7, // "Ligar agora": leads de até tantos dias
     vendedoresFora: ['Lucas Ribeiro'], // fora do processo de cobrança (ex.: consignado): não aparecem em alertas, Gestor do dia nem Fila do SDR

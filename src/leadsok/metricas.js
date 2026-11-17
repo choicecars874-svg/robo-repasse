@@ -449,7 +449,7 @@ function painelComercial({ de, ate, horasParado = 2, metas = {} }) {
 // e não arquivados. Cada lead aparece numa lista só (a mais urgente).
 function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario = '' } = {}) {
   const hTentar = Number(cadencia.horasTentarDeNovo) || 3;
-  const hRecado = Number(cadencia.horasAguardandoRecado) || 24;
+  const hRecado = Number(cadencia.horasAguardandoRecado) || 2;
   const maxTent = Number(cadencia.tentativasMax) || 3;
   const diasNovos = Number(cadencia.diasNovos) || 7;
   const hResgate = Number(cadencia.horasSemRespostaResgate) || 1;

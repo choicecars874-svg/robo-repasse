@@ -162,6 +162,8 @@
   .avisoLigando { margin-top:6px; font-size:13px; color:var(--ouro); font-weight:600; }
   .modal.brf { max-width:760px; max-height:88vh; overflow:auto; } .brf h3 { font-size:15px; margin:18px 0 8px; }
   .brfGrade { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px 18px; } .brfGrade div { display:flex; flex-direction:column; gap:2px; } .brfGrade b { font-weight:600; font-size:14.5px; }
+  .brfFase { border:1px solid rgba(226,179,80,.35); background:rgba(226,179,80,.06); border-radius:14px; padding:12px 14px; margin:6px 0 14px; display:flex; flex-direction:column; gap:6px; } .brfFase b { font-size:16px; }
+  .brfCheck { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:13.5px; color:var(--sub); } .brfCheck span.ok { color:var(--verde); } .brfCheck i { color:var(--sub); font-style:normal; font-size:12.5px; }
   .brfItem { border-left:2px solid var(--borda2); padding:6px 10px; margin:6px 0; font-size:14px; }
   .brfChat { max-height:320px; overflow:auto; display:flex; flex-direction:column; gap:8px; padding:4px; } .brfChat .msg { max-width:80%; padding:8px 12px; border-radius:12px; background:rgba(255,255,255,.05); font-size:14px; }
   .brfChat .msg.cliente { align-self:flex-start; } .brfChat .msg.loja { align-self:flex-end; background:rgba(226,179,80,.12); }
@@ -1539,7 +1541,7 @@ async function carregarAgenda() {
         ${a.concluido && !st ? `<div style="margin-top:4px"><span class="tag">concluído no LeadsOK${a.motivo ? ': ' + esc(a.motivo) : ''}</span></div>` : !passou && !st ? `<div style="margin-top:4px">${seloConfirmacao(a)}</div>` : ''}
         ${a.obs ? `<div class="briefing">${esc(a.obs)}</div>` : ''}
         ${a.nome ? '' : '<span class="tag ruimTag">LeadsOK não enviou o nome</span> '}${a.vendedor ? '' : '<span class="tag ruimTag">sem vendedor responsável</span>'}</div>
-      <div class="acoes">${!passou && !st && !a.concluido ? `<button class="btn verde" data-conf="${tipoMsgVisita(a.data, false)}">${ROTULO_MSG[tipoMsgVisita(a.data, false)]}</button>${a.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('') + (st ? '<button class="btn" data-v="">Limpar</button>' : '') + ((!st && passou && !a.concluido) || st === 'nao_veio' ? '<button class="btn" data-conf="nao_veio">Mandar mensagem: não veio</button>' : '')}</div></div>`;
+      <div class="acoes">${a.identificado ? '<button class="btn" data-briefing="1">Briefing</button>' : ''}${!passou && !st && !a.concluido ? `<button class="btn verde" data-conf="${tipoMsgVisita(a.data, false)}">${ROTULO_MSG[tipoMsgVisita(a.data, false)]}</button>${a.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${st === v ? (c || 'verde') + ' marcado' : ''}" data-v="${v}">${n}</button>`).join('') + (st ? '<button class="btn" data-v="">Limpar</button>' : '') + ((!st && passou && !a.concluido) || st === 'nao_veio' ? '<button class="btn" data-conf="nao_veio">Mandar mensagem: não veio</button>' : '')}</div></div>`;
   }).join('') || '<div class="vazio">Nenhum agendamento no período.</div>';
   document.querySelectorAll('.agItem [data-conf]').forEach((b) => b.onclick = () => {
     const it = b.closest('.agItem');
@@ -1617,7 +1619,7 @@ const LISTAS_SDR = [
   ['abandonados', 'Sem resposta de ninguém (outros vendedores)', 'O cliente mandou mensagem há mais de 1 h e o vendedor dele não respondeu. Ligue antes que esfrie e registre o que combinou.'],
   ['interesseIa', 'Interesse em agendar: confirmar horário', 'O cliente topou visitar (numa ligação, ou a IA marcou), mas o horário ainda não foi confirmado com uma pessoa. Leia o briefing, chame o cliente e feche dia e hora. Sem isso, não é agendamento de verdade.'],
   ['novos', 'Ligar agora', 'Leads dos últimos 7 dias que você ainda não trabalhou, do mais novo para o mais velho. Ligue pelo WhatsApp, depois no telefone; se não atender, deixe o recado.'],
-  ['retornar', 'Follow-up: não responderam', 'Quem não atendeu há mais de 3 h, quem não respondeu o recado em 24 h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.'],
+  ['retornar', 'Follow-up: não responderam', 'Quem não atendeu há mais de 3 h, quem não respondeu o recado em 2 h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.'],
   ['visitas', 'Follow-up de visitas', 'Visitas com horário confirmado, ou agendadas por uma pessoa. Antes do horário: mande a confirmação. Depois: marque se veio e se comprou.'],
   ['posVisita', 'Follow-up pós-visita', 'Não veio, ou veio e não comprou (últimos 14 dias). Remarcar a visita ou entender o que faltou.'],
   ['retomar', 'Retomar leads antigos', 'Leads de 7 a 30 dias atrás com a conversa parada.'],
@@ -1760,6 +1762,9 @@ async function abrirBriefingLead(leadId) {
   const linhaInfo = (rot, val) => val ? `<div><span class="sub">${rot}</span><b>${val}</b></div>` : '';
   m.querySelector('.modal').innerHTML = `<div class="cardTopo"><h2>Briefing · ${esc(l.nome || 'Lead')}</h2><button class="btn" id="brfX">Fechar</button></div>
     <p class="sub" style="margin-top:0">O que já se sabe antes de falar com ele. Leia antes de ligar.</p>
+    ${b.fase ? `<div class="brfFase"><span class="eyebrow">Fase do lead (pela conversa no LeadsOK)</span><b>${esc(b.fase.fase)}</b>
+      <div class="brfCheck">${b.fase.itens.map((x) => `<span class="${x.ok ? 'ok' : ''}" title="${esc(x.detalhe)}">${x.ok ? '✓' : '·'} ${esc(x.item)}${x.ok && x.detalhe ? ` <i>${esc(x.detalhe)}</i>` : ''}</span>`).join('')}</div>
+      ${b.conversa.mensagens.length ? '' : '<span class="sub">Sem conversa no LeadsOK para analisar.</span>'}</div>` : ''}
     <div class="brfGrade">
       ${linhaInfo('Telefone', l.whatsapp ? esc('+' + soDigitos(l.whatsapp)) : '')}
       ${linhaInfo('Canal', esc(canal(l.origem)) + (l.provavel ? ` <span class="sub">(provável: ${esc(canal(l.provavel))})</span>` : ''))}
@@ -1897,7 +1902,7 @@ async function carregarSdr() {
             <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}${l.tentativas ? ` · ${l.tentativas} tentativa(s) sem atender` : ''}</div>
             ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : uc.resultado === 'interesse_visita' ? 'confirmar até' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
           <div class="acoes">${tel ? `<button class="btn" data-ligar="${tel}">Ligar</button>` : ''}
-            ${kpv ? '<button class="btn verde" data-conf="nao_veio">Mandar mensagem: não veio</button>' : ''}${kv && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') + '<button class="btn" data-conf="nao_veio">Mandar mensagem: não veio</button>' : kv ? `<button class="btn verde" data-conf="${tipoMsgVisita(l.agenda_data, false)}">${ROTULO_MSG[tipoMsgVisita(l.agenda_data, false)]}</button>${l.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : BOTOES_SDR}</div></div>`;
+            ${kpv ? '<button class="btn verde" data-conf="nao_veio">Mandar mensagem: não veio</button>' : ''}${kv && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') + '<button class="btn" data-conf="nao_veio">Mandar mensagem: não veio</button>' : kv ? `<button class="btn" data-briefing="1">Briefing</button><button class="btn verde" data-conf="${tipoMsgVisita(l.agenda_data, false)}">${ROTULO_MSG[tipoMsgVisita(l.agenda_data, false)]}</button>${l.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : BOTOES_SDR}</div></div>`;
       }).join('') || '<div class="vazio">Nada nesta lista agora.</div>'}</div>`;
   }).join('');
   ligarBotoesSdr($('#sdListas'));
