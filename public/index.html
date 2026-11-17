@@ -355,6 +355,15 @@
   <div id="sdListas"></div>
   <div class="card"><div class="cardTopo"><div><h2>Etapas</h2><p class="sub">Onde está cada lead que já foi trabalhado. Clique numa etapa para ver os leads.</p></div></div>
     <div class="atalhos" id="sdEtapasBtns"></div><div id="sdEtapa"></div></div>
+  <div class="card" id="swCard"><details id="swDet"><summary><h2 style="display:inline">WhatsApp do SDR · lembrete automático</h2> <span class="sub" id="swResumo"></span></summary>
+    <p class="sub" style="margin:10px 0">No dia da visita, o painel manda sozinho, pelo WhatsApp do SDR, o lembrete com a foto do carro do cliente (do estoque) e o texto do lembrete da Configuração do SDR. Só para quem tem visita marcada, uma mensagem por visita, dentro do horário e com intervalo entre os envios.</p>
+    <div class="cardTopo" style="flex-wrap:wrap;gap:10px"><div><b id="swStatus">…</b><div class="sub" id="swNumero"></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn verde" id="btnSwConectar">Conectar WhatsApp</button><button class="btn" id="btnSwTeste">Enviar teste para mim</button><button class="btn verm" id="btnSwDesc">Desconectar</button></div></div>
+    <div id="swQr" hidden style="margin:12px 0"><p class="sub">No celular do SDR: WhatsApp > Configurações > Aparelhos conectados > Conectar aparelho, e aponte para o código.</p><img id="swQrImg" alt="QR Code" style="width:240px;height:240px;background:#fff;border-radius:12px;padding:8px"></div>
+    <div class="linha" style="margin-top:12px"><div style="align-self:end"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="swAtivo" style="width:auto"> Enviar o lembrete automático</label></div><div><label>Quantas horas antes da visita</label><input type="number" step="0.5" min="0.5" max="12" id="swHoras"></div><div><label>Só entre (hora)</label><input type="number" min="6" max="12" id="swIni"></div><div><label>e (hora)</label><input type="number" min="14" max="22" id="swFim"></div><div><label>Máximo por dia</label><input type="number" min="1" max="30" id="swMax"></div><div><label>Nome que assina</label><input id="swNome" placeholder="ex.: Marcos"></div><div style="align-self:end"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="swFoto" checked style="width:auto"> Mandar a foto do carro</label></div></div>
+    <p><button class="btn" id="btnSwSalvar">Salvar</button></p>
+    <h3 style="font-size:15px;margin:14px 0 6px">Lembretes de hoje</h3><div id="swHoje"></div>
+    <details style="margin-top:10px"><summary class="sub">Registro</summary><pre id="swLog" style="max-height:200px;overflow:auto"></pre></details>
+  </details></div>
   <div class="card"><details id="sdObjDet"><summary><h2 style="display:inline">Argumentário de objeções</h2> <span class="sub">· o que responder quando o cliente trava</span></summary><div id="sdObjecoes" style="margin-top:12px"></div></details></div>
   <div class="card soAdmin" id="sdCfgCard"><details><summary><h2 style="display:inline">Configuração do SDR</h2> <span class="sub">· prazos da cadência, texto do recado e objeções</span></summary>
     <div class="linha" style="margin-top:12px"><div><label>Não atendeu: tentar de novo depois de (horas)</label><input type="number" step="0.5" min="0.5" id="cfTentar"></div><div><label>Recado sem resposta: follow-up depois de (horas)</label><input type="number" min="1" id="cfRecado"></div><div><label>Tentativas até "Sem contato"</label><input type="number" min="1" max="10" id="cfMax"></div><div><label>"Ligar agora": leads de até (dias)</label><input type="number" min="1" max="30" id="cfDias"></div><div><label>Lead de outro vendedor sem resposta cai na fila depois de (horas)</label><input type="number" step="0.25" min="0.25" id="cfResgate"></div><div><label>Vendedores fora do processo (ex.: consignado), separados por vírgula</label><input id="cfFora" placeholder="ex.: Lucas Ribeiro"></div></div>
@@ -1982,7 +1991,46 @@ $('#btnSdAtualizar').onclick = async () => {
   b.disabled = false; b.textContent = 'Atualizar';
 };
 $('#sdVend').onchange = () => { try { localStorage.setItem('carteiraSdr', $('#sdVend').value); } catch {} carregarSdr(); };
+let swTimer = null;
+async function carregarWhatsSdr() {
+  const st = await api('/api/sdr/whats').catch(() => null);
+  if (!st) return;
+  const NOMES = { conectado: 'Conectado', 'aguardando-qr': 'Esperando ler o QR Code', conectando: 'Conectando…', reconectando: 'Reconectando…', desligado: 'Não conectado' };
+  $('#swStatus').textContent = NOMES[st.status] || st.status;
+  $('#swStatus').className = st.status === 'conectado' ? 'bom' : st.status === 'desligado' ? 'ruim' : '';
+  $('#swNumero').textContent = st.numero ? `número +${st.numero}` : '';
+  $('#swResumo').textContent = `· ${NOMES[st.status] || st.status}${st.config.ativo ? ' · automático ligado' : ' · automático desligado'}`;
+  $('#swQr').hidden = !st.qr; if (st.qr) $('#swQrImg').src = st.qr;
+  $('#btnSwConectar').hidden = st.status === 'conectado';
+  $('#btnSwDesc').hidden = !st.temSessao && st.status === 'desligado';
+  $('#btnSwTeste').hidden = st.status !== 'conectado';
+  const c = st.config;
+  if (!$('#swCard').dataset.ok) {
+    $('#swCard').dataset.ok = '1';
+    $('#swAtivo').checked = !!c.ativo; $('#swHoras').value = c.horasAntes; $('#swIni').value = c.horaInicio; $('#swFim').value = c.horaFim; $('#swMax').value = c.maxDia; $('#swFoto').checked = c.comFoto !== false; $('#swNome').value = st.nomeSdr || '';
+  }
+  const hm = (t) => new Date(t).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  $('#swHoje').innerHTML = st.hoje.length ? st.hoje.map((v) => `<div class="brfItem"><b>${esc(v.nome || 'Cliente')}</b> <span class="sub">· visita ${hm(v.data)} · ${v.fotoDoCarro ? 'com foto do carro' : 'sem foto (carro não achado no estoque)'}</span> · ${v.enviado ? '<span class="bom">enviado</span>' : v.falhou ? '<span class="ruim">não foi (veja o registro)</span>' : v.comResultado ? '<span class="sub">visita já marcada na Agenda</span>' : !c.ativo ? '<span class="sub">automático desligado</span>' : st.status !== 'conectado' ? '<span class="ruim">esperando o WhatsApp conectar</span>' : v.enviarEm <= Date.now() ? 'enviando na próxima rodada' : `envia às ${hm(v.enviarEm)}`}</div>`).join('') : '<div class="sub">Nenhuma visita hoje.</div>';
+  $('#swLog').textContent = st.log.map((x) => `${new Date(x.em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} ${x.tipo === 'erro' ? 'ERRO ' : ''}${x.texto}`).join('\n') || 'Nada ainda.';
+  clearTimeout(swTimer);
+  if (['aguardando-qr', 'conectando', 'reconectando'].includes(st.status) && document.querySelector('#comSdr.ativo')) swTimer = setTimeout(carregarWhatsSdr, 3000);
+}
+$('#btnSwConectar').onclick = async () => { $('#swDet').open = true; try { await api('/api/sdr/whats/conectar', { method:'POST' }); } catch (e) { alert(e.message); } setTimeout(carregarWhatsSdr, 1500); };
+$('#btnSwDesc').onclick = async () => {
+  const b = $('#btnSwDesc');
+  if (!b.dataset.conf) { b.dataset.conf = '1'; b.textContent = 'Clique de novo para desconectar'; setTimeout(() => { delete b.dataset.conf; b.textContent = 'Desconectar'; }, 5000); return; }
+  await api('/api/sdr/whats/desconectar', { method:'POST' }); delete b.dataset.conf; b.textContent = 'Desconectar'; carregarWhatsSdr();
+};
+$('#btnSwTeste').onclick = async () => {
+  try { const r = await api('/api/sdr/whats/teste', { method:'POST' }); alert(`Teste enviado para o próprio número${r.comFoto ? ', com a foto de um carro do estoque' : ' (sem foto: nenhum carro com foto no estoque)'}. Confira no WhatsApp.`); }
+  catch (e) { alert(e.message); }
+};
+$('#btnSwSalvar').onclick = async () => {
+  await api('/api/sdr/whats/config', { method:'POST', body: JSON.stringify({ ativo: $('#swAtivo').checked, horasAntes: $('#swHoras').value, horaInicio: $('#swIni').value, horaFim: $('#swFim').value, maxDia: $('#swMax').value, comFoto: $('#swFoto').checked, nomeSdr: $('#swNome').value }) });
+  alert('Lembrete automático salvo.'); carregarWhatsSdr();
+};
 async function carregarSdr() {
+  carregarWhatsSdr();
   avisoLk();
   const pedido = carteiraSdr();
   const r = await api('/api/sdr?vendedor=' + encodeURIComponent(pedido));
