@@ -345,7 +345,7 @@
     <div class="kpi"><div class="eyebrow">Na fila</div><b id="sdFila">0</b><small>somando as listas</small></div>
   </div>
   <p class="sub" style="margin:0 0 14px">Trabalhe de cima para baixo. Depois de cada contato, marque o resultado: o lead fica marcado como trabalhado hoje. Os dados vêm do LeadsOK (atualizam a cada 15 min); responder e agendar continua sendo feito no LeadsOK.</p>
-  <div class="card filtros"><div><label>Carteira (leads no nome de)</label><select id="sdVend"><option value="">Todos os vendedores</option></select></div><div style="flex:3"><label>Buscar lead por telefone, nome ou carro</label><input id="sdBusca" placeholder="ex.: 11961262931, Maria ou Corolla"></div><div style="align-self:end"><button class="btn" id="btnSdBusca">Buscar</button></div></div>
+  <div class="card filtros"><div><label>Carteira (leads no nome de)</label><select id="sdVend"><option value="">Todos os vendedores</option></select></div><div style="flex:3"><label>Buscar lead por telefone, nome ou carro</label><input id="sdBusca" placeholder="ex.: 11961262931, Maria ou Corolla"></div><div style="align-self:end"><button class="btn" id="btnSdBusca">Buscar</button></div><div style="align-self:end;text-align:right"><button class="btn verde" id="btnSdAtualizar">Atualizar</button><div class="sub" id="sdAtualizado" style="font-size:12px;margin-top:4px"></div></div></div>
   <div id="sdResultado"></div>
   <div class="card filtros soAdmin" id="sdTeste"><div><label>Lead de teste (só no painel, não vai ao LeadsOK)</label><input id="tsTel" placeholder="DDD + número, ex.: 48999990000"></div><div><label>Nome</label><input id="tsNome" value="Lead teste"></div><div><label>Carro</label><input id="tsCarro" value="Toyota Corolla XEi 2021"></div><div style="align-self:end;display:flex;gap:8px"><button class="btn verde" id="btnTeste">Criar</button><button class="btn" id="btnTesteRem">Apagar testes</button></div></div>
   <div id="sdListas"></div>
@@ -1889,12 +1889,20 @@ $('#btnCfSdr').onclick = async () => {
     alert('Configuração do SDR salva.'); delete $('#sdCfgCard').dataset.ok; carregarSdr();
   } catch (e) { alert(e.message); }
 };
+// Atualizar: busca no LeadsOK quem foi respondido/agendado agora e recarrega a fila
+$('#btnSdAtualizar').onclick = async () => {
+  const b = $('#btnSdAtualizar'); b.disabled = true; b.textContent = 'Atualizando…';
+  try { await api('/api/sdr/atualizar', { method:'POST' }); await carregarSdr(); if ($('#sdBusca').value.trim()) buscarLeadSdr(); }
+  catch (e) { alert(e.message); }
+  b.disabled = false; b.textContent = 'Atualizar';
+};
 $('#sdVend').onchange = () => { try { localStorage.setItem('carteiraSdr', $('#sdVend').value); } catch {} carregarSdr(); };
 async function carregarSdr() {
   avisoLk();
   const pedido = carteiraSdr();
   const r = await api('/api/sdr?vendedor=' + encodeURIComponent(pedido));
   if (r.erro) return;
+  api('/api/leadsok/estado').then((e) => { if (e?.ultimaSync) $('#sdAtualizado').textContent = 'dados do LeadsOK de ' + haTempo(new Date(e.ultimaSync).toISOString()); }).catch(() => {});
   if (!window.vendedoresSdr) { window.vendedoresSdr = r.vendedores.map((v) => v.vendedor); if (carteiraSdr() !== pedido) return carregarSdr(); }
   const selV = $('#sdVend'); const atualV = carteiraSdr();
   selV.innerHTML = '<option value="">Todos os vendedores</option>' + [...new Set([...r.vendedores.map((v) => v.vendedor), ...(atualV ? [atualV] : [])])].map((v) => { const n = r.vendedores.find((x) => x.vendedor === v)?.n; return `<option value="${esc(v)}" ${v === atualV ? 'selected' : ''}>${esc(v)}${n ? ` (${n})` : ''}</option>`; }).join('');

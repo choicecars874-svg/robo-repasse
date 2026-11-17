@@ -405,6 +405,30 @@ async function ciclo(tipo = 'incremental') {
   }
 }
 
+// Atualizar agora (botão da Fila do SDR): relê as primeiras páginas das listas do LeadsOK, onde estão as conversas
+// mais recentes. Leve: não carrega detalhes. Se uma coleta já estiver rodando, espera ela terminar.
+let ultimaRapida = 0;
+async function atualizarAgora() {
+  if (!cfg.ativo || banco.erro()) throw new Error('LeadsOK não está conectado');
+  for (let i = 0; estado.rodando && i < 90; i++) await esperar(1000);
+  if (Date.now() - ultimaRapida < 30000) return { ok: true, recente: true, em: ultimaRapida };
+  if (estado.rodando) return { ok: true, emAndamento: true };
+  estado.rodando = true;
+  const inicio = Date.now();
+  try {
+    const r = await sincronizarListas(2);
+    ultimaRapida = estado.ultimaSync = Date.now();
+    registrar('rápida', inicio, true, null, r);
+    return { ok: true, em: ultimaRapida, ...r };
+  } catch (e) {
+    registrar('rápida', inicio, false, e.message, {});
+    throw e;
+  } finally {
+    estado.rodando = false;
+    estado.fase = '';
+  }
+}
+
 // Enquanto faltar detalhe (conversas e fichas) de lead de entrada, carrega mais um lote a cada 2 minutos,
 // em vez de esperar o ciclo de 15 min. Para sozinho quando os leads de entrada estiverem em dia.
 async function recuperarDetalhes() {
@@ -602,4 +626,4 @@ function definirHorasParado(h) {
   salvarCfg();
 }
 
-module.exports = { conversaRecente, notasDoLead, canalPelaMensagem, testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };
+module.exports = { atualizarAgora, conversaRecente, notasDoLead, canalPelaMensagem, testarDetalhes, gravarAgenda, iniciar, ciclo, salvarCredenciais, testarConexao, desligar, status, definirHorasParado, horasParado: () => cfg.horasParado, gravarNotaLeadsOK, gravarNotasAtivo, definirGravarNotas };

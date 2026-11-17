@@ -422,6 +422,13 @@ function iniciarPainel() {
     const fase = require('./leadsok/fase').faseDoLead(conv.mensagens, { agenda: b.agenda, ficha: b.lead.ficha, nome: b.lead.nome });
     res.set('Cache-Control', 'no-store').json({ ...b, conversa: { ...conv, mensagens: conv.mensagens.slice(-30) }, notasLeadsOK: notas, fase });
   });
+  app.post('/api/sdr/atualizar', async (_, res) => {
+    try {
+      res.json(await leadsok.atualizarAgora());
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
   app.get('/api/sdr/historico', (req, res) => res.json(comercial.historicoContatos({ dia: req.query.dia, por: req.query.por })));
   app.get('/api/sdr/buscar', (req, res) => res.json(comercial.buscarLead(req.query.q)));
   app.post('/api/sdr/contato', (req, res) => {
