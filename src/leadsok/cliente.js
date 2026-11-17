@@ -72,26 +72,55 @@ function criarCliente({ email, senha }) {
       for (const m of html.matchAll(/(?:\/_next\/)?static\/chunks\/[\w\-./%]+?\.js/g)) out.add('/_next/' + m[0].replace(/^\/_next\//, ''));
       return [...out];
     };
+    // arquivos de código citados dentro de outro arquivo: o "runtime" do webpack monta o nome dos chunks carregados sob
+    // demanda (ex.: a conversa só carrega ao abrir um chat) a partir de mapas {id:"hash"} e {id:"nome"}
+    const chunksCitados = (js) => {
+      const out = new Set();
+      for (const m of js.matchAll(/(?:\/_next\/)?static\/chunks\/[\w\-./%]+?\.js/g)) out.add('/_next/' + m[0].replace(/^\/_next\//, ''));
+      if (/static\/chunks\/"\s*\+/.test(js)) {
+        const mapas = [...js.matchAll(/\{((?:\s*\d+\s*:\s*"[\w-]+"\s*,?)+)\}/g)].map((m) => Object.fromEntries([...m[1].matchAll(/(\d+)\s*:\s*"([\w-]+)"/g)].map((x) => [x[1], x[2]])));
+        const hashes = mapas.filter((mp) => Object.values(mp).length > 3 && Object.values(mp).every((v) => /^[0-9a-f]{8,20}$/.test(v))).sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0] || {};
+        const nomes = mapas.find((mp) => mp !== hashes && Object.values(mp).some((v) => !/^[0-9a-f]{8,20}$/.test(v))) || {};
+        for (const [id, h] of Object.entries(hashes)) out.add(`/_next/static/chunks/${nomes[id] || id}.${h}.js`);
+      }
+      return [...out];
+    };
+    // getPendingSchedule não é usada: não vale continuar procurando por ela
+    const faltam = () => NOMES.some((n) => n !== 'getPendingSchedule' && !mapa[n]);
+    let lidos = 0;
+    const lerScript = async (src, pag) => {
+      if (vistos.has(src) || lidos >= 600) return [];
+      vistos.add(src);
+      lidos++;
+      const r = await req(src, { seguir: true });
+      if (r.status >= 400) return [];
+      const js = await r.text();
+      const achar = (nome, id) => {
+        if (!mapa[nome]) mapa[nome] = id;
+        ondeEsta[nome] ||= pag === '/login' ? '/atendimentos' : pag;
+      };
+      for (const re of res) for (const a of js.matchAll(re)) achar(a[2], a[1]);
+      for (const [nome, re] of porNome) if (!mapa[nome]) for (const a of js.matchAll(re)) { achar(nome, a[1]); break; }
+      await esperar(60);
+      return chunksCitados(js);
+    };
     for (let k = 0; k < fila.length && k < 16; k++) {
       const pag = fila[k];
       const r = await req(pag, { seguir: true });
       const html = await r.text();
       // links do menu (só caminhos internos simples, sem sair, sem arquivos)
       for (const m of html.matchAll(/href="(\/[a-z][\w-]*)"/g)) if (!fila.includes(m[1]) && !/sair|logout|_next|api/i.test(m[1])) fila.push(m[1]);
-      for (const src of scriptsDaPagina(html)) {
-        if (vistos.has(src)) continue;
-        vistos.add(src);
-        const js = await (await req(src, { seguir: true })).text();
-        const achar = (nome, id) => {
-          if (!mapa[nome]) mapa[nome] = id;
-          ondeEsta[nome] ||= pag === '/login' ? '/atendimentos' : pag;
-        };
-        for (const re of res) for (const a of js.matchAll(re)) achar(a[2], a[1]);
-        for (const [nome, re] of porNome) if (!mapa[nome]) for (const a of js.matchAll(re)) { achar(nome, a[1]); break; }
-        await esperar(80);
+      // lê os arquivos da página e, enquanto faltar ação, os que eles citam (em largura, até 600 arquivos no total)
+      let atual = scriptsDaPagina(html);
+      for (let nivel = 0; atual.length && nivel < 4; nivel++) {
+        const prox = [];
+        for (const src of atual) prox.push(...(await lerScript(src, pag)));
+        if (!faltam()) break;
+        atual = prox.filter((x) => !vistos.has(x));
       }
+      if (!faltam() && k >= 1) break;
     }
-    estatisticaDescoberta = { paginas: fila.length, scripts: vistos.size, acoes: Object.keys(mapa).length };
+    estatisticaDescoberta = { paginas: fila.length, scripts: vistos.size, acoes: Object.keys(mapa).length, faltando: NOMES.filter((n) => !mapa[n]) };
     if (!Object.keys(mapa).length) throw new Error(`Não achei as ações do LeadsOK (o site pode ter mudado): li ${Math.min(fila.length, 16)} página(s) e ${vistos.size} arquivo(s) de código`);
     acoes = mapa;
     paginaDaAcao = ondeEsta;
