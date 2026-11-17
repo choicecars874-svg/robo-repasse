@@ -4,10 +4,9 @@ const config = require('../config');
 
 // Vendedores fora do processo de cobrança (ex.: consignado): não entram em alertas, Gestor do dia nem Fila do SDR
 const foraDoProcesso = () => ((config.get().sdr || {}).vendedoresFora || []).map((v) => String(v).trim().toLowerCase()).filter(Boolean);
-const semFora = (col = 'l.vendedor') => {
-  const f = foraDoProcesso();
-  return f.length ? `AND lower(trim(COALESCE(${col}, ''))) NOT IN (${f.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})` : '';
-};
+// compara pelo nome contido (o LeadsOK às vezes tem sobrenome a mais, espaço ou emoji): "lucas ribeiro" pega "Lucas Ribeiro 🚗"
+const semFora = (col = 'l.vendedor') => foraDoProcesso().map((v) => `AND lower(COALESCE(${col}, '')) NOT LIKE '%${v.replace(/'/g, "''").replace(/[%_]/g, '')}%'`).join(' ');
+const estaFora = (nome) => { const n = String(nome || '').toLowerCase(); return foraDoProcesso().some((v) => n.includes(v)); };
 
 const diaSP = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 const VENDIDO = "COALESCE(lower(l.archive_reason), '') LIKE 'vendido%'";
@@ -218,14 +217,14 @@ function agenda({ de, ate } = {}) {
       (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'cliente') cliente_confirmou,
       (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'lembrete') lembrete_enviado
     FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id LEFT JOIN lk_visitas v ON v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data
-    WHERE COALESCE(a.modalidade, 'presencial') != 'ligacao' AND date(a.data, '-3 hours') BETWEEN ? AND ? ORDER BY a.data`).all(de, ate);
+    WHERE COALESCE(a.modalidade, 'presencial') != 'ligacao' AND date(a.data, '-3 hours') BETWEEN ? AND ? ${semFora('COALESCE(l.vendedor, a.vendedor)')} ORDER BY a.data`).all(de, ate);
   // agendamentos tipo "ligação" no LeadsOK são lembretes de follow-up, não visita: ficam fora, só contados
   const followupsLigacao = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE modalidade = 'ligacao' AND date(data, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
   // visitas agendadas pelo SDR no briefing (último "agendou" de cada lead) que não estão na agenda do LeadsOK no mesmo dia
   const doSdr = d.prepare(`SELECT c.lead_id, c.proximo_em, c.por, l.nome, l.whatsapp, l.carro, l.vendedor, l.origem, l.aba_atual
     FROM lk_contatos c JOIN lk_leads l ON l.id = c.lead_id
     WHERE c.resultado = 'agendou' AND c.proximo_em IS NOT NULL AND c.id = (SELECT MAX(id) FROM lk_contatos WHERE lead_id = c.lead_id AND resultado = 'agendou')
-      AND date(c.proximo_em / 1000, 'unixepoch', '-3 hours') BETWEEN ? AND ?`).all(de, ate);
+      AND date(c.proximo_em / 1000, 'unixepoch', '-3 hours') BETWEEN ? AND ? ${semFora()}`).all(de, ate);
   const visita = d.prepare('SELECT compareceu, comprou, marcado_por, marcado_em FROM lk_visitas WHERE lead_id = ? AND data_agendada = ?');
   const diaDe = (iso) => new Date(Date.parse(iso) - 3 * 3600000).toISOString().slice(0, 10);
   for (const c of doSdr) {
@@ -422,7 +421,7 @@ function painelComercial({ de, ate, horasParado = 2, metas = {} }) {
     },
     canais: L.porOrigem,
     diretos: L.diretos,
-    time: T.vendedores,
+    time: T.vendedores.filter((v) => !estaFora(v.vendedor)),
     semDadoConversa: !!L.total.semDadoConversa,
   };
 }
@@ -466,7 +465,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
         a.data agenda_data, a.modalidade, a.obs agenda_obs, a.confirmado agenda_confirmado, a.lead_id IS NOT NULL identificado, 'leadsok' agenda_origem
       FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id
       WHERE ${EH_VISITA} AND COALESCE(a.concluido, 0) = 0 AND date(a.data, '-3 hours') BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data)
-        AND COALESCE(l.id, '') NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))
+        AND COALESCE(l.id, '') NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse')) ${semFora('COALESCE(l.vendedor, a.vendedor)')}
         ${vendedor ? "AND lower(COALESCE(l.vendedor, a.vendedor, '')) = lower(?)" : ''} ORDER BY a.data ASC LIMIT 150`).all(diaSP(agora - 7 * 86400000), amanha, ...va),
     // 3) ligar: leads dos últimos 7 dias que o SDR ainda não trabalhou e o cliente não respondeu (mais novos primeiro)
     novos: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.created_date > ? AND COALESCE(l.ultima_msg_owner, 'salesman') != 'customers' ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 200`).all(iso(diasNovos * 86400000), ...va),
@@ -477,7 +476,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
       WHERE l.is_resgate = 0 AND l.whatsapp IS NOT NULL AND v.marcado_em > ? AND (v.compareceu = 0 OR (v.compareceu = 1 AND v.comprou = 0))
         AND NOT (${VENDIDO}) AND NOT EXISTS (SELECT 1 FROM lk_visitas v2 WHERE v2.lead_id = l.id AND v2.comprou = 1)
         AND l.id NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse'))
-        AND NOT EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.em > v.marcado_em) ${V}
+        AND NOT EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.em > v.marcado_em) ${semFora()} ${V}
       ORDER BY v.data_agendada DESC LIMIT 100`).all(agora - 14 * 86400000, ...va),
   };
   // follow-ups marcados como "ligação" na agenda do LeadsOK (hoje e atrasados até 3 dias), sem contato do SDR depois
@@ -533,7 +532,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   const fimAmanha = Date.parse(amanha + 'T23:59:59-03:00');
   for (const l of Object.values(todosLeads)) {
     const c = ultimos[l.id];
-    if (c.resultado !== 'agendou' || !c.proximo_em || naLista.has(l.id) || !meu(l)) continue;
+    if (c.resultado !== 'agendou' || !c.proximo_em || naLista.has(l.id) || !meu(l) || estaFora(l.vendedor)) continue;
     if (c.proximo_em < agora - 7 * 86400000 || c.proximo_em > fimAmanha) continue;
     const data = new Date(c.proximo_em).toISOString();
     if (jaMarcada.get(l.id, data)) continue;
@@ -556,8 +555,8 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   listas.visitas = listas.visitas.filter((l) => !noInteresse.has(l));
   // + quem topou visitar numa ligação do SDR e ainda não fechou o horário (com o briefing do que foi dito)
   const idsInteresse = new Set(listas.interesseIa.map((l) => l.id));
-  for (const l of Object.values(todosLeads)) if (meu(l) && etapa(l.id, l) === 'interesse' && !idsInteresse.has(l.id)) listas.interesseIa.push({ ...l, topouSemHorario: true });
-  listas.retornar = Object.values(todosLeads).filter((l) => meu(l) && etapa(l.id, l) === 'retornar')
+  for (const l of Object.values(todosLeads)) if (meu(l) && !estaFora(l.vendedor) && etapa(l.id, l) === 'interesse' && !idsInteresse.has(l.id)) listas.interesseIa.push({ ...l, topouSemHorario: true });
+  listas.retornar = Object.values(todosLeads).filter((l) => meu(l) && !estaFora(l.vendedor) && etapa(l.id, l) === 'retornar')
     .sort((a, b) => (ultimos[a.id].proximo_em || ultimos[a.id].em) - (ultimos[b.id].proximo_em || ultimos[b.id].em));
   const noRetornar = new Set(listas.retornar.map((l) => l.id));
   for (const l of followLeadsOK) if (!noRetornar.has(l.id) && noRetornar.add(l.id)) listas.retornar.push({ ...l, followLeadsOK: l.agenda_data });
@@ -573,7 +572,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   // etapas (CRM): onde está cada lead que já foi trabalhado
   const etapas = { aguardando: [], tentar: [], retorno: [], interesse: [], agendados: [], posVisita: [], semContato: [], encerrados: [] };
   for (const l of Object.values(todosLeads)) {
-    if (!meu(l)) continue;
+    if (!meu(l) || estaFora(l.vendedor)) continue;
     const e = etapa(l.id, l);
     if (etapas[e]) etapas[e].push(l);
   }
@@ -589,7 +588,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   const resumo = { ligacoes: contatos.filter((c) => c.tipo === 'ligacao').length, atenderam: contatos.filter((c) => ['atendeu', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse'].includes(c.resultado) && c.tipo === 'ligacao').length, mensagens: contatos.filter((c) => c.tipo === 'mensagem').length, agendou: contatos.filter((c) => c.resultado === 'agendou').length, leads: Object.keys(porLead).length };
   // vendedores com leads em aberto (para escolher a carteira)
   const vendedores = d.prepare(`SELECT l.vendedor, COUNT(*) n FROM lk_leads l WHERE l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND l.vendedor IS NOT NULL AND l.vendedor_is_ia = 0 AND l.created_date > ?
-    GROUP BY l.vendedor ORDER BY n DESC`).all(iso(30 * 86400000));
+    ${semFora()} GROUP BY l.vendedor ORDER BY n DESC`).all(iso(30 * 86400000));
   return { dia: hoje, horasSemResposta, vendedor, vendedores, listas, etapas, resumo, cadencia: { horasTentarDeNovo: hTentar, horasAguardandoRecado: hRecado, tentativasMax: maxTent, diasNovos, horasSemRespostaResgate: hResgate } };
 }
 

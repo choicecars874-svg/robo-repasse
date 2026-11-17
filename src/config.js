@@ -77,7 +77,7 @@ const PADRAO = {
     horasAguardandoRecado: 24, // mandou recado e o cliente não respondeu: volta para o follow-up
     tentativasMax: 3, // tentativas seguidas sem atender até ir para "Sem contato"
     diasNovos: 7, // "Ligar agora": leads de até tantos dias
-    vendedoresFora: [], // fora do processo de cobrança (ex.: consignado): não aparecem em alertas, Gestor do dia nem Fila do SDR
+    vendedoresFora: ['Lucas Ribeiro'], // fora do processo de cobrança (ex.: consignado): não aparecem em alertas, Gestor do dia nem Fila do SDR
     horasSemRespostaResgate: 1, // lead de outro vendedor sem resposta há mais que isso cai na fila do SDR
     recado:
       'Fala {lead}, aqui é {sdr} da Choice Cars, prazer falar com você! Notamos seu interesse {carro} e tentei te ligar pra entender melhor se é esse veículo mesmo que você procura. Vai ser um prazer te atender e te dar uma atenção especial. Qual o melhor horário pra gente conversar?',
