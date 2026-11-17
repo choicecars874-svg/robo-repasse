@@ -379,7 +379,7 @@ function iniciarPainel() {
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
   app.get('/api/sdr', (req, res) => {
     const sdr = config.get().sdr || {};
-    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: String(req.query.vendedor || '').slice(0, 80), cadencia: sdr }), recado: sdr.recado || '', confirmacao: sdr.confirmacao || '', objecoes: sdr.objecoes || [] });
+    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: String(req.query.vendedor || '').slice(0, 80), cadencia: sdr, usuario: req.usuario.nome }), recado: sdr.recado || '', confirmacao: sdr.confirmacao || '', objecoes: sdr.objecoes || [] });
   });
   // resultado do SDR: o administrador vê todos; o SDR vê só o dele
   app.get('/api/sdr/resultado', (req, res) => {
@@ -394,7 +394,7 @@ function iniciarPainel() {
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
     const objecoes = (Array.isArray(b.objecoes) ? b.objecoes : []).map((o) => ({ objecao: String(o.objecao || '').trim().slice(0, 120), resposta: String(o.resposta || '').trim().slice(0, 1500) })).filter((o) => o.objecao).slice(0, 40);
     const atual = config.get();
-    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 24), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, objecoes } }).sdr);
+    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 24), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), horasSemRespostaResgate: n(b.horasSemRespostaResgate, 0.25, 48, 1), recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, objecoes } }).sdr);
   });
   app.post('/api/sdr/lead-teste', (req, res) => {
     try {
@@ -411,9 +411,9 @@ function iniciarPainel() {
       const r = comercial.registrarContato({ ...req.body, por: req.usuario.nome });
       // briefing também nas Notas internas do lead no LeadsOK (se estiver ligado)
       if (req.body.nota && leadsok.gravarNotasAtivo()) {
-        const RES = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem', agendou: 'AGENDOU', ja_comprou: 'JÁ COMPROU', sem_interesse: 'SEM INTERESSE' };
+        const RES = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem', agendou: 'AGENDOU', interesse_visita: 'TOPOU VISITAR (sem horário confirmado)', ja_comprou: 'JÁ COMPROU', sem_interesse: 'SEM INTERESSE' };
         const quando = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-        const retorno = req.body.proximoEm ? ` · ${req.body.resultado === 'agendou' ? 'VISITA' : 'retorno'} ${new Date(Number(req.body.proximoEm)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
+        const retorno = req.body.proximoEm ? ` · ${req.body.resultado === 'agendou' ? 'VISITA' : req.body.resultado === 'interesse_visita' ? 'confirmar horário até' : 'retorno'} ${new Date(Number(req.body.proximoEm)).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
         const linha = `[${quando} · ${req.usuario.nome} · ${req.body.tipo === 'mensagem' ? 'mensagem' : 'ligação'} · ${RES[req.body.resultado] || ''}${req.body.interesse ? ' · ' + req.body.interesse : ''}] ${String(req.body.nota).slice(0, 1500)}${retorno}`;
         leadsok.gravarNotaLeadsOK(String(req.body.leadId), linha).then(() => comercial.marcarNoLeadsOK(r.id, 'ok')).catch((e) => comercial.marcarNoLeadsOK(r.id, 'erro: ' + e.message));
       }

@@ -335,7 +335,7 @@
     <div class="atalhos" id="sdEtapasBtns"></div><div id="sdEtapa"></div></div>
   <div class="card"><details id="sdObjDet"><summary><h2 style="display:inline">Argumentário de objeções</h2> <span class="sub">· o que responder quando o cliente trava</span></summary><div id="sdObjecoes" style="margin-top:12px"></div></details></div>
   <div class="card soAdmin" id="sdCfgCard"><details><summary><h2 style="display:inline">Configuração do SDR</h2> <span class="sub">· prazos da cadência, texto do recado e objeções</span></summary>
-    <div class="linha" style="margin-top:12px"><div><label>Não atendeu: tentar de novo depois de (horas)</label><input type="number" step="0.5" min="0.5" id="cfTentar"></div><div><label>Recado sem resposta: follow-up depois de (horas)</label><input type="number" min="1" id="cfRecado"></div><div><label>Tentativas até "Sem contato"</label><input type="number" min="1" max="10" id="cfMax"></div><div><label>"Ligar agora": leads de até (dias)</label><input type="number" min="1" max="30" id="cfDias"></div></div>
+    <div class="linha" style="margin-top:12px"><div><label>Não atendeu: tentar de novo depois de (horas)</label><input type="number" step="0.5" min="0.5" id="cfTentar"></div><div><label>Recado sem resposta: follow-up depois de (horas)</label><input type="number" min="1" id="cfRecado"></div><div><label>Tentativas até "Sem contato"</label><input type="number" min="1" max="10" id="cfMax"></div><div><label>"Ligar agora": leads de até (dias)</label><input type="number" min="1" max="30" id="cfDias"></div><div><label>Lead de outro vendedor sem resposta cai na fila depois de (horas)</label><input type="number" step="0.25" min="0.25" id="cfResgate"></div></div>
     <label>Texto do recado de "Não atendeu" ({lead} = nome do cliente, {sdr} = quem está logado, {carro} = "no Corolla XEi" ou "em um dos nossos carros")</label><textarea id="cfRecadoTxt" style="min-height:110px;font-family:inherit"></textarea>
     <label>Mensagem de confirmação da visita ({lead}, {sdr}, {quando} = "amanhã" / "hoje" / "sexta (21/11)", {hora}, {carro} = "o Corolla XEi" ou "nossos carros")</label><textarea id="cfConfTxt" style="min-height:90px;font-family:inherit"></textarea>
     <label>Objeções: uma por bloco. 1ª linha = objeção, linhas seguintes = resposta. Deixe uma linha em branco entre as objeções.</label><textarea id="cfObj" style="min-height:260px;font-family:inherit"></textarea>
@@ -401,6 +401,7 @@
   <div class="lkAviso" hidden></div>
   <div class="periodoBar" id="perSdrRes"></div>
   <div class="card filtros soAdmin"><div><label>Pessoa</label><select id="srPor"><option value="">Todos</option></select></div></div>
+  <div class="card"><h2>Funil do SDR</h2><p class="sub" id="srFunilObs"></p><div class="pnFunil" id="srFunil"></div></div>
   <div class="kpis kpis5" id="srKpis"></div>
   <div class="grade">
     <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Por dia</h2><p class="sub">Ligações, quem atendeu e agendamentos de cada dia.</p></div><div class="legenda"><span style="--c:var(--azul)">Ligações</span><span style="--c:var(--verde)">Atenderam</span><span style="--c:var(--ouro)">Agendou</span></div></div><div class="tmGraf" id="srDias"></div></div>
@@ -1449,6 +1450,10 @@ async function carregarSdrRes() {
   if (r.erro) return;
   const atual = $('#srPor').value;
   $('#srPor').innerHTML = '<option value="">Todos</option>' + r.pessoas.map((p) => `<option ${p === atual ? 'selected' : ''}>${esc(p)}</option>`).join('');
+  const fu = r.funil || {};
+  const etF = [['Ativação', fu.ativados, 'leads que receberam ligação ou mensagem'], ['Conexão', fu.conectados, 'atenderam ou responderam'], ['Agendamento', fu.agendaram, 'agendaram visita'], ['Comparecimento', fu.compareceram, 'vieram à loja'], ['Compra', fu.compraram, 'compraram']];
+  $('#srFunil').innerHTML = etF.map(([n, v, txt], i) => `<div class="pnEtapa"><div class="eyebrow">${n}</div><b>${num(v)}</b><div class="conv">${i ? pct(v, etF[i - 1][1]) + ' da etapa anterior' : 'no período'}</div><div class="var">${txt}</div><div class="trilho"><i style="width:${fu.ativados ? (v / fu.ativados) * 100 : 0}%"></i></div></div>`).join('');
+  $('#srFunilObs').textContent = `${rotuloCap(per.rotulo)} · por lead, pelo dia do contato · cada etapa conta quem chegou pelo menos até ela · Fila do SDR + Agenda`;
   const t = r.total;
   $('#srKpis').innerHTML = [
     ['Ligações', num(t.ligacoes), `${num(t.leads)} leads trabalhados`, ''],
@@ -1481,7 +1486,7 @@ async function carregarAgenda() {
   $('#agPend').hidden = !soPend;
   $('#agKpis').hidden = soPend;
   $('#agKpis').innerHTML = [
-    ['Agendados', z.agendados, '', umDia ? rotuloCap(per.rotulo) : rotuloCap(per.rotulo), 'ouro'],
+    ['Agendados', z.agendados, '', z.futuros ? `${num(z.confirmados)} confirmado(s) pelo cliente · ${num(z.iaSemConfirmar)} da IA a confirmar` : rotuloCap(per.rotulo), 'ouro'],
     ['Vieram', z.vieram, pct(z.vieram, z.vieram + z.naoVieram), 'dos que já foram marcados', 'ok'],
     ['Compraram', z.compraram, pct(z.compraram, z.vieram), 'de quem veio', 'ok'],
     ['Não vieram', z.naoVieram, pct(z.naoVieram, z.vieram + z.naoVieram), 'no-show', 'mau'],
@@ -1593,10 +1598,11 @@ $('#btnCkDesligar').onclick = async () => { if (confirm('Desligar a leitura do C
 // ---------- Fila do SDR ----------
 const LISTAS_SDR = [
   ['responder', 'Cliente respondeu', 'O cliente mandou mensagem e está sem resposta. Responda primeiro: ele está quente agora.'],
-  ['abandonados', 'Sem resposta de ninguém (outros vendedores)', 'O cliente mandou mensagem e o vendedor dele não respondeu. Ligue antes que esfrie e registre o que combinou.'],
+  ['abandonados', 'Sem resposta de ninguém (outros vendedores)', 'O cliente mandou mensagem há mais de 1 h e o vendedor dele não respondeu. Ligue antes que esfrie e registre o que combinou.'],
+  ['interesseIa', 'Interesse em agendar: confirmar horário', 'O cliente topou visitar (numa ligação, ou a IA marcou), mas o horário ainda não foi confirmado com uma pessoa. Leia o briefing, chame o cliente e feche dia e hora. Sem isso, não é agendamento de verdade.'],
   ['novos', 'Ligar agora', 'Leads dos últimos 7 dias que você ainda não trabalhou, do mais novo para o mais velho. Ligue pelo WhatsApp, depois no telefone; se não atender, deixe o recado.'],
   ['retornar', 'Follow-up: não responderam', 'Quem não atendeu há mais de 3 h, quem não respondeu o recado em 24 h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.'],
-  ['visitas', 'Follow-up de visitas', 'Visitas agendadas (no LeadsOK ou aqui). Antes do horário: chame o cliente confirmando o horário. Depois: marque se veio e se comprou.'],
+  ['visitas', 'Follow-up de visitas', 'Visitas com horário confirmado, ou agendadas por uma pessoa. Antes do horário: mande a confirmação. Depois: marque se veio e se comprou.'],
   ['posVisita', 'Follow-up pós-visita', 'Não veio, ou veio e não comprou (últimos 14 dias). Remarcar a visita ou entender o que faltou.'],
   ['retomar', 'Retomar leads antigos', 'Leads de 7 a 30 dias atrás com a conversa parada.'],
 ];
@@ -1604,7 +1610,7 @@ const LISTAS_SDR = [
 const carroLinha = (l) => l.carro ? `<div class="carro"><svg class="i"><use href="#i-carro"/></svg>${esc(l.carro.replace(/\s*\|\s*Placa:.*$/i, ''))}</div>` : '';
 const haTempo = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`; };
 const soDigitos = (t) => String(t || '').replace(/\D/g, '');
-const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem enviada', agendou: 'agendou', ja_comprou: 'já comprou', sem_interesse: 'sem interesse' };
+const RESULTADO = { atendeu: 'atendeu', nao_atendeu: 'não atendeu', enviada: 'mensagem enviada', agendou: 'agendou', interesse_visita: 'topou visitar, sem horário', ja_comprou: 'já comprou', sem_interesse: 'sem interesse' };
 // Na linha só o resultado da ligação. Agendou / sem interesse / já comprou ficam no briefing de "Atendeu";
 // "Não atendeu" já abre a mensagem de recado (cadência: ligação WhatsApp, ligação telefone, mensagem, follow-up)
 const BOTOES_SDR = `<button class="btn verde" data-c="ligacao:atendeu">Atendeu</button><button class="btn" data-c="ligacao:nao_atendeu">Não atendeu</button>`;
@@ -1695,6 +1701,8 @@ function abrirBriefing(leadId, nome, resultado) {
       <label><input type="radio" name="bfProx" value="retornar" ${resultado === 'atendeu' ? 'checked' : ''}> Ligar de novo em <input type="datetime-local" id="bfData" value="${local(amanha10)}" style="width:auto;margin-left:6px"></label>
       <label><input type="radio" name="bfProx" value="agendou" ${resultado === 'agendou' ? 'checked' : ''}> Agendou visita para <input type="datetime-local" id="bfVisita" value="${local(amanha10)}" style="width:auto;margin-left:6px"></label>
       <span class="sub" style="margin:-4px 0 4px 28px">O lead vai para o Follow-up de visitas. Registre também no LeadsOK.</span>
+      <label><input type="radio" name="bfProx" value="interesse_visita"> Topou visitar, mas não confirmou o horário. Voltar a falar em <input type="datetime-local" id="bfInteresse" value="${local(amanha10)}" style="width:auto;margin-left:6px"></label>
+      <span class="sub" style="margin:-4px 0 4px 28px">Fica em "Interesse em agendar" até fechar dia e hora. Escreva acima o que ele disse (quando pode, o que falta).</span>
       <label><input type="radio" name="bfProx" value="sem_interesse"> Não ligar mais: sem interesse</label>
       <label><input type="radio" name="bfProx" value="ja_comprou"> Não ligar mais: já comprou</label></div>
     <p style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn" id="bfCancelar">Cancelar</button><button class="btn verde" id="bfSalvar">Salvar briefing</button></p></div>`;
@@ -1711,6 +1719,10 @@ function abrirBriefing(leadId, nome, resultado) {
       const t = lerSP(m.querySelector('#bfData').value);
       if (!t || t < Date.now() - 60000) return alert('Escolha uma data de retorno no futuro.');
       corpo.proximoEm = t;
+    }
+    if (prox === 'interesse_visita') {
+      const t = lerSP(m.querySelector('#bfInteresse').value);
+      if (t && t > Date.now() - 3600000) corpo.proximoEm = t;
     }
     if (prox === 'agendou') {
       const t = lerSP(m.querySelector('#bfVisita').value);
@@ -1733,7 +1745,7 @@ function carteiraSdr() {
 $('#btnCfSdr').onclick = async () => {
   const objecoes = $('#cfObj').value.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).map((b) => { const [o, ...r] = b.split('\n'); return { objecao: o.trim(), resposta: r.join('\n').trim() }; });
   try {
-    await api('/api/sdr/config', { method:'POST', body: JSON.stringify({ horasTentarDeNovo: $('#cfTentar').value, horasAguardandoRecado: $('#cfRecado').value, tentativasMax: $('#cfMax').value, diasNovos: $('#cfDias').value, recado: $('#cfRecadoTxt').value, confirmacao: $('#cfConfTxt').value, objecoes }) });
+    await api('/api/sdr/config', { method:'POST', body: JSON.stringify({ horasTentarDeNovo: $('#cfTentar').value, horasAguardandoRecado: $('#cfRecado').value, tentativasMax: $('#cfMax').value, diasNovos: $('#cfDias').value, horasSemRespostaResgate: $('#cfResgate').value, recado: $('#cfRecadoTxt').value, confirmacao: $('#cfConfTxt').value, objecoes }) });
     alert('Configuração do SDR salva.'); delete $('#sdCfgCard').dataset.ok; carregarSdr();
   } catch (e) { alert(e.message); }
 };
@@ -1753,7 +1765,7 @@ async function carregarSdr() {
   $('#sdObjecoes').innerHTML = (r.objecoes || []).map((o) => `<details class="objecao"><summary><b>"${esc(o.objecao)}"</b></summary><p>${esc(o.resposta)}</p></details>`).join('') || '<div class="vazio">Nenhuma objeção cadastrada.</div>';
   if (eu?.papel === 'admin' && !$('#sdCfgCard').dataset.ok) {
     $('#sdCfgCard').dataset.ok = '1';
-    $('#cfTentar').value = r.cadencia.horasTentarDeNovo; $('#cfRecado').value = r.cadencia.horasAguardandoRecado; $('#cfMax').value = r.cadencia.tentativasMax; $('#cfDias').value = r.cadencia.diasNovos;
+    $('#cfTentar').value = r.cadencia.horasTentarDeNovo; $('#cfRecado').value = r.cadencia.horasAguardandoRecado; $('#cfMax').value = r.cadencia.tentativasMax; $('#cfDias').value = r.cadencia.diasNovos; $('#cfResgate').value = r.cadencia.horasSemRespostaResgate;
     $('#cfRecadoTxt').value = r.recado || COPY_NAO_ATENDEU;
     $('#cfConfTxt').value = r.confirmacao || COPY_CONFIRMACAO;
     $('#cfObj').value = (r.objecoes || []).map((o) => `${o.objecao}\n${o.resposta}`).join('\n\n');
@@ -1762,21 +1774,22 @@ async function carregarSdr() {
   $('#sdMsg').textContent = num(r.resumo.mensagens); $('#sdAgendou').textContent = num(r.resumo.agendou); $('#sdLeads').textContent = `leads trabalhados: ${num(r.resumo.leads)}`;
   $('#sdFila').textContent = num(LISTAS_SDR.reduce((a, [k]) => a + r.listas[k].length, 0));
   const cd = r.cadencia;
-  const descSdr = (k, d) => k === 'novos' ? d.replace('7 dias', `${cd.diasNovos} dias`) : k === 'retornar' ? `Quem não atendeu há mais de ${String(cd.horasTentarDeNovo).replace('.', ',')} h, quem não respondeu o recado em ${cd.horasAguardandoRecado} h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.` : d;
+  const descSdr = (k, d) => k === 'abandonados' ? d.replace('1 h', `${String(cd.horasSemRespostaResgate).replace('.', ',')} h`) : k === 'novos' ? d.replace('7 dias', `${cd.diasNovos} dias`) : k === 'retornar' ? `Quem não atendeu há mais de ${String(cd.horasTentarDeNovo).replace('.', ',')} h, quem não respondeu o recado em ${cd.horasAguardandoRecado} h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.` : d;
   $('#sdListas').innerHTML = LISTAS_SDR.map(([k, titulo, desc0]) => { const desc = descSdr(k, desc0);
     const itens = r.listas[k];
     return `<div class="card"><div class="cardTopo"><div><h2>${titulo} <span class="sub">(${itens.length})</span></h2><p class="sub">${desc}</p></div></div>
       ${itens.map((l) => {
         const tel = soDigitos(l.whatsapp); const nome = (l.nome || 'Cliente').split(' ')[0];
-        const quando = k === 'posVisita' ? `${l.compareceu === 0 ? '<span class="ruim">não veio</span>' : 'veio e não comprou'} · visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : k === 'visitas' ? `visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${l.agenda_origem === 'sdr' ? ' · agendada pelo SDR' : ''}${l.passou ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}` : k === 'novos' ? `chegou ${haTempo(l.created_date)}` : k === 'retornar' && l.followLeadsOK ? `follow-up marcado no LeadsOK ${new Date(l.followLeadsOK).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : `chegou ${haTempo(l.created_date)} · última msg ${haTempo(l.ultima_msg_at)}`;
+        const kv = (k === 'visitas' || k === 'interesseIa') && !!l.agenda_data; // visita com data: botões de confirmação / resultado
+        const quando = k === 'posVisita' ? `${l.compareceu === 0 ? '<span class="ruim">não veio</span>' : 'veio e não comprou'} · visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : kv ? `visita ${new Date(l.agenda_data).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${l.agenda_origem === 'sdr' ? ' · agendada pelo SDR' : ''}${l.passou ? ' · <span class="ruim">passou do horário: marque o resultado</span>' : ''}` : l.topouSemHorario ? '<span class="bom">topou visitar</span> · <span class="ruim">falta fechar dia e hora</span>' : k === 'novos' ? `chegou ${haTempo(l.created_date)}` : k === 'retornar' && l.followLeadsOK ? `follow-up marcado no LeadsOK ${new Date(l.followLeadsOK).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : `chegou ${haTempo(l.created_date)} · última msg ${haTempo(l.ultima_msg_at)}`;
         const feitos = l.contatosHoje.map((c) => (c.tipo === 'ligacao' ? 'ligação: ' : '') + (RESULTADO[c.resultado] || c.resultado)).join(' · ');
         const uc = l.ultimoContato;
         return `<div class="sdLinha ${feitos ? 'feito' : ''}" data-lead="${esc(l.id)}" data-data="${esc(l.agenda_data || '')}">
-          <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>${carroLinha(l)}${k === 'visitas' && !l.passou ? `<div style="margin-top:4px">${seloConfirmacao(l)}</div>` : ''}${k === 'visitas' && l.agenda_obs ? `<div class="briefing">${esc(l.agenda_obs)}</div>` : ''}
+          <div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || 'sem vendedor')}${l.ia ? ' (IA)' : ''} · ${quando}</span>${carroLinha(l)}${kv && !l.passou ? `<div style="margin-top:4px">${seloConfirmacao(l)}</div>` : ''}${kv && l.agenda_obs ? `<div class="briefing">${esc(l.agenda_obs)}</div>` : ''}
             <div class="sub">${tel ? '+' + tel : 'sem telefone'}${feitos ? ` · <span class="bom">hoje: ${esc(feitos)}</span>` : ''}${l.tentativas ? ` · ${l.tentativas} tentativa(s) sem atender` : ''}</div>
-            ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
+            ${uc && (uc.nota || uc.proximo_em) ? `<div class="briefing">${uc.interesse ? `<span class="tag ${uc.interesse === 'quente' ? 'vendido' : ''}">${esc(uc.interesse)}</span> ` : ''}${esc(uc.nota || '')}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : uc.resultado === 'interesse_visita' ? 'confirmar até' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${haTempo(new Date(uc.em).toISOString())}</span></div>` : ''}</div>
           <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${tel}?text=${encodeURIComponent(`Oi ${nome}, tudo bem? Aqui é da Choice Cars.`)}">WhatsApp</a>` : ''}
-            ${k === 'visitas' && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') : k === 'visitas' ? `<button class="btn verde" data-conf="mensagem">Mandar confirmação</button>${l.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : BOTOES_SDR}</div></div>`;
+            ${kv && l.passou ? VISITA_BTNS.map(([v, n, c]) => `<button class="btn ${c}" data-visita="${v}">${n}</button>`).join('') : kv ? `<button class="btn verde" data-conf="mensagem">Mandar confirmação</button>${l.cliente_confirmou ? '' : '<button class="btn" data-conf="cliente">Cliente confirmou</button>'}` : BOTOES_SDR}</div></div>`;
       }).join('') || '<div class="vazio">Nada nesta lista agora.</div>'}</div>`;
   }).join('');
   ligarBotoesSdr($('#sdListas'));
@@ -1791,14 +1804,14 @@ async function carregarSdr() {
     catch (e) { alert(e.message); }
   });
   // etapas do CRM
-  const ETAPAS = [['aguardando', 'Aguardando resposta'], ['tentar', 'Tentar de novo (3 h)'], ['retorno', 'Retorno marcado'], ['agendados', 'Agendados'], ['posVisita', 'Pós-visita'], ['semContato', 'Sem contato (3 tentativas)'], ['encerrados', 'Encerrados']];
+  const ETAPAS = [['aguardando', 'Aguardando resposta'], ['tentar', 'Tentar de novo (3 h)'], ['retorno', 'Retorno marcado'], ['interesse', 'Interesse em agendar'], ['agendados', 'Agendados'], ['posVisita', 'Pós-visita'], ['semContato', 'Sem contato (3 tentativas)'], ['encerrados', 'Encerrados']];
   window.etapaSdr ||= 'retorno';
   $('#sdEtapasBtns').innerHTML = ETAPAS.map(([k, n]) => `<button data-et="${k}" class="${k === window.etapaSdr ? 'ativo' : ''}">${n} (${r.etapas[k].length})</button>`).join('');
   $('#sdEtapasBtns').querySelectorAll('button').forEach((b) => b.onclick = () => { window.etapaSdr = b.dataset.et; carregarSdr(); });
   $('#sdEtapa').innerHTML = r.etapas[window.etapaSdr].map((l) => {
     const uc = l.ultimoContato || {}; const tel = soDigitos(l.whatsapp);
     return `<div class="sdLinha" data-lead="${esc(l.id)}"><div><b>${esc(l.nome || 'Sem nome')}</b> <span class="sub">· ${esc(canal(l.origem))} · ${esc(l.vendedor || '')} · ${tel ? '+' + tel : ''}</span>
-      <div class="briefing">${uc.interesse ? `<span class="tag">${esc(uc.interesse)}</span> ` : ''}${esc(RESULTADO[uc.resultado] || '')}${uc.nota ? ' · ' + esc(uc.nota) : ''}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${uc.em ? haTempo(new Date(uc.em).toISOString()) : ''}</span></div></div>
+      <div class="briefing">${uc.interesse ? `<span class="tag">${esc(uc.interesse)}</span> ` : ''}${esc(RESULTADO[uc.resultado] || '')}${uc.nota ? ' · ' + esc(uc.nota) : ''}${uc.proximo_em ? ` <span class="sub">· ${uc.resultado === 'agendou' ? 'visita' : uc.resultado === 'interesse_visita' ? 'confirmar até' : 'retorno'} ${new Date(uc.proximo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>` : ''} <span class="sub">· ${esc(uc.por || '')} ${uc.em ? haTempo(new Date(uc.em).toISOString()) : ''}</span></div></div>
       <div class="acoes">${tel ? `<a class="btn" href="tel:+${tel}">Ligar</a>` : ''}${BOTOES_SDR}</div></div>`;
   }).join('') || '<div class="vazio">Nenhum lead nesta etapa.</div>';
   ligarBotoesSdr($('#sdEtapa'));

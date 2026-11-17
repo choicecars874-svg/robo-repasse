@@ -223,7 +223,7 @@ function agenda({ de, ate } = {}) {
   }
   itens.sort((a, b) => (a.data < b.data ? -1 : 1));
   const agora = new Date().toISOString();
-  const resumo = { agendados: itens.length, vieram: 0, compraram: 0, vieramNaoCompraram: 0, naoVieram: 0, aMarcar: 0, futuros: 0, concluidosLeadsOK: 0 };
+  const resumo = { agendados: itens.length, vieram: 0, compraram: 0, vieramNaoCompraram: 0, naoVieram: 0, aMarcar: 0, futuros: 0, concluidosLeadsOK: 0, confirmados: 0, iaSemConfirmar: 0 };
   for (const a of itens) {
     if (a.compareceu === 1) {
       resumo.vieram++;
@@ -232,7 +232,11 @@ function agenda({ de, ate } = {}) {
     } else if (a.compareceu === 0) resumo.naoVieram++;
     else if (a.concluido) resumo.concluidosLeadsOK++;
     else if (a.data < agora) resumo.aMarcar++;
-    else resumo.futuros++;
+    else {
+      resumo.futuros++;
+      if (a.cliente_confirmou) resumo.confirmados++;
+      else if (a.pela_ia) resumo.iaSemConfirmar++;
+    }
   }
   // por dia (para o gráfico da semana/mês)
   const porDia = {};
@@ -404,11 +408,12 @@ function painelComercial({ de, ate, horasParado = 2, metas = {} }) {
 
 // Fila do SDR: quem ligar ou chamar hoje, em ordem de urgência. Só leads de entrada (sem a base de resgate)
 // e não arquivados. Cada lead aparece numa lista só (a mais urgente).
-function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
+function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario = '' } = {}) {
   const hTentar = Number(cadencia.horasTentarDeNovo) || 3;
   const hRecado = Number(cadencia.horasAguardandoRecado) || 24;
   const maxTent = Number(cadencia.tentativasMax) || 3;
   const diasNovos = Number(cadencia.diasNovos) || 7;
+  const hResgate = Number(cadencia.horasSemRespostaResgate) || 1;
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
   const hoje = diaSP();
@@ -423,6 +428,8 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
   // carteira: só os leads que estão no nome do vendedor no LeadsOK (o Elyas transfere para o SDR o que ele não dá conta)
   const V = vendedor ? 'AND lower(l.vendedor) = lower(?)' : '';
   const daCarteira = (l) => !vendedor || String(l.vendedor || '').toLowerCase() === vendedor.toLowerCase();
+  // da carteira OU que o próprio usuário trabalhou por último (ex.: lead de outro vendedor que ele resgatou e agendou)
+  const meu = (l) => daCarteira(l) || (!!usuario && ultimos[l.id]?.por === usuario);
   const va = vendedor ? [vendedor] : [];
   // agenda do LeadsOK: "presencial"/"online" é visita; "ligacao" é lembrete de follow-up (vai para "Retornar hoje")
   const EH_VISITA = "COALESCE(a.modalidade, 'presencial') != 'ligacao'";
@@ -431,7 +438,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
     responder: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 150`).all(iso(7 * 86400000), iso(horasSemResposta * 3600000), ...va),
     // 1b) com a carteira escolhida: leads de OUTROS vendedores que estão sem resposta (ninguém cuidando): ligar antes que esfrie
     abandonados: vendedor ? d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ${semAgendar}
-      AND lower(COALESCE(l.vendedor, '')) != lower(?) ORDER BY l.ultima_msg_at DESC LIMIT 100`).all(iso(7 * 86400000), iso(horasSemResposta * 3600000), vendedor) : [],
+      AND lower(COALESCE(l.vendedor, '')) != lower(?) ORDER BY l.ultima_msg_at DESC LIMIT 100`).all(iso(7 * 86400000), iso(hResgate * 3600000), vendedor) : [],
     // 2) follow-up de visitas (agenda do LeadsOK): confirmar as de hoje e amanhã; marcar o resultado das que já passaram (7 dias)
     visitas: d.prepare(`SELECT COALESCE(l.id, 'agenda-' || a.id) id, COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, l.origem,
         COALESCE(l.vendedor, a.vendedor) vendedor, l.vendedor_is_ia ia, l.ultima_msg_owner, l.ultima_msg_at, l.created_date, l.aba_atual,
@@ -479,6 +486,8 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
     if (!c) return 'fila';
     if (['ja_comprou', 'sem_interesse'].includes(c.resultado)) return 'encerrados';
     if (c.resultado === 'agendou') return 'agendados';
+    // topou visitar mas não fechou dia e hora: fica em "interesse em agendar" até confirmar
+    if (c.resultado === 'interesse_visita') return 'interesse';
     if (c.proximo_em) return c.proximo_em <= fimDeHoje ? 'retornar' : 'retorno';
     if (c.resultado === 'nao_atendeu') return tentativas[id] >= maxTent ? 'semContato' : agora - c.em >= hTentar * 3600000 ? 'retornar' : 'tentar';
     if (c.resultado === 'enviada') {
@@ -503,12 +512,15 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
   const fimAmanha = Date.parse(amanha + 'T23:59:59-03:00');
   for (const l of Object.values(todosLeads)) {
     const c = ultimos[l.id];
-    if (c.resultado !== 'agendou' || !c.proximo_em || naLista.has(l.id) || !daCarteira(l)) continue;
+    if (c.resultado !== 'agendou' || !c.proximo_em || naLista.has(l.id) || !meu(l)) continue;
     if (c.proximo_em < agora - 7 * 86400000 || c.proximo_em > fimAmanha) continue;
     const data = new Date(c.proximo_em).toISOString();
     if (jaMarcada.get(l.id, data)) continue;
     listas.visitas.push({ ...l, agenda_data: data, modalidade: 'presencial', agenda_origem: 'sdr' });
   }
+  // pela_ia: quem marcou foi a IA (sem confirmação humana do horário é só interesse em agendar)
+  const pelaIa = d.prepare(`SELECT 1 FROM lk_agenda a WHERE a.lead_id = ? AND a.data = ? AND a.pela_ia = 1`);
+  for (const l of listas.visitas) l.pela_ia = l.agenda_origem === 'leadsok' && !!pelaIa.get(l.id, l.agenda_data);
   // primeiro as que já passaram (marcar o resultado), depois as próximas por horário
   const agoraIso = new Date(agora).toISOString();
   const conf = d.prepare('SELECT tipo, MAX(em) em FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? GROUP BY tipo');
@@ -517,23 +529,30 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
     for (const c of conf.all(l.id, l.agenda_data)) l[c.tipo === 'cliente' ? 'cliente_confirmou' : 'confirmacao_enviada'] = c.em;
   }
   listas.visitas.sort((a, b) => (a.passou !== b.passou ? (a.passou ? -1 : 1) : a.agenda_data < b.agenda_data ? -1 : 1));
-  listas.retornar = Object.values(todosLeads).filter((l) => daCarteira(l) && etapa(l.id, l) === 'retornar')
+  // interesse em agendar: a IA marcou, a visita ainda não aconteceu e o cliente não confirmou o horário
+  listas.interesseIa = listas.visitas.filter((l) => l.pela_ia && !l.passou && !l.cliente_confirmou);
+  const noInteresse = new Set(listas.interesseIa);
+  listas.visitas = listas.visitas.filter((l) => !noInteresse.has(l));
+  // + quem topou visitar numa ligação do SDR e ainda não fechou o horário (com o briefing do que foi dito)
+  const idsInteresse = new Set(listas.interesseIa.map((l) => l.id));
+  for (const l of Object.values(todosLeads)) if (meu(l) && etapa(l.id, l) === 'interesse' && !idsInteresse.has(l.id)) listas.interesseIa.push({ ...l, topouSemHorario: true });
+  listas.retornar = Object.values(todosLeads).filter((l) => meu(l) && etapa(l.id, l) === 'retornar')
     .sort((a, b) => (ultimos[a.id].proximo_em || ultimos[a.id].em) - (ultimos[b.id].proximo_em || ultimos[b.id].em));
   const noRetornar = new Set(listas.retornar.map((l) => l.id));
   for (const l of followLeadsOK) if (!noRetornar.has(l.id) && noRetornar.add(l.id)) listas.retornar.push({ ...l, followLeadsOK: l.agenda_data });
   // fila de trabalho: um lead só na lista mais urgente, e só quem está na etapa "fila" (ou "retornar")
   const vistos = new Set();
-  for (const k of ['retornar', 'responder', 'visitas', 'posVisita', 'novos', 'abandonados', 'retomar']) {
+  for (const k of ['retornar', 'responder', 'abandonados', 'interesseIa', 'visitas', 'posVisita', 'novos', 'retomar']) {
     listas[k] = listas[k].filter((l) => {
       const e = etapa(l.id, l);
-      const pode = k === 'retornar' ? e === 'retornar' || (l.followLeadsOK && e !== 'encerrados') : k === 'visitas' ? e !== 'encerrados' : k === 'posVisita' ? e !== 'encerrados' : e === 'fila';
+      const pode = k === 'retornar' ? e === 'retornar' || (l.followLeadsOK && e !== 'encerrados') : k === 'visitas' ? e !== 'encerrados' : k === 'interesseIa' ? e !== 'encerrados' && (!l.topouSemHorario || e === 'interesse') : k === 'posVisita' ? e !== 'encerrados' : e === 'fila';
       return pode && !vistos.has(l.id) && vistos.add(l.id);
     });
   }
   // etapas (CRM): onde está cada lead que já foi trabalhado
-  const etapas = { aguardando: [], tentar: [], retorno: [], agendados: [], posVisita: [], semContato: [], encerrados: [] };
+  const etapas = { aguardando: [], tentar: [], retorno: [], interesse: [], agendados: [], posVisita: [], semContato: [], encerrados: [] };
   for (const l of Object.values(todosLeads)) {
-    if (!daCarteira(l)) continue;
+    if (!meu(l)) continue;
     const e = etapa(l.id, l);
     if (etapas[e]) etapas[e].push(l);
   }
@@ -546,14 +565,14 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {} } = {}) {
   const porLead = {};
   for (const c of contatos) (porLead[c.lead_id] ||= []).push(c);
   for (const k of Object.keys(listas)) for (const l of listas[k]) l.contatosHoje = porLead[l.id] || [];
-  const resumo = { ligacoes: contatos.filter((c) => c.tipo === 'ligacao').length, atenderam: contatos.filter((c) => ['atendeu', 'agendou', 'ja_comprou', 'sem_interesse'].includes(c.resultado) && c.tipo === 'ligacao').length, mensagens: contatos.filter((c) => c.tipo === 'mensagem').length, agendou: contatos.filter((c) => c.resultado === 'agendou').length, leads: Object.keys(porLead).length };
+  const resumo = { ligacoes: contatos.filter((c) => c.tipo === 'ligacao').length, atenderam: contatos.filter((c) => ['atendeu', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse'].includes(c.resultado) && c.tipo === 'ligacao').length, mensagens: contatos.filter((c) => c.tipo === 'mensagem').length, agendou: contatos.filter((c) => c.resultado === 'agendou').length, leads: Object.keys(porLead).length };
   // vendedores com leads em aberto (para escolher a carteira)
   const vendedores = d.prepare(`SELECT l.vendedor, COUNT(*) n FROM lk_leads l WHERE l.is_resgate = 0 AND l.aba_atual != 'arquivados' AND l.vendedor IS NOT NULL AND l.vendedor_is_ia = 0 AND l.created_date > ?
     GROUP BY l.vendedor ORDER BY n DESC`).all(iso(30 * 86400000));
-  return { dia: hoje, horasSemResposta, vendedor, vendedores, listas, etapas, resumo, cadencia: { horasTentarDeNovo: hTentar, horasAguardandoRecado: hRecado, tentativasMax: maxTent, diasNovos } };
+  return { dia: hoje, horasSemResposta, vendedor, vendedores, listas, etapas, resumo, cadencia: { horasTentarDeNovo: hTentar, horasAguardandoRecado: hRecado, tentativasMax: maxTent, diasNovos, horasSemRespostaResgate: hResgate } };
 }
 
-const RESULTADOS = ['atendeu', 'nao_atendeu', 'enviada', 'agendou', 'ja_comprou', 'sem_interesse'];
+const RESULTADOS = ['atendeu', 'nao_atendeu', 'enviada', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse'];
 function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proximoEm }) {
   const d = banco.abrir();
   if (!d) throw new Error(banco.erro());
@@ -578,7 +597,7 @@ function resultadoSdr({ de, ate, por } = {}) {
   if (!d) return { erro: banco.erro() };
   const filtro = por ? 'AND c.por = ?' : '';
   const args = por ? [de, ate, por] : [de, ate];
-  const ATENDEU = "c.tipo = 'ligacao' AND c.resultado IN ('atendeu', 'agendou', 'ja_comprou', 'sem_interesse')";
+  const ATENDEU = "c.tipo = 'ligacao' AND c.resultado IN ('atendeu', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse')";
   const cols = `TOTAL(c.tipo = 'ligacao') ligacoes, TOTAL(${ATENDEU}) atenderam, TOTAL(c.resultado = 'nao_atendeu') naoAtenderam,
     TOTAL(c.tipo = 'mensagem') mensagens, TOTAL(c.resultado = 'agendou') agendou, TOTAL(c.resultado IN ('ja_comprou', 'sem_interesse')) encerrados,
     COUNT(DISTINCT c.lead_id) leads`;
@@ -597,7 +616,17 @@ function resultadoSdr({ de, ate, por } = {}) {
   const porHora = d.prepare(`SELECT CAST(strftime('%H', c.em / 1000, 'unixepoch', '-3 hours') AS INTEGER) hora, TOTAL(c.tipo = 'ligacao') ligacoes, TOTAL(${ATENDEU}) atenderam
     FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY hora ORDER BY hora`).all(...args);
   const pessoas = d.prepare('SELECT DISTINCT por FROM lk_contatos WHERE por IS NOT NULL ORDER BY por').all().map((x) => x.por);
-  return { de, ate, por: por || null, total: { ...total, ...visTot }, porDia, porPessoa: porPessoa.map((p) => ({ ...p, vieram: visMapa[p.por]?.vieram || 0, naoVieram: visMapa[p.por]?.naoVieram || 0, compraram: visMapa[p.por]?.compraram || 0 })), porHora, pessoas };
+  // funil do SDR (por lead, cada etapa conta quem chegou pelo menos até ela):
+  // ativação = lead que recebeu ligação ou mensagem; conexão = atendeu, ou respondeu no WhatsApp depois do contato;
+  // agendamento = agendou visita; comparecimento = veio; compra
+  const f = d.prepare(`SELECT COUNT(*) ativados, TOTAL(conectou OR agendou OR veio OR comprou) conectados, TOTAL(agendou OR veio OR comprou) agendaram, TOTAL(veio OR comprou) compareceram, TOTAL(comprou) compraram FROM (
+      SELECT c.lead_id,
+        MAX(c.resultado IN ('atendeu', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse') OR (l.ultima_msg_owner = 'customers' AND l.ultima_msg_at > strftime('%Y-%m-%dT%H:%M:%fZ', c.em / 1000.0, 'unixepoch'))) conectou,
+        MAX(c.resultado = 'agendou') agendou,
+        MAX(EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = c.lead_id AND v.compareceu = 1 AND v.marcado_em > c.em)) veio,
+        MAX(EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = c.lead_id AND v.comprou = 1 AND v.marcado_em > c.em)) comprou
+      FROM lk_contatos c LEFT JOIN lk_leads l ON l.id = c.lead_id WHERE c.dia BETWEEN ? AND ? AND c.lead_id NOT LIKE 'teste-%' ${filtro} GROUP BY c.lead_id)`).get(...args);
+  return { de, ate, por: por || null, funil: f, total: { ...total, ...visTot }, porDia, porPessoa: porPessoa.map((p) => ({ ...p, vieram: visMapa[p.por]?.vieram || 0, naoVieram: visMapa[p.por]?.naoVieram || 0, compraram: visMapa[p.por]?.compraram || 0 })), porHora, pessoas };
 }
 
 // Confirmação da visita: "mensagem" = SDR mandou a confirmação; "cliente" = cliente confirmou o horário
