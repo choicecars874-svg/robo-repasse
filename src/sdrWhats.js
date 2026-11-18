@@ -20,6 +20,12 @@ const logger = pino({ level: 'silent' });
 const estado = { status: 'desligado', qr: null, numero: null, desde: Date.now(), ultimoErro: null, enviadosHoje: 0, diaContagem: null, log: [] };
 let sock = null;
 let enviando = false;
+// conversa no WhatsApp do SDR (só em memória, nada é gravado): número -> última mensagem e se o cliente desmarcou
+const conversas = new Map();
+const meusEnvios = new Map(); // número -> quando o lembrete começou a ser enviado (não conta como conversa)
+const chaveNum = (n) => String(n || '').replace(/\D/g, '').slice(-8);
+// cliente avisando que não vem / quer mudar / já resolveu
+const DESMARCOU = /\b(n[aã]o\s+(vou|vai|consigo|posso|irei|d[aá]\b|tenho como|estarei|vou mais)|desmarc|cancel|remarc|outro dia|fica pra outr|imprevisto|j[aá] comprei|comprei outro|desist|adiar|semana que vem)/i;
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const cfg = () => ({ ativo: false, horasAntes: 2, horaInicio: 8, horaFim: 20, maxDia: 15, comFoto: true, estiloCard: 'cor', modeloCard: 'premium', ...((config.get().sdr || {}).lembreteAuto || {}) });
@@ -46,6 +52,25 @@ async function conectar() {
     shouldSyncHistoryMessage: () => false,
   });
   sock.ev.on('creds.update', saveCreds);
+  // anota quando houve conversa com cada número (para o lembrete não cair no meio de uma conversa)
+  sock.ev.on('messages.upsert', ({ messages }) => {
+    for (const m of messages || []) {
+      const k = m.key || {};
+      const msg = m.message || {};
+      const texto = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || '';
+      if (!Object.keys(msg).length || msg.protocolMessage || msg.reactionMessage) continue;
+      const em = Number(m.messageTimestamp) ? Number(m.messageTimestamp) * 1000 : Date.now();
+      for (const jid of [k.remoteJid, k.remoteJidAlt, k.senderPn]) {
+        if (!jid || !/@s\.whatsapp\.net$/.test(jid)) continue;
+        const n = chaveNum(jid.split('@')[0]);
+        if (k.fromMe && Date.now() - (meusEnvios.get(n) || 0) < 120000) continue; // o próprio lembrete
+        const c = conversas.get(n) || { em: 0, desmarcou: 0 };
+        c.em = Math.max(c.em, em);
+        if (!k.fromMe && DESMARCOU.test(texto)) c.desmarcou = em;
+        conversas.set(n, c);
+      }
+    }
+  });
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       estado.status = 'aguardando-qr';
@@ -169,13 +194,19 @@ function pendentesHoje() {
   const agora = Date.now();
   const doLeadsOK = d.prepare(`SELECT a.lead_id, a.data, COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, COALESCE(l.vendedor, a.vendedor) vendedor
     FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id
-    WHERE a.lead_id IS NOT NULL AND COALESCE(a.modalidade, 'presencial') != 'ligacao' AND COALESCE(a.concluido, 0) = 0 AND date(a.data, '-3 hours') = ?`).all(hoje);
+    WHERE a.lead_id IS NOT NULL AND COALESCE(a.modalidade, 'presencial') = 'presencial' AND COALESCE(a.concluido, 0) = 0 AND date(a.data, '-3 hours') = ?`).all(hoje);
   const doSdr = d.prepare(`SELECT c.lead_id, c.proximo_em, l.nome, l.whatsapp, l.carro, l.vendedor FROM lk_contatos c JOIN lk_leads l ON l.id = c.lead_id
     WHERE c.resultado = 'agendou' AND c.proximo_em IS NOT NULL AND c.id = (SELECT MAX(id) FROM lk_contatos WHERE lead_id = c.lead_id AND resultado = 'agendou')
-      AND date(c.proximo_em / 1000, 'unixepoch', '-3 hours') = ?`).all(hoje).map((x) => ({ ...x, data: new Date(x.proximo_em).toISOString() }));
+      AND COALESCE(c.modalidade, 'presencial') = 'presencial' AND date(c.proximo_em / 1000, 'unixepoch', '-3 hours') = ?`).all(hoje).map((x) => ({ ...x, data: new Date(x.proximo_em).toISOString() }));
   const vistos = new Set();
   const lista = [];
-  const jaEnviado = d.prepare("SELECT tipo FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo IN ('lembrete', 'lembrete_erro')");
+  const jaEnviado = d.prepare("SELECT tipo, por FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo IN ('lembrete', 'lembrete_erro', 'lembrete_pulado') ORDER BY tipo = 'lembrete' DESC");
+  const excluida = d.prepare("SELECT 1 FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo = 'excluido'");
+  // venda já fechada (LeadsOK "Vendido", "Veio e comprou" na Agenda ou "já comprou" no briefing) ou "sem interesse" depois do agendamento
+  const encerrado = d.prepare(`SELECT CASE WHEN lower(COALESCE(l.archive_reason, '')) LIKE 'vendido%' OR EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = l.id AND v.comprou = 1)
+        OR EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.resultado = 'ja_comprou') THEN 'venda já fechada'
+      WHEN EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.resultado = 'sem_interesse' AND c.em > ?) THEN 'cliente sem interesse' END motivo
+    FROM lk_leads l WHERE l.id = ?`);
   const temResultado = d.prepare('SELECT 1 FROM lk_visitas WHERE lead_id = ? AND data_agendada = ?');
   const fora = ((config.get().sdr || {}).vendedoresFora || []).map((v) => String(v).toLowerCase());
   for (const v of [...doLeadsOK, ...doSdr]) {
@@ -186,9 +217,32 @@ function pendentesHoje() {
     if (quando <= agora) continue;
     const enviarEm = Math.max(quando - c.horasAntes * 3600000, Date.parse(`${hoje}T${String(c.horaInicio).padStart(2, '0')}:00:00-03:00`));
     const env = jaEnviado.get(v.lead_id, v.data);
-    lista.push({ ...v, enviarEm, enviado: env?.tipo === 'lembrete', falhou: env?.tipo === 'lembrete_erro', comResultado: !!temResultado.get(v.lead_id, v.data) });
+    const pular = excluida.get(v.lead_id, v.data) ? 'excluído da agenda' : encerrado.get(quando - 7 * 86400000, v.lead_id)?.motivo || (env?.tipo === 'lembrete_pulado' ? env.por : null);
+    lista.push({ ...v, enviarEm, pular, enviado: env?.tipo === 'lembrete', falhou: env?.tipo === 'lembrete_erro', comResultado: !!temResultado.get(v.lead_id, v.data) });
   }
   return lista.sort((a, b) => a.enviarEm - b.enviarEm);
+}
+
+// ---------- Antes de enviar: a conversa está rolando? o cliente desmarcou? ----------
+// Olha o WhatsApp do SDR (memória) e a conversa no LeadsOK (só leitura, nada é gravado).
+// Devolve o motivo para NÃO mandar, ou null.
+async function motivoParaNaoEnviar(v) {
+  const janela = (Number(cfg().horasConversa) || 3) * 3600000;
+  const agora = Date.now();
+  const c = conversas.get(chaveNum(v.whatsapp));
+  if (c?.desmarcou && agora - c.desmarcou < 48 * 3600000) return 'o cliente falou em desmarcar/não vir no seu WhatsApp';
+  if (c?.em && agora - c.em < janela) return 'conversa em andamento no seu WhatsApp';
+  if (String(v.lead_id).startsWith('agenda-') || String(v.lead_id).startsWith('teste-')) return null;
+  try {
+    const { mensagens } = await require('./leadsok/coletor').conversaRecente(v.lead_id, 20);
+    const recentes = (mensagens || []).filter((m) => m.em && agora - Date.parse(m.em) < 48 * 3600000);
+    if (recentes.some((m) => m.de === 'cliente' && DESMARCOU.test(m.texto))) return 'o cliente falou em desmarcar/não vir na conversa do LeadsOK';
+    const ultima = recentes[recentes.length - 1];
+    if (ultima && agora - Date.parse(ultima.em) < janela) return 'conversa em andamento no LeadsOK';
+  } catch (e) {
+    registrar('aviso', `Não consegui ler a conversa de ${v.nome || 'cliente'} no LeadsOK (${e.message}); conferi só o seu WhatsApp`);
+  }
+  return null;
 }
 
 // ---------- Envio ----------
@@ -202,6 +256,7 @@ async function enviarLembrete(v, { por = 'automático', teste = false } = {}) {
   // no texto, o nome do carro do estoque (marca e modelo) quando achado; senão o que veio do lead
   const nomeCarro = carro ? `${carro.marca || ''} ${carro.modelo || ''}`.trim() : v.carro;
   const texto = textoLembrete({ nome: v.nome, carro: nomeCarro, data: v.data, sdr, temCarro: !!carro });
+  meusEnvios.set(chaveNum(numero), Date.now());
   let card = null;
   if (cfg().comFoto) {
     // card com a foto do carro do cliente; sem carro no estoque, a foto da fachada da loja e "estamos te esperando"
@@ -226,7 +281,14 @@ async function rodada() {
   enviando = true;
   try {
     for (const v of pendentesHoje()) {
-      if (v.enviado || v.falhou || v.comResultado || v.enviarEm > Date.now()) continue;
+      if (v.enviado || v.falhou || v.pular || v.comResultado || v.enviarEm > Date.now()) continue;
+      const motivo = await motivoParaNaoEnviar(v);
+      if (motivo) {
+        // não manda: o SDR já está falando com o cliente (ou ele desmarcou). Fica anotado e não tenta de novo.
+        banco.abrir().prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(v.lead_id), v.data, 'lembrete_pulado', motivo.slice(0, 80), Date.now());
+        registrar('aviso', `Lembrete de ${v.nome || 'cliente'} não foi enviado: ${motivo}`);
+        continue;
+      }
       if (estado.enviadosHoje >= c.maxDia) {
         registrar('aviso', `Limite de ${c.maxDia} lembretes por dia atingido`);
         break;
@@ -253,10 +315,11 @@ function iniciar() {
 }
 
 function status() {
-  return { ...estado, temSessao: temSessao(), config: cfg(), nomeSdr: (config.get().sdr || {}).nomeSdr || '', textos: { carro: (config.get().sdr || {}).lembreteAutoCarro || '', semCarro: (config.get().sdr || {}).lembreteAutoSemCarro || '' }, hoje: pendentesHoje().map((v) => ({ nome: v.nome, data: v.data, enviarEm: v.enviarEm, enviado: v.enviado, falhou: v.falhou, comResultado: v.comResultado, carro: v.carro, fotoDoCarro: !!carroNoEstoque(v.carro)?.imagem })) };
+  return { ...estado, temSessao: temSessao(), config: cfg(), nomeSdr: (config.get().sdr || {}).nomeSdr || '', textos: { carro: (config.get().sdr || {}).lembreteAutoCarro || '', semCarro: (config.get().sdr || {}).lembreteAutoSemCarro || '' }, hoje: pendentesHoje().map((v) => ({ nome: v.nome, data: v.data, enviarEm: v.enviarEm, enviado: v.enviado, falhou: v.falhou, pular: v.pular, comResultado: v.comResultado, carro: v.carro, fotoDoCarro: !!carroNoEstoque(v.carro)?.imagem })) };
 }
 
 // só para teste automatizado: usa um socket falso
 const _usarSock = (s) => { sock = s; estado.status = 'conectado'; estado.numero = '5511999990000'; };
 
-module.exports = { cardDaVisita, fraseDoCard, _usarSock, rodada, iniciar, conectar, desconectar, status, enviarLembrete, carroNoEstoque, textoLembrete, pendentesHoje };
+const _conversas = conversas;
+module.exports = { _conversas, motivoParaNaoEnviar, cardDaVisita, fraseDoCard, _usarSock, rodada, iniciar, conectar, desconectar, status, enviarLembrete, carroNoEstoque, textoLembrete, pendentesHoje };

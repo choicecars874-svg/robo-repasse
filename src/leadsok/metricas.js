@@ -10,6 +10,10 @@ const estaFora = (nome) => { const n = String(nome || '').toLowerCase(); return 
 
 const diaSP = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
 const VENDIDO = "COALESCE(lower(l.archive_reason), '') LIKE 'vendido%'";
+// o lead já comprou: "Vendido" no LeadsOK, "Veio e comprou" na Agenda ou "já comprou" no briefing do SDR
+const JA_VENDEU = (col) => `(EXISTS (SELECT 1 FROM lk_leads lv WHERE lv.id = ${col} AND lower(COALESCE(lv.archive_reason, '')) LIKE 'vendido%')
+  OR EXISTS (SELECT 1 FROM lk_visitas vv WHERE vv.lead_id = ${col} AND vv.comprou = 1) OR EXISTS (SELECT 1 FROM lk_contatos cv WHERE cv.lead_id = ${col} AND cv.resultado = 'ja_comprou'))`;
+const EXCLUIDA = (lead, data) => `EXISTS (SELECT 1 FROM lk_confirmacoes cx WHERE cx.lead_id = ${lead} AND cx.data_agendada = ${data} AND cx.tipo = 'excluido')`;
 const STATUS_FICHA = { 1: 'Pré-aprovado', 2: 'Pré-reprovado', 3: 'Em análise', 5: 'Erro' };
 const nomeStatus = (s) => STATUS_FICHA[s] || 'Outros';
 
@@ -215,13 +219,16 @@ function agenda({ de, ate, vendedor = null } = {}) {
       a.obs, a.confirmado, a.motivo, v.compareceu, v.comprou, v.marcado_por, v.marcado_em,
       (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'mensagem') confirmacao_enviada,
       (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'cliente') cliente_confirmou,
-      (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'lembrete') lembrete_enviado
+      (SELECT MAX(em) FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'lembrete') lembrete_enviado,
+      (SELECT por FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'lembrete_pulado') lembrete_pulado,
+      (SELECT por FROM lk_confirmacoes c WHERE c.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND c.data_agendada = a.data AND c.tipo = 'excluido') excluido_por,
+      ${JA_VENDEU('a.lead_id')} venda_fechada
     FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id LEFT JOIN lk_visitas v ON v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data
     WHERE COALESCE(a.modalidade, 'presencial') != 'ligacao' AND date(a.data, '-3 hours') BETWEEN ? AND ? ${semFora('COALESCE(l.vendedor, a.vendedor)')} ORDER BY a.data`).all(de, ate);
   // agendamentos tipo "ligação" no LeadsOK são lembretes de follow-up, não visita: ficam fora, só contados
   const followupsLigacao = d.prepare("SELECT COUNT(*) n FROM lk_agenda WHERE modalidade = 'ligacao' AND date(data, '-3 hours') BETWEEN ? AND ?").get(de, ate).n;
   // visitas agendadas pelo SDR no briefing (último "agendou" de cada lead) que não estão na agenda do LeadsOK no mesmo dia
-  const doSdr = d.prepare(`SELECT c.lead_id, c.proximo_em, c.por, l.nome, l.whatsapp, l.carro, l.vendedor, l.origem, l.aba_atual
+  const doSdr = d.prepare(`SELECT c.lead_id, c.proximo_em, c.por, c.modalidade, ${JA_VENDEU('c.lead_id')} venda_fechada, l.nome, l.whatsapp, l.carro, l.vendedor, l.origem, l.aba_atual
     FROM lk_contatos c JOIN lk_leads l ON l.id = c.lead_id
     WHERE c.resultado = 'agendou' AND c.proximo_em IS NOT NULL AND c.id = (SELECT MAX(id) FROM lk_contatos WHERE lead_id = c.lead_id AND resultado = 'agendou')
       AND date(c.proximo_em / 1000, 'unixepoch', '-3 hours') BETWEEN ? AND ? ${semFora()}`).all(de, ate);
@@ -232,7 +239,9 @@ function agenda({ de, ate, vendedor = null } = {}) {
     if (itens.some((a) => a.lead_id === c.lead_id && diaDe(a.data) === diaDe(data))) continue;
     const v = visita.get(c.lead_id, data) || {};
     const cf = (tipo) => d.prepare('SELECT MAX(em) em FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo = ?').get(c.lead_id, data, tipo).em;
-    itens.push({ id: 'sdr-' + c.lead_id + '-' + c.proximo_em, lead_id: c.lead_id, data, modalidade: 'presencial', concluido: 0, pela_ia: 0, pelo_sdr: c.por || 'SDR',
+    const cfPor = (tipo) => d.prepare('SELECT por FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo = ?').get(c.lead_id, data, tipo)?.por ?? null;
+    itens.push({ id: 'sdr-' + c.lead_id + '-' + c.proximo_em, lead_id: c.lead_id, data, modalidade: c.modalidade === 'video' ? 'online' : 'presencial', concluido: 0, pela_ia: 0, pelo_sdr: c.por || 'SDR',
+      venda_fechada: c.venda_fechada, excluido_por: cfPor('excluido'), lembrete_pulado: cfPor('lembrete_pulado'), lembrete_enviado: cf('lembrete'),
       nome: c.nome, whatsapp: c.whatsapp, carro: c.carro, vendedor: c.vendedor, origem: c.origem, aba_atual: c.aba_atual,
       compareceu: v.compareceu ?? null, comprou: v.comprou ?? null, marcado_por: v.marcado_por || null, marcado_em: v.marcado_em || null,
       identificado: 1, confirmacao_enviada: cf('mensagem'), cliente_confirmou: cf('cliente') });
@@ -244,9 +253,15 @@ function agenda({ de, ate, vendedor = null } = {}) {
     for (let i = itens.length - 1; i >= 0; i--) if (String(itens[i].vendedor || '').toLowerCase() !== v) itens.splice(i, 1);
   }
   const agora = new Date().toISOString();
+  // excluídos pelo SDR (agendamento errado/repetido): saem da agenda, da fila e do lembrete; dá para restaurar
+  const excluidos = [];
+  for (let i = itens.length - 1; i >= 0; i--) if (itens[i].excluido_por != null && itens[i].compareceu == null) excluidos.unshift(...itens.splice(i, 1));
+  // venda já fechada e a visita ainda não aconteceu: agendamento que sobrou (ex.: a IA marcou de novo), não conta
+  for (const a of itens) a.vendaFechada = !!a.venda_fechada && a.compareceu == null && !a.concluido && a.data >= agora;
   // lead arquivado no LeadsOK (visita concluída sem ser venda) = visita cancelada: fora dos agendados
   const cancelados = itens.filter((a) => a.concluido && a.compareceu == null && !/vend/i.test(a.motivo || '')).length;
-  const resumo = { agendados: itens.length - cancelados, canceladosLeadsOK: cancelados, vieram: 0, compraram: 0, vieramNaoCompraram: 0, naoVieram: 0, aMarcar: 0, futuros: 0, concluidosLeadsOK: 0, confirmados: 0, iaSemConfirmar: 0 };
+  const jaVendidos = itens.filter((a) => a.vendaFechada).length;
+  const resumo = { agendados: itens.length - cancelados - jaVendidos, canceladosLeadsOK: cancelados, jaVendidos, excluidos: excluidos.length, chamadas: itens.filter((a) => a.modalidade === 'online').length, vieram: 0, compraram: 0, vieramNaoCompraram: 0, naoVieram: 0, aMarcar: 0, futuros: 0, concluidosLeadsOK: 0, confirmados: 0, iaSemConfirmar: 0 };
   for (const a of itens) {
     if (a.compareceu === 1) {
       resumo.vieram++;
@@ -254,6 +269,7 @@ function agenda({ de, ate, vendedor = null } = {}) {
       else resumo.vieramNaoCompraram++;
     } else if (a.compareceu === 0) resumo.naoVieram++;
     else if (a.concluido) resumo.concluidosLeadsOK++;
+    else if (a.vendaFechada) continue;
     else if (a.data < agora) resumo.aMarcar++;
     else {
       resumo.futuros++;
@@ -264,6 +280,7 @@ function agenda({ de, ate, vendedor = null } = {}) {
   // por dia (para o gráfico da semana/mês)
   const porDia = {};
   for (const a of itens) {
+    if (a.vendaFechada) continue;
     const dia = new Date(Date.parse(a.data) - 3 * 3600000).toISOString().slice(0, 10);
     const x = (porDia[dia] ||= { dia, agendados: 0, vieram: 0, compraram: 0, naoVieram: 0 });
     x.agendados++;
@@ -271,7 +288,7 @@ function agenda({ de, ate, vendedor = null } = {}) {
     if (a.comprou === 1) x.compraram++;
     if (a.compareceu === 0) x.naoVieram++;
   }
-  return { de, ate, dia: de, itens, resumo, porDia: Object.values(porDia), followupsLigacao };
+  return { de, ate, dia: de, itens, excluidos, resumo, porDia: Object.values(porDia), followupsLigacao };
 }
 // resultado: 'comprou' (veio e comprou), 'nao_comprou' (veio e não comprou), 'nao_veio' ou null (limpar)
 const RESULTADOS_VISITA = { comprou: [1, 1], nao_comprou: [1, 0], nao_veio: [0, null] };
@@ -568,6 +585,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
         a.data agenda_data, a.modalidade, a.obs agenda_obs, a.confirmado agenda_confirmado, a.lead_id IS NOT NULL identificado, 'leadsok' agenda_origem
       FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id
       WHERE ${EH_VISITA} AND COALESCE(a.concluido, 0) = 0 AND date(a.data, '-3 hours') BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = COALESCE(a.lead_id, 'agenda-' || a.id) AND v.data_agendada = a.data)
+        AND NOT ${EXCLUIDA("COALESCE(a.lead_id, 'agenda-' || a.id)", 'a.data')} AND NOT (a.data > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') AND ${JA_VENDEU('a.lead_id')})
         AND COALESCE(l.id, '') NOT IN (SELECT lead_id FROM lk_contatos WHERE resultado IN ('ja_comprou', 'sem_interesse')) ${semFora('COALESCE(l.vendedor, a.vendedor)')}
         ${vendedor ? "AND lower(COALESCE(l.vendedor, a.vendedor, '')) = lower(?)" : ''} ORDER BY a.data ASC LIMIT 150`).all(diaSP(agora - 7 * 86400000), amanha, ...va),
     // 3) ligar: leads dos últimos 7 dias que o SDR ainda não trabalhou e o cliente não respondeu (mais novos primeiro)
@@ -592,7 +610,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   const fimDeHoje = Date.parse(hoje + 'T23:59:59-03:00');
   const ultimos = {};
   const tentativas = {};
-  for (const c of d.prepare('SELECT lead_id, em, por, tipo, resultado, nota, interesse, proximo_em FROM lk_contatos ORDER BY em').all()) {
+  for (const c of d.prepare('SELECT lead_id, em, por, tipo, resultado, nota, interesse, proximo_em, modalidade FROM lk_contatos ORDER BY em').all()) {
     ultimos[c.lead_id] = c;
     // tentativas seguidas sem atender (zera quando atende ou agenda)
     tentativas[c.lead_id] = c.resultado === 'nao_atendeu' ? (tentativas[c.lead_id] || 0) + 1 : 0;
@@ -632,14 +650,15 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   // visitas que o SDR agendou pelo briefing (data no "proximo_em"): entram no follow-up se não estão na agenda do LeadsOK
   const naLista = new Set(listas.visitas.map((l) => l.id));
   const jaMarcada = d.prepare('SELECT 1 FROM lk_visitas WHERE lead_id = ? AND data_agendada = ?');
+  const excluidaSdr = d.prepare("SELECT 1 FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo = 'excluido'");
   const fimAmanha = Date.parse(amanha + 'T23:59:59-03:00');
   for (const l of Object.values(todosLeads)) {
     const c = ultimos[l.id];
     if (c.resultado !== 'agendou' || !c.proximo_em || naLista.has(l.id) || !meu(l) || estaFora(l.vendedor)) continue;
     if (c.proximo_em < agora - 7 * 86400000 || c.proximo_em > fimAmanha) continue;
     const data = new Date(c.proximo_em).toISOString();
-    if (jaMarcada.get(l.id, data)) continue;
-    listas.visitas.push({ ...l, agenda_data: data, modalidade: 'presencial', agenda_origem: 'sdr' });
+    if (jaMarcada.get(l.id, data) || excluidaSdr.get(l.id, data)) continue;
+    listas.visitas.push({ ...l, agenda_data: data, modalidade: c.modalidade === 'video' ? 'online' : 'presencial', agenda_origem: 'sdr' });
   }
   // pela_ia: quem marcou foi a IA (sem confirmação humana do horário é só interesse em agendar)
   const pelaIa = d.prepare(`SELECT 1 FROM lk_agenda a WHERE a.lead_id = ? AND a.data = ? AND a.pela_ia = 1`);
@@ -652,6 +671,9 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
     for (const c of conf.all(l.id, l.agenda_data)) l[{ cliente: 'cliente_confirmou', lembrete: 'lembrete_enviado', nao_veio: 'msg_nao_veio' }[c.tipo] || 'confirmacao_enviada'] = c.em;
   }
   listas.visitas.sort((a, b) => (a.passou !== b.passou ? (a.passou ? -1 : 1) : a.agenda_data < b.agenda_data ? -1 : 1));
+  // chamadas de vídeo (online no LeadsOK ou "chamada de vídeo" no briefing): lista própria, sem lembrete de visita na loja
+  listas.chamadas = listas.visitas.filter((l) => l.modalidade === 'online');
+  listas.visitas = listas.visitas.filter((l) => l.modalidade !== 'online');
   // interesse em agendar: a IA marcou, a visita ainda não aconteceu e o cliente não confirmou o horário
   listas.interesseIa = listas.visitas.filter((l) => l.pela_ia && !l.passou && !l.cliente_confirmou);
   const noInteresse = new Set(listas.interesseIa);
@@ -665,10 +687,10 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   for (const l of followLeadsOK) if (!noRetornar.has(l.id) && noRetornar.add(l.id)) listas.retornar.push({ ...l, followLeadsOK: l.agenda_data });
   // fila de trabalho: um lead só na lista mais urgente, e só quem está na etapa "fila" (ou "retornar")
   const vistos = new Set();
-  for (const k of ['retornar', 'responder', 'abandonados', 'interesseIa', 'visitas', 'posVisita', 'novos', 'retomar']) {
+  for (const k of ['retornar', 'responder', 'abandonados', 'interesseIa', 'visitas', 'chamadas', 'posVisita', 'novos', 'retomar']) {
     listas[k] = listas[k].filter((l) => {
       const e = etapa(l.id, l);
-      const pode = k === 'retornar' ? e === 'retornar' || (l.followLeadsOK && e !== 'encerrados') : k === 'visitas' ? e !== 'encerrados' : k === 'interesseIa' ? e !== 'encerrados' && (!l.topouSemHorario || e === 'interesse') : k === 'posVisita' ? e !== 'encerrados' : e === 'fila';
+      const pode = k === 'retornar' ? e === 'retornar' || (l.followLeadsOK && e !== 'encerrados') : k === 'visitas' || k === 'chamadas' ? e !== 'encerrados' : k === 'interesseIa' ? e !== 'encerrados' && (!l.topouSemHorario || e === 'interesse') : k === 'posVisita' ? e !== 'encerrados' : e === 'fila';
       return pode && !vistos.has(l.id) && vistos.add(l.id);
     });
   }
@@ -720,7 +742,7 @@ function qualifDoLead(d, leadId, ate = Infinity) {
 }
 
 const RESULTADOS = ['atendeu', 'nao_atendeu', 'enviada', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse'];
-function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proximoEm, qualif }) {
+function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proximoEm, qualif, modalidade }) {
   const d = banco.abrir();
   if (!d) throw new Error(banco.erro());
   if (!['ligacao', 'mensagem'].includes(tipo)) throw new Error('Tipo de contato inválido');
@@ -730,8 +752,9 @@ function registrarContato({ leadId, tipo, resultado, por, nota, interesse, proxi
   const proximo = proximoEm ? Number(proximoEm) : null;
   if (proximo && !(proximo > Date.now() - 3600000)) throw new Error('Data de retorno inválida');
   const q = limparQualif(qualif);
-  const r = d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em, por, nota, interesse, proximo_em, qualif) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(String(leadId), diaSP(), tipo, resultado || null, Date.now(), por || null, nota ? String(nota).slice(0, 2000) : null, interesse || null, proximo, q ? JSON.stringify(q) : null);
+  const mod = resultado === 'agendou' && modalidade === 'video' ? 'video' : null;
+  const r = d.prepare('INSERT INTO lk_contatos (lead_id, dia, tipo, resultado, em, por, nota, interesse, proximo_em, qualif, modalidade) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(String(leadId), diaSP(), tipo, resultado || null, Date.now(), por || null, nota ? String(nota).slice(0, 2000) : null, interesse || null, proximo, q ? JSON.stringify(q) : null, mod);
   return { ok: true, id: Number(r.lastInsertRowid) };
 }
 function marcarNoLeadsOK(id, situacao) {
@@ -783,6 +806,16 @@ function confirmarVisita({ leadId, data, tipo, por }) {
   if (!d) throw new Error(banco.erro());
   if (!leadId || !data || !['mensagem', 'cliente', 'lembrete', 'nao_veio'].includes(tipo)) throw new Error('Dados da confirmação inválidos');
   d.prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(leadId), String(data), tipo, por || null, Date.now());
+  return { ok: true };
+}
+
+// Excluir um agendamento da agenda (repetido, marcado errado, venda já fechada). Só no painel: o LeadsOK não muda.
+function excluirAgendamento({ leadId, data, por, desfazer = false }) {
+  const d = banco.abrir();
+  if (!d) throw new Error(banco.erro());
+  if (!leadId || !data) throw new Error('Lead e data do agendamento são obrigatórios');
+  if (desfazer) d.prepare("DELETE FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo = 'excluido'").run(String(leadId), String(data));
+  else d.prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(leadId), String(data), 'excluido', por || 'painel', Date.now());
   return { ok: true };
 }
 
@@ -847,4 +880,4 @@ function vendedoresLeadsOK() {
   return d.prepare("SELECT DISTINCT vendedor FROM lk_leads WHERE vendedor IS NOT NULL AND trim(vendedor) != '' AND COALESCE(vendedor_is_ia, 0) = 0 ORDER BY vendedor").all().map((x) => x.vendedor);
 }
 
-module.exports = { vendedoresLeadsOK, planilhaSdr, planilhaCsv, qualifDoLead, COLUNAS_PLANILHA, briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+module.exports = { excluirAgendamento, vendedoresLeadsOK, planilhaSdr, planilhaCsv, qualifDoLead, COLUNAS_PLANILHA, briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

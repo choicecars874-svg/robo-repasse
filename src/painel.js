@@ -420,6 +420,18 @@ function iniciarPainel() {
       res.status(400).json({ erro: e.message });
     }
   });
+  // excluir (ou restaurar) um agendamento só no painel: sai da agenda, da fila e do lembrete automático
+  app.post('/api/agenda/excluir', (req, res) => {
+    try {
+      if (req.usuario.papel === 'vendedor' && !String(req.body.leadId || '').startsWith('agenda-')) {
+        const b = comercial.briefingLead(String(req.body.leadId));
+        if (b?.lead && !daCarteira(req.usuario, b.lead.vendedor)) return res.status(403).json({ erro: 'Este lead não está no seu nome' });
+      }
+      res.json(comercial.excluirAgendamento({ leadId: req.body.leadId, data: req.body.data, por: req.usuario?.nome, desfazer: !!req.body.desfazer }));
+    } catch (e) {
+      res.status(400).json({ erro: e.message });
+    }
+  });
   app.post('/api/agenda/confirmar', (req, res) => {
     try {
       res.json(comercial.confirmarVisita({ leadId: req.body.leadId, data: req.body.data, tipo: req.body.tipo, por: req.usuario?.nome }));
