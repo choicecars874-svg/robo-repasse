@@ -204,7 +204,7 @@ function registrarEsperando(horasParado = 2) {
 }
 
 // Agenda de um período (de/ate, padrão hoje) com o resumo de comparecimento
-function agenda({ de, ate } = {}) {
+function agenda({ de, ate, vendedor = null } = {}) {
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
   de ||= diaSP();
@@ -238,6 +238,11 @@ function agenda({ de, ate } = {}) {
       identificado: 1, confirmacao_enviada: cf('mensagem'), cliente_confirmou: cf('cliente') });
   }
   itens.sort((a, b) => (a.data < b.data ? -1 : 1));
+  // vendedor: só as visitas dos leads dele
+  if (vendedor) {
+    const v = vendedor.toLowerCase();
+    for (let i = itens.length - 1; i >= 0; i--) if (String(itens[i].vendedor || '').toLowerCase() !== v) itens.splice(i, 1);
+  }
   const agora = new Date().toISOString();
   // lead arquivado no LeadsOK (visita concluída sem ser venda) = visita cancelada: fora dos agendados
   const cancelados = itens.filter((a) => a.concluido && a.compareceu == null && !/vend/i.test(a.motivo || '')).length;
@@ -525,7 +530,7 @@ function painelComercial({ de, ate, horasParado = 2, metas = {} }) {
 
 // Fila do SDR: quem ligar ou chamar hoje, em ordem de urgência. Só leads de entrada (sem a base de resgate)
 // e não arquivados. Cada lead aparece numa lista só (a mais urgente).
-function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario = '' } = {}) {
+function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario = '', semAbandonados = false } = {}) {
   const hTentar = Number(cadencia.horasTentarDeNovo) || 3;
   const hRecado = Number(cadencia.horasAguardandoRecado) || 2;
   const maxTent = Number(cadencia.tentativasMax) || 3;
@@ -546,7 +551,8 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
   const V = vendedor ? 'AND lower(l.vendedor) = lower(?)' : '';
   const daCarteira = (l) => !vendedor || String(l.vendedor || '').toLowerCase() === vendedor.toLowerCase();
   // da carteira OU que o próprio usuário trabalhou por último (ex.: lead de outro vendedor que ele resgatou e agendou)
-  const meu = (l) => daCarteira(l) || (!!usuario && ultimos[l.id]?.por === usuario);
+  // vendedor: só os leads no nome dele; SDR: também os que ele mesmo trabalhou (lead de outro vendedor que ele resgatou)
+  const meu = (l) => daCarteira(l) || (!semAbandonados && !!usuario && ultimos[l.id]?.por === usuario);
   const va = vendedor ? [vendedor] : [];
   // agenda do LeadsOK: "presencial"/"online" é visita; "ligacao" é lembrete de follow-up (vai para "Retornar hoje")
   const EH_VISITA = "COALESCE(a.modalidade, 'presencial') != 'ligacao'";
@@ -554,7 +560,7 @@ function filaSdr({ horasSemResposta = 1, vendedor = '', cadencia = {}, usuario =
     // 1) cliente mandou mensagem e ninguém respondeu
     responder: d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ${semAgendar} ${V} ORDER BY l.created_date DESC LIMIT 150`).all(iso(7 * 86400000), iso(horasSemResposta * 3600000), ...va),
     // 1b) com a carteira escolhida: leads de OUTROS vendedores que estão sem resposta (ninguém cuidando): ligar antes que esfrie
-    abandonados: vendedor ? d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ${semAgendar}
+    abandonados: vendedor && !semAbandonados ? d.prepare(`SELECT ${campos} FROM lk_leads l WHERE ${base} AND l.ultima_msg_owner = 'customers' AND l.ultima_msg_at BETWEEN ? AND ? ${semAgendar}
       AND lower(COALESCE(l.vendedor, '')) != lower(?) ORDER BY l.ultima_msg_at DESC LIMIT 100`).all(iso(7 * 86400000), iso(hResgate * 3600000), vendedor) : [],
     // 2) follow-up de visitas (agenda do LeadsOK): confirmar as de hoje e amanhã; marcar o resultado das que já passaram (7 dias)
     visitas: d.prepare(`SELECT COALESCE(l.id, 'agenda-' || a.id) id, COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, l.origem,
@@ -797,15 +803,15 @@ function historicoContatos({ dia, por } = {}) {
 }
 
 // Achar um lead pelo telefone (com ou sem 55/DDD) ou pelo nome, com todos os contatos já feitos
-function buscarLead(q) {
+function buscarLead(q, vendedor = null) {
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
   q = String(q || '').trim();
   if (q.length < 3) return { leads: [] };
   const dig = q.replace(/\D/g, '');
   const leads = dig.length >= 8
-    ? d.prepare("SELECT id, nome, whatsapp, carro, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE replace(replace(replace(whatsapp, '+', ''), ' ', ''), '-', '') LIKE ? LIMIT 20").all('%' + dig.slice(-9))
-    : d.prepare('SELECT id, nome, whatsapp, carro, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE nome LIKE ? OR carro LIKE ? LIMIT 20').all('%' + q + '%', '%' + q + '%');
+    ? d.prepare(`SELECT id, nome, whatsapp, carro, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE replace(replace(replace(whatsapp, '+', ''), ' ', ''), '-', '') LIKE ? ${vendedor ? 'AND lower(vendedor) = lower(?)' : ''} LIMIT 20`).all('%' + dig.slice(-9), ...(vendedor ? [vendedor] : []))
+    : d.prepare(`SELECT id, nome, whatsapp, carro, origem, vendedor, aba_atual, archive_reason, created_date, ultima_msg_owner, ultima_msg_at, is_resgate FROM lk_leads WHERE (nome LIKE ? OR carro LIKE ?) ${vendedor ? 'AND lower(vendedor) = lower(?)' : ''} LIMIT 20`).all('%' + q + '%', '%' + q + '%', ...(vendedor ? [vendedor] : []));
   const cont = d.prepare('SELECT em, tipo, resultado, por, nota, interesse, proximo_em FROM lk_contatos WHERE lead_id = ? ORDER BY em DESC');
   const ag = d.prepare('SELECT data, modalidade FROM lk_agenda WHERE lead_id = ? ORDER BY data DESC');
   return { leads: leads.map((l) => ({ ...l, contatos: cont.all(l.id), agenda: ag.all(l.id) })) };
@@ -834,4 +840,11 @@ function removerLeadsTeste() {
   return { ok: true, removidos: Number(d.prepare("DELETE FROM lk_leads WHERE id LIKE 'teste-%'").run().changes) };
 }
 
-module.exports = { planilhaSdr, planilhaCsv, qualifDoLead, COLUNAS_PLANILHA, briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+// nomes dos vendedores no LeadsOK (para ligar cada usuário do painel à carteira dele)
+function vendedoresLeadsOK() {
+  const d = banco.abrir();
+  if (!d) return [];
+  return d.prepare("SELECT DISTINCT vendedor FROM lk_leads WHERE vendedor IS NOT NULL AND trim(vendedor) != '' AND COALESCE(vendedor_is_ia, 0) = 0 ORDER BY vendedor").all().map((x) => x.vendedor);
+}
+
+module.exports = { vendedoresLeadsOK, planilhaSdr, planilhaCsv, qualifDoLead, COLUNAS_PLANILHA, briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

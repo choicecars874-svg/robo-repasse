@@ -92,7 +92,7 @@ function iniciarPainel() {
     if (!igual(partes[2] || '', assinar(validade, usuario))) return null;
     if (!usuario) return { nome: 'Administrador', papel: 'admin' };
     const u = lerUsuarios().find((x) => chaveNome(x.nome) === chaveNome(usuario));
-    return u ? { nome: u.nome, papel: u.papel || 'sdr' } : null;
+    return u ? { nome: u.nome, papel: u.papel || 'sdr', nomeLeadsOK: u.nomeLeadsOK || null } : null;
   };
 
   app.get('/login', (_, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(PUBLICO, 'login.html')));
@@ -142,9 +142,30 @@ function iniciarPainel() {
     }
     next();
   });
-  app.get('/api/eu', (req, res) => res.json(req.usuario));
+  // Carteira de cada usuário: os leads que estão no nome dele no LeadsOK. Usa o "Nome no LeadsOK" do cadastro;
+  // sem ele, procura o vendedor do LeadsOK com o mesmo primeiro nome (só se for um só).
+  const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  const carteiraDe = (u) => {
+    if (!u || u.papel === 'admin') return null;
+    if (u.nomeLeadsOK) return u.nomeLeadsOK;
+    const primeiro = semAcento(u.nome).split(/\s+/)[0];
+    const iguais = comercial.vendedoresLeadsOK().filter((v) => semAcento(v).split(/\s+/)[0] === primeiro);
+    return iguais.length === 1 ? iguais[0] : null;
+  };
+  const daCarteira = (u, vendedor) => semAcento(vendedor) === semAcento(carteiraDe(u));
+  app.get('/api/eu', (req, res) => res.json({ ...req.usuario, carteira: carteiraDe(req.usuario) }));
   // Usuários (só administrador): criar, trocar senha, remover
-  app.get('/api/usuarios', (_, res) => res.json(lerUsuarios().map(({ nome, login, papel, criadoEm }) => ({ nome, login: login || null, papel, criadoEm }))));
+  app.get('/api/usuarios', (_, res) => res.json({ usuarios: lerUsuarios().map(({ nome, login, papel, nomeLeadsOK, criadoEm }) => ({ nome, login: login || null, papel: papel || 'sdr', nomeLeadsOK: nomeLeadsOK || null, carteira: carteiraDe({ nome, papel: papel || 'sdr', nomeLeadsOK }), criadoEm })), vendedores: comercial.vendedoresLeadsOK() }));
+  // muda papel e "nome no LeadsOK" sem mexer na senha
+  app.post('/api/usuarios/editar', (req, res) => {
+    const lista = lerUsuarios();
+    const u = lista.find((x) => chaveNome(x.nome) === chaveNome(req.body.nome));
+    if (!u) return res.status(404).json({ erro: 'Usuário não encontrado' });
+    if (req.body.papel) u.papel = ['sdr', 'vendedor', 'admin'].includes(req.body.papel) ? req.body.papel : 'sdr';
+    if (req.body.nomeLeadsOK !== undefined) u.nomeLeadsOK = String(req.body.nomeLeadsOK || '').trim().slice(0, 60) || undefined;
+    salvarUsuarios(lista);
+    res.json({ ok: true });
+  });
   app.post('/api/usuarios', (req, res) => {
     const nome = String(req.body.nome || '').trim();
     const senha = String(req.body.senha || '');
@@ -156,7 +177,9 @@ function iniciarPainel() {
     const sal = crypto.randomBytes(16).toString('hex');
     const lista = lerUsuarios().filter((u) => chaveNome(u.nome) !== chaveNome(nome));
     if (login && lista.some((u) => chaveNome(u.login) === login || chaveNome(u.nome) === login)) return res.status(400).json({ erro: 'Esse login já está em uso' });
-    lista.push({ nome, ...(login ? { login } : {}), papel: 'sdr', sal, hash: crypto.scryptSync(senha, sal, 64).toString('hex'), criadoEm: Date.now() });
+    const papel = ['sdr', 'vendedor', 'admin'].includes(req.body.papel) ? req.body.papel : 'sdr';
+    const nomeLeadsOK = String(req.body.nomeLeadsOK || '').trim().slice(0, 60);
+    lista.push({ nome, ...(login ? { login } : {}), papel, ...(nomeLeadsOK ? { nomeLeadsOK } : {}), sal, hash: crypto.scryptSync(senha, sal, 64).toString('hex'), criadoEm: Date.now() });
     salvarUsuarios(lista);
     res.json({ ok: true });
   });
@@ -381,7 +404,7 @@ function iniciarPainel() {
   };
   app.get('/api/leads', (req, res) => res.json(comercial.leads(periodo(req.query))));
   app.get('/api/time', (req, res) => res.json(comercial.time(periodo(req.query), leadsok.horasParado())));
-  app.get('/api/agenda', (req, res) => res.json({ ...comercial.agenda({ de: req.query.de || req.query.dia, ate: req.query.ate || req.query.dia }), confirmacao: (config.get().sdr || {}).confirmacao || '', lembreteDia: (config.get().sdr || {}).lembreteDia || '', naoVeio: (config.get().sdr || {}).naoVeio || '' }));
+  app.get('/api/agenda', (req, res) => res.json({ ...comercial.agenda({ de: req.query.de || req.query.dia, ate: req.query.ate || req.query.dia, vendedor: req.usuario.papel === 'vendedor' ? carteiraDe(req.usuario) || '__sem_carteira__' : null }), confirmacao: (config.get().sdr || {}).confirmacao || '', lembreteDia: (config.get().sdr || {}).lembreteDia || '', naoVeio: (config.get().sdr || {}).naoVeio || '' }));
   app.post('/api/agenda/visita', (req, res) => {
     try {
       const { leadId, data, resultado, compareceu } = req.body;
@@ -407,7 +430,10 @@ function iniciarPainel() {
   app.get('/api/estoque', (_, res) => res.json(comercial.estoque()));
   app.get('/api/sdr', (req, res) => {
     const sdr = config.get().sdr || {};
-    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: String(req.query.vendedor || '').slice(0, 80), cadencia: sdr, usuario: req.usuario.nome }), recado: sdr.recado || '', confirmacao: sdr.confirmacao || '', lembreteDia: sdr.lembreteDia || '', naoVeio: sdr.naoVeio || '', objecoes: sdr.objecoes || [], vendedoresFora: sdr.vendedoresFora || [] });
+    // administrador escolhe a carteira; SDR e vendedor só veem os leads no nome deles no LeadsOK
+    const admin = req.usuario.papel === 'admin';
+    const carteira = admin ? String(req.query.vendedor || '').slice(0, 80) : carteiraDe(req.usuario) || '__sem_carteira__';
+    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: carteira, cadencia: sdr, usuario: req.usuario.nome, semAbandonados: req.usuario.papel === 'vendedor' }), carteiraFixa: admin ? null : carteiraDe(req.usuario) || '', recado: sdr.recado || '', confirmacao: sdr.confirmacao || '', lembreteDia: sdr.lembreteDia || '', naoVeio: sdr.naoVeio || '', objecoes: sdr.objecoes || [], vendedoresFora: sdr.vendedoresFora || [] });
   });
   // resultado do SDR: o administrador vê todos; o SDR vê só o dele
   app.get('/api/sdr/resultado', (req, res) => {
@@ -436,6 +462,7 @@ function iniciarPainel() {
   app.get('/api/sdr/lead/:id', async (req, res) => {
     const b = comercial.briefingLead(req.params.id);
     if (b.erro) return res.status(404).json(b);
+    if (req.usuario.papel === 'vendedor' && !daCarteira(req.usuario, b.lead.vendedor)) return res.status(403).json({ erro: 'Este lead não está no seu nome' });
     const [conv, notas] = await Promise.all([
       leadsok.conversaRecente(req.params.id, 120).catch((e) => ({ mensagens: [], motivo: e.message })),
       leadsok.notasDoLead(req.params.id).catch(() => ''),
@@ -469,6 +496,7 @@ function iniciarPainel() {
   app.get('/api/sdr/planilha/chave', (req, res) => res.json({ chave: req.usuario.papel === 'admin' ? (config.get().sdr || {}).chavePlanilha || null : null }));
   // WhatsApp do SDR (lembrete automático da visita)
   const sdrWhats = require('./sdrWhats');
+  app.use('/api/sdr/whats', (req, res, next) => (req.usuario.papel === 'vendedor' ? res.status(403).json({ erro: 'Só o SDR conecta o WhatsApp do lembrete' }) : next()));
   app.get('/api/sdr/whats', (_, res) => res.set('Cache-Control', 'no-store').json(sdrWhats.status()));
   app.post('/api/sdr/whats/conectar', async (req, res) => {
     try {
@@ -517,7 +545,10 @@ function iniciarPainel() {
     }
   });
   app.get('/api/sdr/historico', (req, res) => res.json(comercial.historicoContatos({ dia: req.query.dia, por: req.query.por })));
-  app.get('/api/sdr/buscar', (req, res) => res.json(comercial.buscarLead(req.query.q)));
+  app.get('/api/sdr/buscar', (req, res) => {
+    const r = comercial.buscarLead(req.query.q, req.usuario.papel === 'vendedor' ? carteiraDe(req.usuario) || '__sem_carteira__' : null);
+    res.json(r);
+  });
   app.post('/api/sdr/contato', (req, res) => {
     try {
       const r = comercial.registrarContato({ ...req.body, por: req.usuario.nome });

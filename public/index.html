@@ -751,9 +751,10 @@
 <section id="sistema">
   <div class="card" id="cardUsuarios">
     <h2>Usuários</h2>
-    <p class="sub" style="margin:4px 0 10px">Acesso próprio para o SDR: ele entra com usuário e senha, vê só a Fila do SDR e a Agenda do dia, e cada contato fica registrado com o nome dele. O administrador continua entrando só com a senha do painel.</p>
+    <p class="sub" style="margin:4px 0 10px">Cada pessoa entra com o próprio login e cada contato fica registrado com o nome dela. <b>SDR</b> e <b>Vendedor</b> veem só os leads que estão no nome deles no LeadsOK (o SDR também vê os leads de outros vendedores que ficaram sem resposta e conecta o WhatsApp do lembrete). <b>Gestor</b> vê o painel inteiro, como o administrador.</p>
     <div class="contasIg" id="listaUsuarios"></div>
-    <div class="linha"><div><label>Nome (aparece no recado e na carteira)</label><input id="novoUsuario" placeholder="ex.: Marcos" autocomplete="off"></div><div><label>Login (opcional)</label><input id="novoLogin" placeholder="ex.: marcos@choicecars" autocomplete="off" autocapitalize="none"></div><div><label>Senha (mín. 6)</label><input type="password" id="novaSenhaUsuario" autocomplete="new-password"></div></div>
+    <div class="linha"><div><label>Nome (aparece no recado e na assinatura)</label><input id="novoUsuario" placeholder="ex.: Murilo" autocomplete="off"></div><div><label>Login (opcional)</label><input id="novoLogin" placeholder="ex.: murilo@choicecars" autocomplete="off" autocapitalize="none"></div><div><label>Senha (mín. 6)</label><input type="password" id="novaSenhaUsuario" autocomplete="new-password"></div></div>
+    <div class="linha"><div><label>Papel</label><select id="novoPapel"><option value="vendedor">Vendedor (só os leads dele)</option><option value="sdr">SDR (os dele + sem resposta dos outros)</option><option value="admin">Gestor (painel inteiro)</option></select></div><div><label>Nome dele no LeadsOK (a carteira)</label><input id="novoNomeLk" list="vendedoresLk" placeholder="escolha da lista" autocomplete="off"><datalist id="vendedoresLk"></datalist></div></div>
     <p><button class="btn verde" id="btnNovoUsuario">Criar usuário</button></p>
   </div>
   <div class="card">
@@ -1158,13 +1159,27 @@ $('#btnDom').onclick = async () => {
   catch (e) { alert(e.message); }
   b.disabled = false; b.textContent = 'Verificar e ativar';
 };
+const PAPEIS = { sdr: 'SDR', vendedor: 'Vendedor', admin: 'Gestor' };
 async function carregarUsuarios() {
-  const l = await api('/api/usuarios').catch(() => []);
-  $('#listaUsuarios').innerHTML = l.map((u) => `<div><span><b>${esc(u.nome)}</b> <span class="sub">${u.login ? '· entra com ' + esc(u.login) + ' ' : ''}· SDR · criado em ${hora(u.criadoEm)}</span></span><button class="btn verm" data-rmu="${esc(u.nome)}">Remover</button></div>`).join('') || '<div><span class="sub">Nenhum usuário além do administrador.</span></div>';
-  document.querySelectorAll('[data-rmu]').forEach((b) => b.onclick = async () => { if (confirm(`Remover o acesso de ${b.dataset.rmu}? O histórico de contatos dele continua.`)) { await api('/api/usuarios/remover', { method:'POST', body: JSON.stringify({ nome: b.dataset.rmu }) }); carregarUsuarios(); } });
+  const r = await api('/api/usuarios').catch(() => ({ usuarios: [], vendedores: [] }));
+  const l = Array.isArray(r) ? r : r.usuarios;
+  $('#vendedoresLk').innerHTML = (r.vendedores || []).map((v) => `<option value="${esc(v)}">`).join('');
+  $('#listaUsuarios').innerHTML = l.map((u) => `<div class="usuLinha" data-u="${esc(u.nome)}"><span><b>${esc(u.nome)}</b> <span class="sub">${u.login ? '· entra com ' + esc(u.login) + ' ' : ''}· criado em ${hora(u.criadoEm)}</span>
+      <br><span class="sub">${u.papel === 'admin' ? 'vê o painel inteiro' : u.carteira ? 'carteira: <b>' + esc(u.carteira) + '</b>' : '<span class="ruim">nome no LeadsOK não encontrado: escolha abaixo</span>'}</span></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select data-papel>${Object.entries(PAPEIS).map(([k, n]) => `<option value="${k}" ${u.papel === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <input data-nomelk list="vendedoresLk" placeholder="nome no LeadsOK" value="${esc(u.nomeLeadsOK || '')}" style="width:170px"><button class="btn" data-salvaru>Salvar</button><button class="btn verm" data-rmu="${esc(u.nome)}">Remover</button></span></div>`).join('') || '<div><span class="sub">Nenhum usuário além do administrador.</span></div>';
+  document.querySelectorAll('[data-rmu]').forEach((b) => b.onclick = async () => {
+    if (!b.dataset.conf) { b.dataset.conf = '1'; b.textContent = 'Confirmar remoção'; return; }
+    await api('/api/usuarios/remover', { method:'POST', body: JSON.stringify({ nome: b.dataset.rmu }) }); carregarUsuarios();
+  });
+  document.querySelectorAll('[data-salvaru]').forEach((b) => b.onclick = async () => {
+    const lin = b.closest('.usuLinha');
+    await api('/api/usuarios/editar', { method:'POST', body: JSON.stringify({ nome: lin.dataset.u, papel: lin.querySelector('[data-papel]').value, nomeLeadsOK: lin.querySelector('[data-nomelk]').value }) });
+    alert('Usuário atualizado.'); carregarUsuarios();
+  });
 }
 $('#btnNovoUsuario').onclick = async () => {
-  try { await api('/api/usuarios', { method:'POST', body: JSON.stringify({ nome: $('#novoUsuario').value, login: $('#novoLogin').value, senha: $('#novaSenhaUsuario').value }) }); alert(`Usuário criado. Ele entra em ${location.origin} com ${$('#novoLogin').value ? 'o login' : 'o nome'} e a senha.`); $('#novoUsuario').value = ''; $('#novoLogin').value = ''; $('#novaSenhaUsuario').value = ''; carregarUsuarios(); }
+  try { await api('/api/usuarios', { method:'POST', body: JSON.stringify({ nome: $('#novoUsuario').value, login: $('#novoLogin').value, senha: $('#novaSenhaUsuario').value, papel: $('#novoPapel').value, nomeLeadsOK: $('#novoNomeLk').value }) }); alert(`Usuário criado. Ele entra em ${location.origin} com ${$('#novoLogin').value ? 'o login' : 'o nome'} e a senha.`); $('#novoUsuario').value = ''; $('#novoLogin').value = ''; $('#novoNomeLk').value = ''; $('#novaSenhaUsuario').value = ''; carregarUsuarios(); }
   catch (e) { alert(e.message); }
 };
 async function carregarSistema() {
@@ -1985,7 +2000,7 @@ function carteiraSdr() {
   try { v = localStorage.getItem('carteiraSdr'); } catch {}
   if (v !== null) return v;
   const meu = String(eu?.nome || '').trim().split(/\s+/)[0].toLowerCase();
-  if (eu?.papel !== 'admin' && meu) return (window.vendedoresSdr || []).find((x) => x.toLowerCase().split(/\s+/)[0] === meu) || '';
+  if (eu?.papel !== 'admin') return '';
   return '';
 }
 $('#btnCfSdr').onclick = async () => {
@@ -2050,15 +2065,15 @@ $('#btnSwSalvar').onclick = async () => {
   alert('Lembrete automático salvo.'); carregarWhatsSdr();
 };
 async function carregarSdr() {
-  api('/api/sdr/whats').then((st) => { $('#swAviso').hidden = st.status === 'conectado'; }).catch(() => {});
+  if ($('#swAviso')) api('/api/sdr/whats').then((st) => { $('#swAviso').hidden = st.status === 'conectado'; }).catch(() => {});
   avisoLk();
   const pedido = carteiraSdr();
   const r = await api('/api/sdr?vendedor=' + encodeURIComponent(pedido));
   if (r.erro) return;
   api('/api/leadsok/estado').then((e) => { if (e?.ultimaSync) $('#sdAtualizado').textContent = 'dados do LeadsOK de ' + haTempo(new Date(e.ultimaSync).toISOString()); }).catch(() => {});
-  if (!window.vendedoresSdr) { window.vendedoresSdr = r.vendedores.map((v) => v.vendedor); if (carteiraSdr() !== pedido) return carregarSdr(); }
   const selV = $('#sdVend'); const atualV = carteiraSdr();
-  selV.innerHTML = '<option value="">Todos os vendedores</option>' + [...new Set([...r.vendedores.map((v) => v.vendedor), ...(atualV ? [atualV] : [])])].map((v) => { const n = r.vendedores.find((x) => x.vendedor === v)?.n; return `<option value="${esc(v)}" ${v === atualV ? 'selected' : ''}>${esc(v)}${n ? ` (${n})` : ''}</option>`; }).join('');
+  // para quem não é administrador o servidor já usa a carteira da pessoa: sem seletor
+  if (selV) selV.innerHTML = '<option value="">Todos os vendedores</option>' + [...new Set([...r.vendedores.map((v) => v.vendedor), ...(atualV ? [atualV] : [])])].map((v) => { const n = r.vendedores.find((x) => x.vendedor === v)?.n; return `<option value="${esc(v)}" ${v === atualV ? 'selected' : ''}>${esc(v)}${n ? ` (${n})` : ''}</option>`; }).join('');
   window.vendedoresSdr = r.vendedores.map((v) => v.vendedor);
   Object.values(r.listas).forEach(guardarLeadsSdr); Object.values(r.etapas).forEach(guardarLeadsSdr);
   window.recadoSdr = r.recado || null; window.confirmacaoSdr = r.confirmacao || null; window.lembreteSdr = r.lembreteDia || null; window.naoVeioSdr = r.naoVeio || null;
@@ -2217,7 +2232,11 @@ $('#filtroGrupo').onchange = () => carregarPainel();
   if (eu.papel !== 'admin') {
     // SDR: deixa no menu só a Fila do SDR e a Agenda do dia
     document.querySelectorAll('nav > button, nav > .grupoMenu, nav .secao').forEach((el) => { el.hidden = !(el.id === 'menuComercial'); });
-    document.querySelectorAll('#menuComercial .sub-itens button').forEach((b) => { b.hidden = !['comSdr', 'comSdrRes', 'comAgenda', 'sdrConexoes'].includes(b.dataset.aba); });
+    const abasDoPapel = eu.papel === 'vendedor' ? ['comSdr', 'comSdrRes', 'comAgenda'] : ['comSdr', 'comSdrRes', 'comAgenda', 'sdrConexoes'];
+    document.querySelectorAll('#menuComercial .sub-itens button').forEach((b) => { b.hidden = !abasDoPapel.includes(b.dataset.aba); });
+    if (eu.papel === 'vendedor') $('#swAviso').remove();
+    // a carteira é fixa: os leads no nome da pessoa no LeadsOK
+    $('#sdVend').closest('div').innerHTML = `<label>Seus leads</label><div style="padding:10px 0;font-weight:600">${eu.carteira ? esc(eu.carteira) : '<span class="ruim">Seu nome não foi achado no LeadsOK. Peça ao administrador para ligar o seu usuário em Sistema → Usuários.</span>'}</div>`;
     $('#menuComercial').classList.remove('fechado');
     $('#sdHistCard').hidden = true; document.querySelectorAll('.soAdmin').forEach((e) => { e.hidden = true; });
     document.querySelector('.barraTopo .eyebrow').textContent = 'Gestão Choice · ' + eu.nome;
