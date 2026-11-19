@@ -753,10 +753,10 @@
 <section id="sistema">
   <div class="card" id="cardUsuarios">
     <h2>Usuários</h2>
-    <p class="sub" style="margin:4px 0 10px">Cada pessoa entra com o próprio login e cada contato fica registrado com o nome dela. <b>SDR</b> e <b>Vendedor</b> veem só os leads que estão no nome deles no LeadsOK (o SDR também vê os leads de outros vendedores que ficaram sem resposta e conecta o WhatsApp do lembrete). <b>Gestor</b> vê o painel inteiro, como o administrador.</p>
+    <p class="sub" style="margin:4px 0 10px">Cada pessoa entra com o próprio login e cada contato fica registrado com o nome dela. <b>SDR</b> e <b>Vendedor</b> veem só os leads que estão no nome deles no LeadsOK e cada um conecta o próprio WhatsApp do lembrete em Conexões. <b>Gestor</b> vê o painel inteiro, como o administrador.</p>
     <div class="contasIg" id="listaUsuarios"></div>
     <div class="linha"><div><label>Nome (aparece no recado e na assinatura)</label><input id="novoUsuario" placeholder="ex.: Murilo" autocomplete="off"></div><div><label>Login (opcional)</label><input id="novoLogin" placeholder="ex.: murilo@choicecars" autocomplete="off" autocapitalize="none"></div><div><label>Senha (mín. 6)</label><input type="password" id="novaSenhaUsuario" autocomplete="new-password"></div></div>
-    <div class="linha"><div><label>Papel</label><select id="novoPapel"><option value="vendedor">Vendedor (só os leads dele)</option><option value="sdr">SDR (os dele + sem resposta dos outros)</option><option value="admin">Gestor (painel inteiro)</option></select></div><div><label>Nome dele no LeadsOK (a carteira)</label><input id="novoNomeLk" list="vendedoresLk" placeholder="escolha da lista" autocomplete="off"><datalist id="vendedoresLk"></datalist></div></div>
+    <div class="linha"><div><label>Papel</label><select id="novoPapel"><option value="vendedor">Vendedor (só os leads dele)</option><option value="sdr">SDR (só os leads dele)</option><option value="admin">Gestor (painel inteiro)</option></select></div><div><label>Nome dele no LeadsOK (a carteira)</label><input id="novoNomeLk" list="vendedoresLk" placeholder="escolha da lista" autocomplete="off"><datalist id="vendedoresLk"></datalist></div></div>
     <p><button class="btn verde" id="btnNovoUsuario">Criar usuário</button></p>
   </div>
   <div class="card">
@@ -2131,7 +2131,8 @@ async function carregarSdr() {
   $('#sdFila').textContent = num(LISTAS_SDR.reduce((a, [k]) => a + r.listas[k].length, 0));
   const cd = r.cadencia;
   const descSdr = (k, d) => k === 'abandonados' ? d.replace('1 h', `${String(cd.horasSemRespostaResgate).replace('.', ',')} h`) : k === 'novos' ? d.replace('7 dias', `${cd.diasNovos} dias`) : k === 'retornar' ? `Quem não atendeu há mais de ${String(cd.horasTentarDeNovo).replace('.', ',')} h, quem não respondeu o recado em ${cd.horasAguardandoRecado} h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.` : d;
-  $('#sdListas').innerHTML = LISTAS_SDR.map(([k, titulo, desc0]) => { const desc = descSdr(k, desc0);
+  // "sem resposta de ninguém (outros vendedores)": só o gestor vê; SDR e vendedor ficam só com os leads deles
+  $('#sdListas').innerHTML = LISTAS_SDR.filter(([k]) => k !== 'abandonados' || eu?.papel === 'admin').map(([k, titulo, desc0]) => { const desc = descSdr(k, desc0);
     const itens = r.listas[k];
     return `<div class="card"><div class="cardTopo"><div><h2>${titulo} <span class="sub">(${itens.length})</span></h2><p class="sub">${desc}</p></div></div>
       ${itens.map((l) => {

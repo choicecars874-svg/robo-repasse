@@ -404,7 +404,7 @@ function iniciarPainel() {
   };
   app.get('/api/leads', (req, res) => res.json(comercial.leads(periodo(req.query))));
   app.get('/api/time', (req, res) => res.json(comercial.time(periodo(req.query), leadsok.horasParado())));
-  app.get('/api/agenda', (req, res) => res.json({ ...comercial.agenda({ de: req.query.de || req.query.dia, ate: req.query.ate || req.query.dia, vendedor: req.usuario.papel === 'vendedor' ? carteiraDe(req.usuario) || '__sem_carteira__' : null }), confirmacao: (config.get().sdr || {}).confirmacao || '', lembreteDia: (config.get().sdr || {}).lembreteDia || '', naoVeio: (config.get().sdr || {}).naoVeio || '' }));
+  app.get('/api/agenda', (req, res) => res.json({ ...comercial.agenda({ de: req.query.de || req.query.dia, ate: req.query.ate || req.query.dia, vendedor: req.usuario.papel !== 'admin' ? carteiraDe(req.usuario) || '__sem_carteira__' : null }), confirmacao: (config.get().sdr || {}).confirmacao || '', lembreteDia: (config.get().sdr || {}).lembreteDia || '', naoVeio: (config.get().sdr || {}).naoVeio || '' }));
   app.post('/api/agenda/visita', (req, res) => {
     try {
       const { leadId, data, resultado, compareceu } = req.body;
@@ -423,7 +423,7 @@ function iniciarPainel() {
   // excluir (ou restaurar) um agendamento só no painel: sai da agenda, da fila e do lembrete automático
   app.post('/api/agenda/excluir', (req, res) => {
     try {
-      if (req.usuario.papel === 'vendedor' && !String(req.body.leadId || '').startsWith('agenda-')) {
+      if (req.usuario.papel !== 'admin' && !String(req.body.leadId || '').startsWith('agenda-')) {
         const b = comercial.briefingLead(String(req.body.leadId));
         if (b?.lead && !daCarteira(req.usuario, b.lead.vendedor)) return res.status(403).json({ erro: 'Este lead não está no seu nome' });
       }
@@ -445,7 +445,7 @@ function iniciarPainel() {
     // administrador escolhe a carteira; SDR e vendedor só veem os leads no nome deles no LeadsOK
     const admin = req.usuario.papel === 'admin';
     const carteira = admin ? String(req.query.vendedor || '').slice(0, 80) : carteiraDe(req.usuario) || '__sem_carteira__';
-    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: carteira, cadencia: sdr, usuario: req.usuario.nome, semAbandonados: req.usuario.papel === 'vendedor' }), carteiraFixa: admin ? null : carteiraDe(req.usuario) || '', recado: sdr.recado || '', confirmacao: sdr.confirmacao || '', lembreteDia: sdr.lembreteDia || '', naoVeio: sdr.naoVeio || '', objecoes: sdr.objecoes || [], vendedoresFora: sdr.vendedoresFora || [] });
+    res.json({ ...comercial.filaSdr({ horasSemResposta: leadsok.horasParado(), vendedor: carteira, cadencia: sdr, usuario: req.usuario.nome, semAbandonados: !admin }), carteiraFixa: admin ? null : carteiraDe(req.usuario) || '', recado: sdr.recado || '', confirmacao: sdr.confirmacao || '', lembreteDia: sdr.lembreteDia || '', naoVeio: sdr.naoVeio || '', objecoes: sdr.objecoes || [], vendedoresFora: sdr.vendedoresFora || [] });
   });
   // resultado do SDR: o administrador vê todos; o SDR vê só o dele
   app.get('/api/sdr/resultado', (req, res) => {
@@ -474,7 +474,7 @@ function iniciarPainel() {
   app.get('/api/sdr/lead/:id', async (req, res) => {
     const b = comercial.briefingLead(req.params.id);
     if (b.erro) return res.status(404).json(b);
-    if (req.usuario.papel === 'vendedor' && !daCarteira(req.usuario, b.lead.vendedor)) return res.status(403).json({ erro: 'Este lead não está no seu nome' });
+    if (req.usuario.papel !== 'admin' && !daCarteira(req.usuario, b.lead.vendedor)) return res.status(403).json({ erro: 'Este lead não está no seu nome' });
     const [conv, notas] = await Promise.all([
       leadsok.conversaRecente(req.params.id, 120).catch((e) => ({ mensagens: [], motivo: e.message })),
       leadsok.notasDoLead(req.params.id).catch(() => ''),
@@ -510,8 +510,9 @@ function iniciarPainel() {
   const sdrWhats = require('./sdrWhats');
   // cada pessoa conecta o próprio WhatsApp: o SDR usa a conexão antiga ("sdr"); vendedor e gestor, uma com o nome deles
   const chaveWhats = (u) => (u.papel === 'sdr' ? 'sdr' : 'u-' + semAcento(u.nome).replace(/[^a-z0-9]+/g, '-'));
+  // só o gestor vê as conexões e os lembretes de todos; SDR e vendedor veem os deles. Textos e horários: gestor e SDR.
   const verTodos = (u) => u.papel !== 'vendedor';
-  app.get('/api/sdr/whats', (req, res) => res.set('Cache-Control', 'no-store').json({ ...sdrWhats.status(chaveWhats(req.usuario), { todos: verTodos(req.usuario) }), podeConfigurar: verTodos(req.usuario) }));
+  app.get('/api/sdr/whats', (req, res) => res.set('Cache-Control', 'no-store').json({ ...sdrWhats.status(chaveWhats(req.usuario), { todos: req.usuario.papel === 'admin' }), podeConfigurar: verTodos(req.usuario) }));
   app.post('/api/sdr/whats/conectar', async (req, res) => {
     try {
       // o nome de quem conectou assina o lembrete ("Aqui é Murilo da Choice Cars"); a carteira decide quais lembretes saem por este número
@@ -565,7 +566,7 @@ function iniciarPainel() {
   });
   app.get('/api/sdr/historico', (req, res) => res.json(comercial.historicoContatos({ dia: req.query.dia, por: req.query.por })));
   app.get('/api/sdr/buscar', (req, res) => {
-    const r = comercial.buscarLead(req.query.q, req.usuario.papel === 'vendedor' ? carteiraDe(req.usuario) || '__sem_carteira__' : null);
+    const r = comercial.buscarLead(req.query.q, req.usuario.papel !== 'admin' ? carteiraDe(req.usuario) || '__sem_carteira__' : null);
     res.json(r);
   });
   app.post('/api/sdr/contato', (req, res) => {
