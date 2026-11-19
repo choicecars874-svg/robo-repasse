@@ -235,7 +235,7 @@ function pendentesHoje() {
   const c = cfg();
   const hoje = diaSP();
   const agora = Date.now();
-  const doLeadsOK = d.prepare(`SELECT a.lead_id, a.data, COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, COALESCE(l.vendedor, a.vendedor) vendedor
+  const doLeadsOK = d.prepare(`SELECT a.lead_id, a.data, COALESCE(l.nome, a.nome) nome, COALESCE(l.whatsapp, a.telefone) whatsapp, COALESCE(l.carro, a.carro) carro, COALESCE(l.vendedor, a.vendedor) vendedor, COALESCE(a.primeira_vez, 0) primeira_vez
     FROM lk_agenda a LEFT JOIN lk_leads l ON l.id = a.lead_id
     WHERE a.lead_id IS NOT NULL AND COALESCE(a.modalidade, 'presencial') = 'presencial' AND COALESCE(a.concluido, 0) = 0 AND date(a.data, '-3 hours') = ?`).all(hoje);
   const doSdr = d.prepare(`SELECT c.lead_id, c.proximo_em, l.nome, l.whatsapp, l.carro, l.vendedor FROM lk_contatos c JOIN lk_leads l ON l.id = c.lead_id
@@ -245,6 +245,7 @@ function pendentesHoje() {
   const lista = [];
   const jaEnviado = d.prepare("SELECT tipo, por FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo IN ('lembrete', 'lembrete_erro', 'lembrete_pulado') ORDER BY tipo = 'lembrete' DESC");
   const excluida = d.prepare("SELECT 1 FROM lk_confirmacoes WHERE lead_id = ? AND data_agendada = ? AND tipo = 'excluido'");
+  const ultAg = d.prepare("SELECT em, proximo_em FROM lk_contatos WHERE lead_id = ? AND resultado = 'agendou' AND proximo_em IS NOT NULL ORDER BY id DESC LIMIT 1");
   // venda já fechada (LeadsOK "Vendido", "Veio e comprou" na Agenda ou "já comprou" no briefing) ou "sem interesse" depois do agendamento
   const encerrado = d.prepare(`SELECT CASE WHEN lower(COALESCE(l.archive_reason, '')) LIKE 'vendido%' OR EXISTS (SELECT 1 FROM lk_visitas v WHERE v.lead_id = l.id AND v.comprou = 1)
         OR EXISTS (SELECT 1 FROM lk_contatos c WHERE c.lead_id = l.id AND c.resultado = 'ja_comprou') THEN 'venda já fechada'
@@ -254,13 +255,18 @@ function pendentesHoje() {
   const fora = ((config.get().sdr || {}).vendedoresFora || []).map((v) => String(v).toLowerCase());
   for (const v of [...doLeadsOK, ...doSdr]) {
     if (vistos.has(v.lead_id) || !v.whatsapp) continue;
+    // agendamento do LeadsOK remarcado pelo SDR para outro horário de hoje: vale o do SDR (vem depois na lista)
+    const ult0 = v.primeira_vez != null ? ultAg.get(v.lead_id) : null;
+    if (ult0 && ult0.em > v.primeira_vez && new Date(ult0.proximo_em).toISOString() !== v.data && diaSP(ult0.proximo_em) === hoje) continue;
     vistos.add(v.lead_id);
     if (fora.some((f) => String(v.vendedor || '').toLowerCase().includes(f))) continue;
     const quando = Date.parse(v.data);
     if (quando <= agora) continue;
     const enviarEm = Math.max(quando - c.horasAntes * 3600000, Date.parse(`${hoje}T${String(c.horaInicio).padStart(2, '0')}:00:00-03:00`));
     const env = jaEnviado.get(v.lead_id, v.data);
-    const pular = excluida.get(v.lead_id, v.data) ? 'excluído da agenda' : encerrado.get(quando - 7 * 86400000, v.lead_id)?.motivo || (env?.tipo === 'lembrete_pulado' ? env.por : null);
+    const ult = ultAg.get(v.lead_id);
+    const remarcada = v.primeira_vez != null && ult && ult.em > v.primeira_vez && new Date(ult.proximo_em).toISOString() !== v.data;
+    const pular = excluida.get(v.lead_id, v.data) ? 'excluído da agenda' : remarcada ? 'visita remarcada pelo SDR para outro horário' : encerrado.get(quando - 7 * 86400000, v.lead_id)?.motivo || (env?.tipo === 'lembrete_pulado' ? env.por : null);
     lista.push({ ...v, enviarEm, pular, enviado: env?.tipo === 'lembrete', falhou: env?.tipo === 'lembrete_erro', comResultado: !!temResultado.get(v.lead_id, v.data) });
   }
   return lista.sort((a, b) => a.enviarEm - b.enviarEm);
