@@ -2003,6 +2003,9 @@ function abrirBriefing(leadId, nome, resultado, tipo = 'ligacao') {
     if (!prox) return alert('Escolha o próximo passo.');
     const nota = m.querySelector('#bfNota').value.trim();
     if (!nota) return alert('Escreva o que o lead falou (debriefing).');
+    // escreveu que agendou, mas escolheu outro próximo passo: a visita não entraria na Agenda nem no lembrete
+    if (!['agendou', 'video'].includes(prox) && /\b(agendei|agendou|agendad[oa]|marquei|marcou|marcad[oa])\b.*\b(visita|vir|vem|loja|s[aá]bado|domingo|segunda|ter[cç]a|quarta|quinta|sexta|amanh[aã]|\d{1,2}\s*(h|:))/i.test(nota)
+      && !confirm('Você escreveu que AGENDOU, mas escolheu "' + ({ retornar: 'Ligar de novo', interesse_visita: 'Topou visitar sem horário', sem_interesse: 'Sem interesse', ja_comprou: 'Já comprou' }[prox] || prox) + '".\n\nAssim a visita NÃO entra na Agenda nem recebe o lembrete.\n\nOK = salvar assim mesmo · Cancelar = voltar e marcar "Agendou visita para" com o dia e a hora')) return;
     const qualif = {};
     m.querySelectorAll('[data-q]').forEach((i) => { if (i.value.trim()) qualif[i.dataset.q] = i.value.trim(); });
     const corpo = { leadId, tipo, nota, qualif, interesse: m.querySelector('input[name=bfInt]:checked').value, resultado: prox === 'retornar' ? 'atendeu' : prox === 'video' ? 'agendou' : prox };
