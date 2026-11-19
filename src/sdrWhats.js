@@ -15,11 +15,22 @@ const {
 const config = require('./config');
 const banco = require('./leadsok/banco');
 
-const DIR_AUTH = path.join(config.DATA_DIR, 'whats-sdr');
 const logger = pino({ level: 'silent' });
-const estado = { status: 'desligado', qr: null, numero: null, desde: Date.now(), ultimoErro: null, enviadosHoje: 0, diaContagem: null, log: [] };
-let sock = null;
+// Uma conexão por pessoa (SDR, vendedores, gestor). Chave 'sdr' = a conexão antiga do SDR (pasta whats-sdr);
+// as outras ficam em whats-u-<nome>. Dono e carteira de cada uma ficam em config.sdr.whatsDonos.
+const sessoes = new Map(); // chave -> { sock, estado }
+const log = [];
 let enviando = false;
+const slug = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'x';
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+const dirAuth = (chave) => path.join(config.DATA_DIR, chave === 'sdr' ? 'whats-sdr' : 'whats-u-' + slug(chave));
+const donos = () => (config.get().sdr || {}).whatsDonos || {};
+function sessao(chave = 'sdr') {
+  if (!sessoes.has(chave)) sessoes.set(chave, { sock: null, estado: { status: 'desligado', qr: null, numero: null, desde: Date.now(), ultimoErro: null, enviadosHoje: 0, diaContagem: null } });
+  return sessoes.get(chave);
+}
+// quem assina o lembrete de cada conexão
+const nomeDe = (chave) => donos()[chave]?.nome || (chave === 'sdr' ? (config.get().sdr || {}).nomeSdr : '') || 'a equipe';
 // conversa no WhatsApp do SDR (só em memória, nada é gravado): número -> última mensagem e se o cliente desmarcou
 const conversas = new Map();
 const meusEnvios = new Map(); // número -> quando o lembrete começou a ser enviado (não conta como conversa)
@@ -31,26 +42,33 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const cfg = () => ({ ativo: false, horasAntes: 2, horaInicio: 8, horaFim: 20, maxDia: 15, comFoto: true, estiloCard: 'cor', modeloCard: 'premium', ...((config.get().sdr || {}).lembreteAuto || {}) });
 const horaSP = (t = Date.now()) => Number(new Date(t).toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false })) % 24;
 const diaSP = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
-function registrar(tipo, texto) {
-  estado.log.unshift({ em: Date.now(), tipo, texto });
-  estado.log = estado.log.slice(0, 40);
+function registrar(tipo, texto, chave = null) {
+  log.unshift({ em: Date.now(), tipo, texto: chave ? `[${String(nomeDe(chave)).split(' ')[0]}] ${texto}` : texto, chave });
+  log.length = Math.min(log.length, 80);
 }
 
 // ---------- Conexão ----------
-async function conectar() {
-  if (sock) return;
+async function conectar(chave = 'sdr', dono = null) {
+  const se = sessao(chave);
+  const estado = se.estado;
+  if (dono) {
+    const c = config.get();
+    config.salvar({ ...c, sdr: { ...c.sdr, whatsDonos: { ...donos(), [chave]: { nome: dono.nome, carteira: dono.carteira || null } } } });
+  }
+  if (se.sock) return;
+  const DIR_AUTH = dirAuth(chave);
   fs.mkdirSync(DIR_AUTH, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(DIR_AUTH);
   const { version } = await fetchLatestBaileysVersion();
   estado.status = 'conectando';
-  sock = makeWASocket({
+  const sock = (se.sock = makeWASocket({
     version,
     auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
     logger,
     markOnlineOnConnect: false,
     syncFullHistory: false,
     shouldSyncHistoryMessage: () => false,
-  });
+  }));
   sock.ev.on('creds.update', saveCreds);
   // anota quando houve conversa com cada número (para o lembrete não cair no meio de uma conversa)
   sock.ev.on('messages.upsert', ({ messages }) => {
@@ -81,35 +99,60 @@ async function conectar() {
       estado.qr = null;
       estado.desde = Date.now();
       estado.numero = sock.user?.id?.split(':')[0] || null;
-      registrar('ok', 'WhatsApp do SDR conectado');
+      registrar('ok', 'WhatsApp conectado', chave);
     }
     if (connection === 'close') {
       const codigo = lastDisconnect?.error?.output?.statusCode;
-      sock = null;
+      if (se.sock === sock) se.sock = null;
+      if (estado.status === 'desligado') return; // desconectado pelo painel
       if (codigo === DisconnectReason.loggedOut) {
         estado.status = 'desligado';
         estado.numero = null;
         fs.rmSync(DIR_AUTH, { recursive: true, force: true });
-        registrar('erro', 'WhatsApp do SDR foi desconectado no celular. Conecte de novo pelo QR.');
+        registrar('erro', 'WhatsApp foi desconectado no celular. Conecte de novo pelo QR.', chave);
         return;
       }
       estado.status = 'reconectando';
-      setTimeout(() => conectar().catch((e) => (estado.ultimoErro = e.message)), 5000);
+      setTimeout(() => conectar(chave).catch((e) => (estado.ultimoErro = e.message)), 5000);
     }
   });
 }
-async function desconectar() {
+async function desconectar(chave = 'sdr') {
+  const se = sessao(chave);
+  se.estado.status = 'desligado';
   try {
-    await sock?.logout();
+    await se.sock?.logout();
   } catch {}
-  sock = null;
-  fs.rmSync(DIR_AUTH, { recursive: true, force: true });
-  estado.status = 'desligado';
-  estado.numero = null;
-  estado.qr = null;
-  registrar('aviso', 'WhatsApp do SDR desconectado pelo painel');
+  se.sock = null;
+  fs.rmSync(dirAuth(chave), { recursive: true, force: true });
+  se.estado.numero = null;
+  se.estado.qr = null;
+  registrar('aviso', 'WhatsApp desconectado pelo painel', chave);
 }
-const temSessao = () => fs.existsSync(path.join(DIR_AUTH, 'creds.json'));
+const temSessao = (chave = 'sdr') => fs.existsSync(path.join(dirAuth(chave), 'creds.json'));
+// conexões salvas no disco (para reconectar quando o servidor reinicia)
+function chavesSalvas() {
+  const l = [];
+  if (temSessao('sdr')) l.push('sdr');
+  for (const k of Object.keys(donos())) if (k !== 'sdr' && temSessao(k)) l.push(k);
+  return l;
+}
+const conectada = (chave) => { const se = sessoes.get(chave); return !!se?.sock && se.estado.status === 'conectado'; };
+// Por qual WhatsApp sai o lembrete: o de quem tem o lead na carteira (vendedor ou SDR); se ele não conectou, o do SDR
+function quemEnvia(v) {
+  const vend = semAcento(v.vendedor);
+  if (vend) for (const [k, dn] of Object.entries(donos())) if (dn.carteira && semAcento(dn.carteira) === vend) {
+    if (conectada(k)) return k;
+    break;
+  }
+  return conectada('sdr') ? 'sdr' : null;
+}
+// dono da carteira do lead (mesmo sem conexão), para mostrar "esperando o WhatsApp do Murilo"
+function donoDoLead(v) {
+  const vend = semAcento(v.vendedor);
+  for (const [k, dn] of Object.entries(donos())) if (dn.carteira && semAcento(dn.carteira) === vend) return k;
+  return null;
+}
 
 // ---------- Carro do lead no estoque (foto) ----------
 // Webmotors manda a placa no texto ("... | Placa: ABC1D23"); nos outros, procura pelo modelo e ano
@@ -246,12 +289,14 @@ async function motivoParaNaoEnviar(v) {
 }
 
 // ---------- Envio ----------
-async function enviarLembrete(v, { por = 'automático', teste = false } = {}) {
-  if (!sock || estado.status !== 'conectado') throw new Error('WhatsApp do SDR não está conectado');
+async function enviarLembrete(v, { teste = false, chave = null } = {}) {
+  chave = chave || quemEnvia(v);
+  if (!chave || !conectada(chave)) throw new Error('Nenhum WhatsApp conectado para enviar');
+  const sock = sessoes.get(chave).sock;
   const numero = String(v.whatsapp).replace(/\D/g, '');
   const [existe] = await sock.onWhatsApp(numero);
   if (!existe?.exists) throw new Error(`O número ${numero} não tem WhatsApp`);
-  const sdr = (config.get().sdr || {}).nomeSdr || 'a equipe';
+  const sdr = nomeDe(chave);
   const carro = carroNoEstoque(v.carro);
   // no texto, o nome do carro do estoque (marca e modelo) quando achado; senão o que veio do lead
   const nomeCarro = carro ? `${carro.marca || ''} ${carro.modelo || ''}`.trim() : v.carro;
@@ -260,45 +305,48 @@ async function enviarLembrete(v, { por = 'automático', teste = false } = {}) {
   let card = null;
   if (cfg().comFoto) {
     // card com a foto do carro do cliente; sem carro no estoque, a foto da fachada da loja e "estamos te esperando"
-    card = await cardDaVisita({ nome: v.nome, carro, data: v.data }).catch((e) => { registrar('aviso', `Card não foi montado (${e.message})`); return null; });
+    card = await cardDaVisita({ nome: v.nome, carro, data: v.data }).catch((e) => { registrar('aviso', `Card não foi montado (${e.message})`, chave); return null; });
   }
   if (card) await sock.sendMessage(existe.jid, { image: card, caption: texto });
   else if (carro?.imagem) await sock.sendMessage(existe.jid, { image: { url: carro.imagem }, caption: texto });
   else await sock.sendMessage(existe.jid, { text: texto });
-  if (!teste) banco.abrir().prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(v.lead_id), v.data, 'lembrete', 'automático', Date.now());
-  return { comFoto: !!carro?.imagem, comCard: !!card, fotoDaLoja: !!card && !carro?.imagem, texto };
+  if (!teste) banco.abrir().prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(v.lead_id), v.data, 'lembrete', 'automático · ' + String(sdr).split(' ')[0], Date.now());
+  return { chave, comFoto: !!carro?.imagem, comCard: !!card, fotoDaLoja: !!card && !carro?.imagem, texto };
 }
 
 async function rodada() {
   const c = cfg();
-  if (!c.ativo || enviando || estado.status !== 'conectado') return;
+  if (!c.ativo || enviando || ![...sessoes.keys()].some(conectada)) return;
   const h = horaSP();
   if (h < c.horaInicio || h >= c.horaFim) return;
-  if (estado.diaContagem !== diaSP()) {
-    estado.diaContagem = diaSP();
-    estado.enviadosHoje = 0;
+  for (const se of sessoes.values()) if (se.estado.diaContagem !== diaSP()) {
+    se.estado.diaContagem = diaSP();
+    se.estado.enviadosHoje = 0;
   }
   enviando = true;
   try {
     for (const v of pendentesHoje()) {
       if (v.enviado || v.falhou || v.pular || v.comResultado || v.enviarEm > Date.now()) continue;
+      const chave = quemEnvia(v);
+      if (!chave) continue; // ninguém conectado para este lead: espera
+      const estado = sessoes.get(chave).estado;
       const motivo = await motivoParaNaoEnviar(v);
       if (motivo) {
         // não manda: o SDR já está falando com o cliente (ou ele desmarcou). Fica anotado e não tenta de novo.
         banco.abrir().prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(v.lead_id), v.data, 'lembrete_pulado', motivo.slice(0, 80), Date.now());
-        registrar('aviso', `Lembrete de ${v.nome || 'cliente'} não foi enviado: ${motivo}`);
+        registrar('aviso', `Lembrete de ${v.nome || 'cliente'} não foi enviado: ${motivo}`, chave);
         continue;
       }
       if (estado.enviadosHoje >= c.maxDia) {
-        registrar('aviso', `Limite de ${c.maxDia} lembretes por dia atingido`);
-        break;
+        registrar('aviso', `Limite de ${c.maxDia} lembretes por dia atingido neste WhatsApp`, chave);
+        continue;
       }
       try {
-        const r = await enviarLembrete(v);
+        const r = await enviarLembrete(v, { chave });
         estado.enviadosHoje++;
-        registrar('ok', `Lembrete enviado para ${v.nome || 'cliente'} (visita ${new Date(v.data).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })})${r.comFoto ? ' com a foto do carro' : ''}`);
+        registrar('ok', `Lembrete enviado para ${v.nome || 'cliente'} (visita ${new Date(v.data).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })})${r.comFoto ? ' com a foto do carro' : ''}`, chave);
       } catch (e) {
-        registrar('erro', `Lembrete de ${v.nome || 'cliente'} não foi: ${e.message}`);
+        registrar('erro', `Lembrete de ${v.nome || 'cliente'} não foi: ${e.message}`, chave);
         // não tenta de novo o mesmo número a cada minuto
         banco.abrir().prepare('INSERT OR REPLACE INTO lk_confirmacoes (lead_id, data_agendada, tipo, por, em) VALUES (?, ?, ?, ?, ?)').run(String(v.lead_id), v.data, 'lembrete_erro', e.message.slice(0, 80), Date.now());
       }
@@ -310,16 +358,30 @@ async function rodada() {
 }
 
 function iniciar() {
-  if (temSessao()) conectar().catch((e) => (estado.ultimoErro = e.message));
+  // reconecta uma por vez (não pesa no servidor na hora de subir)
+  chavesSalvas().forEach((k, i) => setTimeout(() => conectar(k).catch((e) => (sessao(k).estado.ultimoErro = e.message)), i * 8000));
   setInterval(() => rodada().catch((e) => registrar('erro', e.message)), 60000);
 }
 
-function status() {
-  return { ...estado, temSessao: temSessao(), config: cfg(), nomeSdr: (config.get().sdr || {}).nomeSdr || '', textos: { carro: (config.get().sdr || {}).lembreteAutoCarro || '', semCarro: (config.get().sdr || {}).lembreteAutoSemCarro || '' }, hoje: pendentesHoje().map((v) => ({ nome: v.nome, data: v.data, enviarEm: v.enviarEm, enviado: v.enviado, falhou: v.falhou, pular: v.pular, comResultado: v.comResultado, carro: v.carro, fotoDoCarro: !!carroNoEstoque(v.carro)?.imagem })) };
+// status da conexão de uma pessoa; todos = true (gestor/SDR) mostra todas as conexões e todos os lembretes do dia
+function status(chave = 'sdr', { todos = true } = {}) {
+  const se = sessao(chave);
+  const nome1 = (k) => String(nomeDe(k)).split(' ')[0];
+  const conexoes = [...new Set(['sdr', ...Object.keys(donos()), ...sessoes.keys()])].filter((k) => temSessao(k) || conectada(k) || (sessoes.get(k)?.estado.status || 'desligado') !== 'desligado')
+    .map((k) => ({ chave: k, nome: nomeDe(k), carteira: donos()[k]?.carteira || null, status: sessao(k).estado.status, numero: sessao(k).estado.numero, enviadosHoje: sessao(k).estado.enviadosHoje }));
+  const hoje = pendentesHoje().map((v) => {
+    const vai = quemEnvia(v);
+    const dono = donoDoLead(v);
+    return { nome: v.nome, data: v.data, vendedor: v.vendedor || null, enviarEm: v.enviarEm, enviado: v.enviado, falhou: v.falhou, pular: v.pular, comResultado: v.comResultado, carro: v.carro, fotoDoCarro: !!carroNoEstoque(v.carro)?.imagem,
+      vaiPor: vai ? nome1(vai) : null, meu: vai === chave || dono === chave, esperando: !vai ? (dono ? `esperando o WhatsApp de ${nome1(dono)} (ou o do SDR) conectar` : 'esperando o WhatsApp do SDR conectar') : null };
+  }).filter((v) => todos || v.meu);
+  const c = config.get().sdr || {};
+  return { ...se.estado, chave, temSessao: temSessao(chave), conectado: conectada(chave), config: cfg(), nomeSdr: nomeDe(chave) === 'a equipe' ? '' : nomeDe(chave), textos: { carro: c.lembreteAutoCarro || '', semCarro: c.lembreteAutoSemCarro || '' },
+    conexoes: todos ? conexoes : conexoes.filter((x) => x.chave === chave), hoje, log: log.filter((x) => todos || x.chave === chave || !x.chave).slice(0, 40) };
 }
 
 // só para teste automatizado: usa um socket falso
-const _usarSock = (s) => { sock = s; estado.status = 'conectado'; estado.numero = '5511999990000'; };
+const _usarSock = (s, chave = 'sdr', numero = '5511999990000') => { const se = sessao(chave); se.sock = s; se.estado.status = 'conectado'; se.estado.numero = numero; };
 
 const _conversas = conversas;
-module.exports = { _conversas, motivoParaNaoEnviar, cardDaVisita, fraseDoCard, _usarSock, rodada, iniciar, conectar, desconectar, status, enviarLembrete, carroNoEstoque, textoLembrete, pendentesHoje };
+module.exports = { quemEnvia, chavesSalvas, _conversas, motivoParaNaoEnviar, cardDaVisita, fraseDoCard, _usarSock, rodada, iniciar, conectar, desconectar, status, enviarLembrete, carroNoEstoque, textoLembrete, pendentesHoje };

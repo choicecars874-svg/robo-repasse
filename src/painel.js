@@ -460,7 +460,7 @@ function iniciarPainel() {
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
     const objecoes = (Array.isArray(b.objecoes) ? b.objecoes : []).map((o) => ({ objecao: String(o.objecao || '').trim().slice(0, 120), resposta: String(o.resposta || '').trim().slice(0, 1500) })).filter((o) => o.objecao).slice(0, 40);
     const atual = config.get();
-    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 2), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), horasSemRespostaResgate: n(b.horasSemRespostaResgate, 0.25, 48, 1), vendedoresFora: (Array.isArray(b.vendedoresFora) ? b.vendedoresFora : atual.sdr.vendedoresFora || []).map((v) => String(v).trim().slice(0, 60)).filter(Boolean).slice(0, 20), foraIniciado: true, chavePlanilha: atual.sdr.chavePlanilha || null, lembreteAuto: atual.sdr.lembreteAuto, nomeSdr: atual.sdr.nomeSdr, lembreteAutoCarro: atual.sdr.lembreteAutoCarro, lembreteAutoSemCarro: atual.sdr.lembreteAutoSemCarro, recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, lembreteDia: String(b.lembreteDia || '').slice(0, 1000) || atual.sdr.lembreteDia, naoVeio: String(b.naoVeio || '').slice(0, 1000) || atual.sdr.naoVeio, objecoes } }).sdr);
+    res.json(config.salvar({ ...atual, sdr: { horasTentarDeNovo: n(b.horasTentarDeNovo, 0.5, 72, 3), horasAguardandoRecado: n(b.horasAguardandoRecado, 1, 168, 2), tentativasMax: n(b.tentativasMax, 1, 10, 3), diasNovos: n(b.diasNovos, 1, 30, 7), horasSemRespostaResgate: n(b.horasSemRespostaResgate, 0.25, 48, 1), vendedoresFora: (Array.isArray(b.vendedoresFora) ? b.vendedoresFora : atual.sdr.vendedoresFora || []).map((v) => String(v).trim().slice(0, 60)).filter(Boolean).slice(0, 20), foraIniciado: true, chavePlanilha: atual.sdr.chavePlanilha || null, whatsDonos: atual.sdr.whatsDonos || {}, lembreteAuto: atual.sdr.lembreteAuto, nomeSdr: atual.sdr.nomeSdr, lembreteAutoCarro: atual.sdr.lembreteAutoCarro, lembreteAutoSemCarro: atual.sdr.lembreteAutoSemCarro, recado: String(b.recado || '').slice(0, 1000) || atual.sdr.recado, confirmacao: String(b.confirmacao || '').slice(0, 1000) || atual.sdr.confirmacao, lembreteDia: String(b.lembreteDia || '').slice(0, 1000) || atual.sdr.lembreteDia, naoVeio: String(b.naoVeio || '').slice(0, 1000) || atual.sdr.naoVeio, objecoes } }).sdr);
   });
   app.post('/api/sdr/lead-teste', (req, res) => {
     try {
@@ -508,21 +508,27 @@ function iniciarPainel() {
   app.get('/api/sdr/planilha/chave', (req, res) => res.json({ chave: req.usuario.papel === 'admin' ? (config.get().sdr || {}).chavePlanilha || null : null }));
   // WhatsApp do SDR (lembrete automático da visita)
   const sdrWhats = require('./sdrWhats');
-  app.use('/api/sdr/whats', (req, res, next) => (req.usuario.papel === 'vendedor' ? res.status(403).json({ erro: 'Só o SDR conecta o WhatsApp do lembrete' }) : next()));
-  app.get('/api/sdr/whats', (_, res) => res.set('Cache-Control', 'no-store').json(sdrWhats.status()));
+  // cada pessoa conecta o próprio WhatsApp: o SDR usa a conexão antiga ("sdr"); vendedor e gestor, uma com o nome deles
+  const chaveWhats = (u) => (u.papel === 'sdr' ? 'sdr' : 'u-' + semAcento(u.nome).replace(/[^a-z0-9]+/g, '-'));
+  const verTodos = (u) => u.papel !== 'vendedor';
+  app.get('/api/sdr/whats', (req, res) => res.set('Cache-Control', 'no-store').json({ ...sdrWhats.status(chaveWhats(req.usuario), { todos: verTodos(req.usuario) }), podeConfigurar: verTodos(req.usuario) }));
   app.post('/api/sdr/whats/conectar', async (req, res) => {
     try {
-      const c = config.get();
-      // o nome de quem conectou assina o lembrete ("Aqui é Marcos da Choice Cars")
-      config.salvar({ ...c, sdr: { ...c.sdr, nomeSdr: req.usuario.papel === 'admin' ? c.sdr.nomeSdr || '' : req.usuario.nome } });
-      await sdrWhats.conectar();
+      // o nome de quem conectou assina o lembrete ("Aqui é Murilo da Choice Cars"); a carteira decide quais lembretes saem por este número
+      const chave = chaveWhats(req.usuario);
+      if (chave === 'sdr') {
+        const c = config.get();
+        if (req.usuario.papel !== 'admin') config.salvar({ ...c, sdr: { ...c.sdr, nomeSdr: req.usuario.nome } });
+      }
+      await sdrWhats.conectar(chave, { nome: req.usuario.nome, carteira: carteiraDe(req.usuario) });
       res.json({ ok: true });
     } catch (e) {
       res.status(400).json({ erro: e.message });
     }
   });
-  app.post('/api/sdr/whats/desconectar', async (_, res) => res.json(await sdrWhats.desconectar().then(() => ({ ok: true }))));
+  app.post('/api/sdr/whats/desconectar', async (req, res) => res.json(await sdrWhats.desconectar(chaveWhats(req.usuario)).then(() => ({ ok: true }))));
   app.post('/api/sdr/whats/config', (req, res) => {
+    if (!verTodos(req.usuario)) return res.status(403).json({ erro: 'Só o SDR ou o gestor mudam os textos e horários do lembrete' });
     const b = req.body || {};
     const c = config.get();
     const n = (v, min, max, pad) => Math.min(max, Math.max(min, Number(v) || pad));
@@ -530,7 +536,7 @@ function iniciarPainel() {
     const nomeSdr = String(b.nomeSdr || '').trim().slice(0, 40) || c.sdr.nomeSdr || (req.usuario.papel !== 'admin' ? req.usuario.nome : '');
     const txt = (v, atual) => String(v || '').trim().slice(0, 1200) || atual;
     config.salvar({ ...c, sdr: { ...c.sdr, lembreteAuto, nomeSdr, lembreteAutoCarro: txt(b.lembreteAutoCarro, c.sdr.lembreteAutoCarro), lembreteAutoSemCarro: txt(b.lembreteAutoSemCarro, c.sdr.lembreteAutoSemCarro) } });
-    res.json(sdrWhats.status());
+    res.json(sdrWhats.status(chaveWhats(req.usuario)));
   });
   // exemplo do card com um carro do estoque (para ver antes de ligar o automático)
   app.get('/api/sdr/whats/card-exemplo.png', async (req, res) => {
@@ -545,13 +551,14 @@ function iniciarPainel() {
     }
   });
   // teste: manda o lembrete de exemplo para o próprio número conectado
-  app.post('/api/sdr/whats/teste', async (_, res) => {
+  app.post('/api/sdr/whats/teste', async (req, res) => {
     try {
-      const st = sdrWhats.status();
+      const chave = chaveWhats(req.usuario);
+      const st = sdrWhats.status(chave, { todos: false });
       if (!st.numero) throw new Error('Conecte o WhatsApp primeiro');
       const ex = require('./leadsok/banco').abrir()?.prepare('SELECT marca, modelo, versao, ano FROM lk_estoque WHERE ativo = 1 AND imagem IS NOT NULL LIMIT 1').get();
       const v = { lead_id: 'teste', nome: 'Teste', whatsapp: st.numero, carro: ex ? `${ex.marca} ${ex.modelo} ${ex.versao || ''} ${ex.ano || ''}` : '', data: new Date(Date.now() + 2 * 3600000).toISOString() };
-      res.json(await sdrWhats.enviarLembrete(v, { teste: true }));
+      res.json(await sdrWhats.enviarLembrete(v, { teste: true, chave }));
     } catch (e) {
       res.status(400).json({ erro: e.message });
     }
