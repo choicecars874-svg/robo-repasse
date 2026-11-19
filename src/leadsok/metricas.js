@@ -763,6 +763,36 @@ function marcarNoLeadsOK(id, situacao) {
 
 // Histórico de contatos registrados (para acompanhar o SDR): por dia e por pessoa
 // Resultado do SDR no período: por dia e por pessoa (ligações, atenderam, recados, agendou) e o que virou visita
+// Produtividade no próprio LeadsOK (o que a pessoa fez lá, sem passar pelos botões do painel):
+// mensagens que ela mandou no chat dos leads e agendamentos que ela criou. Vem da coleta de conversas
+// (atualiza sozinha: listas a cada 15 min, conversas novas em até 2 min). Ligação o LeadsOK não registra.
+function produtividadeLeadsOK({ de, ate, nome = null } = {}) {
+  const d = banco.abrir();
+  if (!d) return { erro: banco.erro() };
+  const fN = nome ? 'AND lower(m.owner_name) = lower(?)' : '';
+  const fA = nome ? 'AND lower(e.actor) = lower(?)' : '';
+  const a = (x) => (nome ? [de, ate, x] : [de, ate]);
+  const msgs = d.prepare(`SELECT m.owner_name pessoa, COUNT(*) mensagens, COUNT(DISTINCT m.lead_id) leads FROM lk_mensagens m
+    WHERE m.owner = 'salesman' AND m.owner_name IS NOT NULL AND date(m.ts, '-3 hours') BETWEEN ? AND ? ${fN} GROUP BY 1`).all(...a(nome));
+  const ags = d.prepare(`SELECT e.actor pessoa, COUNT(*) agendamentos, COUNT(DISTINCT e.lead_id) leadsAgendados FROM lk_eventos e
+    WHERE e.tipo = 'scheduled' AND e.actor IS NOT NULL AND date(e.ts, '-3 hours') BETWEEN ? AND ? ${fA} GROUP BY 1`).all(...a(nome));
+  const porDiaM = d.prepare(`SELECT date(m.ts, '-3 hours') dia, COUNT(*) mensagens, COUNT(DISTINCT m.lead_id) leads FROM lk_mensagens m
+    WHERE m.owner = 'salesman' AND m.owner_name IS NOT NULL AND date(m.ts, '-3 hours') BETWEEN ? AND ? ${fN} GROUP BY 1`).all(...a(nome));
+  const porDiaA = d.prepare(`SELECT date(e.ts, '-3 hours') dia, COUNT(*) agendamentos FROM lk_eventos e
+    WHERE e.tipo = 'scheduled' AND e.actor IS NOT NULL AND date(e.ts, '-3 hours') BETWEEN ? AND ? ${fA} GROUP BY 1`).all(...a(nome));
+  const pessoas = {};
+  for (const x of msgs) Object.assign((pessoas[x.pessoa] ||= { pessoa: x.pessoa, mensagens: 0, leads: 0, agendamentos: 0 }), { mensagens: x.mensagens, leads: x.leads });
+  for (const x of ags) Object.assign((pessoas[x.pessoa] ||= { pessoa: x.pessoa, mensagens: 0, leads: 0, agendamentos: 0 }), { agendamentos: x.agendamentos });
+  const dias = {};
+  for (const x of porDiaM) Object.assign((dias[x.dia] ||= { dia: x.dia, mensagens: 0, leads: 0, agendamentos: 0 }), { mensagens: x.mensagens, leads: x.leads });
+  for (const x of porDiaA) Object.assign((dias[x.dia] ||= { dia: x.dia, mensagens: 0, leads: 0, agendamentos: 0 }), { agendamentos: x.agendamentos });
+  const lista = Object.values(pessoas).sort((x, y) => y.mensagens + y.agendamentos * 10 - (x.mensagens + x.agendamentos * 10));
+  const tot = lista.reduce((t, x) => ({ mensagens: t.mensagens + x.mensagens, agendamentos: t.agendamentos + x.agendamentos }), { mensagens: 0, agendamentos: 0 });
+  tot.leads = d.prepare(`SELECT COUNT(DISTINCT m.lead_id) n FROM lk_mensagens m WHERE m.owner = 'salesman' AND m.owner_name IS NOT NULL AND date(m.ts, '-3 hours') BETWEEN ? AND ? ${fN}`).get(...a(nome)).n;
+  const base = d.prepare('SELECT MAX(detalhe_em) atualizado, COUNT(*) leads, TOTAL(detalhe_em IS NOT NULL) detalhados FROM lk_leads WHERE is_resgate = 0').get();
+  return { pessoas: lista, porDia: Object.values(dias).sort((x, y) => (x.dia < y.dia ? -1 : 1)), total: tot, atualizado: base.atualizado || null, semConversas: !base.detalhados };
+}
+
 function resultadoSdr({ de, ate, por } = {}) {
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
@@ -880,4 +910,4 @@ function vendedoresLeadsOK() {
   return d.prepare("SELECT DISTINCT vendedor FROM lk_leads WHERE vendedor IS NOT NULL AND trim(vendedor) != '' AND COALESCE(vendedor_is_ia, 0) = 0 ORDER BY vendedor").all().map((x) => x.vendedor);
 }
 
-module.exports = { excluirAgendamento, vendedoresLeadsOK, planilhaSdr, planilhaCsv, qualifDoLead, COLUNAS_PLANILHA, briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };
+module.exports = { produtividadeLeadsOK, excluirAgendamento, vendedoresLeadsOK, planilhaSdr, planilhaCsv, qualifDoLead, COLUNAS_PLANILHA, briefingLead, gestorDoDia, painelComercial, confirmarVisita, resultadoSdr, criarLeadTeste, removerLeadsTeste, registrarEsperando, filaSdr, registrarContato, marcarNoLeadsOK, historicoContatos, buscarLead, resumoPeriodo, leads, time, agenda, marcarVisita, estoque, resumoHoje, diaSP };

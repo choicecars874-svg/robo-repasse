@@ -446,6 +446,9 @@
   <div class="card filtros soAdmin"><div><label>Pessoa</label><select id="srPor"><option value="">Todos</option></select></div></div>
   <div class="card"><h2>Funil do SDR</h2><p class="sub" id="srFunilObs"></p><div class="pnFunil" id="srFunil"></div></div>
   <div class="kpis kpis5" id="srKpis"></div>
+  <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Produtividade no LeadsOK</h2><p class="sub" id="srLkObs">Mensagens enviadas no chat dos leads e agendamentos criados direto no LeadsOK, mesmo sem usar os botões do painel. Atualiza sozinho.</p></div></div>
+    <div class="kpis" id="srLkKpis" style="margin:10px 0"></div>
+    <table><thead><tr><th>Pessoa</th><th>Mensagens enviadas</th><th>Leads chamados</th><th>Agendamentos</th></tr></thead><tbody id="srLkPessoas"></tbody></table></div>
   <div class="grade">
     <div class="card"><div class="cardTopo" style="flex-wrap:wrap;gap:8px"><div><h2>Por dia</h2><p class="sub">Ligações, quem atendeu e agendamentos de cada dia.</p></div><div class="legenda"><span style="--c:var(--azul)">Ligações</span><span style="--c:var(--verde)">Atenderam</span><span style="--c:var(--ouro)">Agendou</span></div></div><div class="tmGraf" id="srDias"></div></div>
     <div class="card"><h2>Que horas mais atendem</h2><p class="sub">Ligações por hora do dia e quantas foram atendidas.</p><div id="srHoras"></div></div>
@@ -1557,6 +1560,11 @@ async function carregarSdrRes() {
   const per = $('#perSdrRes').per || { de: diaSP(0), ate: diaSP(0), rotulo: 'hoje' };
   const r = await api(`/api/sdr/resultado?de=${per.de}&ate=${per.ate}&por=${encodeURIComponent($('#srPor').value)}`);
   if (r.erro) return;
+  const lk = r.noLeadsOK || {};
+  $('#srLkKpis').innerHTML = lk.semConversas ? '' : [['Mensagens enviadas', lk.total?.mensagens], ['Leads chamados', lk.total?.leads], ['Agendamentos', lk.total?.agendamentos]].map(([n, v]) => `<div class="kpi"><div class="eyebrow">${n}</div><b>${num(v || 0)}</b></div>`).join('');
+  $('#srLkPessoas').innerHTML = lk.semConversas ? '<tr><td colspan="4" class="ruim">As conversas do LeadsOK ainda não estão sendo lidas (veja Integrações → LeadsOK → "Testar coleta de detalhes").</td></tr>'
+    : (lk.pessoas || []).map((p) => `<tr><td><b>${esc(p.pessoa)}</b></td><td>${num(p.mensagens)}</td><td>${num(p.leads)}</td><td class="bom">${num(p.agendamentos)}</td></tr>`).join('') || '<tr><td colspan="4" class="sub">Nada no período.</td></tr>';
+  $('#srLkObs').textContent = 'Mensagens enviadas no chat dos leads e agendamentos criados direto no LeadsOK, mesmo sem usar os botões do painel. Atualiza sozinho a cada 15 min' + (lk.atualizado ? ` · última leitura ${new Date(lk.atualizado).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '') + '. Ligação o LeadsOK não registra: essa conta vem dos botões da Fila.';
   const atual = $('#srPor').value;
   $('#srPor').innerHTML = '<option value="">Todos</option>' + r.pessoas.map((p) => `<option ${p === atual ? 'selected' : ''}>${esc(p)}</option>`).join('');
   const fu = r.funil || {};

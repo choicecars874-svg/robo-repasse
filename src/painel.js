@@ -451,7 +451,10 @@ function iniciarPainel() {
   app.get('/api/sdr/resultado', (req, res) => {
     const hoje = comercial.diaSP();
     const por = req.usuario.papel === 'admin' ? String(req.query.por || '') : req.usuario.nome;
-    res.json(comercial.resultadoSdr({ de: req.query.de || hoje, ate: req.query.ate || hoje, por }));
+    const de = req.query.de || hoje, ate = req.query.ate || hoje;
+    // no LeadsOK: o gestor vê todos; os outros, só o nome deles no LeadsOK
+    const nomeLk = req.usuario.papel === 'admin' ? null : carteiraDe(req.usuario) || '__sem_carteira__';
+    res.json({ ...comercial.resultadoSdr({ de, ate, por }), noLeadsOK: comercial.produtividadeLeadsOK({ de, ate, nome: nomeLk }) });
   });
   // cadência, recado e objeções (só o administrador muda)
   app.post('/api/sdr/config', (req, res) => {
