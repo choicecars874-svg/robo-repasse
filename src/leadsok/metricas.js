@@ -793,14 +793,19 @@ function produtividadeLeadsOK({ de, ate, nome = null } = {}) {
   return { pessoas: lista, porDia: Object.values(dias).sort((x, y) => (x.dia < y.dia ? -1 : 1)), total: tot, atualizado: base.atualizado || null, semConversas: !base.detalhados };
 }
 
-function resultadoSdr({ de, ate, por } = {}) {
+function resultadoSdr({ de, ate, por, carteira = null } = {}) {
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
-  const filtro = por ? 'AND c.por = ?' : '';
-  const args = por ? [de, ate, por] : [de, ate];
+  // carteira: só os leads que estão no nome da pessoa no LeadsOK
+  const filtro = (por ? 'AND c.por = ? ' : '') + (carteira ? 'AND c.lead_id IN (SELECT id FROM lk_leads WHERE lower(vendedor) = lower(?))' : '');
+  const args = [de, ate, ...(por ? [por] : []), ...(carteira ? [carteira] : [])];
+  // por lead e por dia: "falou" = conversou com o lead (ligação atendida ou mensagem respondida com resultado);
+  // "agendou" é sempre parte de quem falou, então a taxa nunca passa de 100%
+  const CONVERSOU = "c.resultado IN ('atendeu', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse')";
   const ATENDEU = "c.tipo = 'ligacao' AND c.resultado IN ('atendeu', 'agendou', 'interesse_visita', 'ja_comprou', 'sem_interesse')";
   const cols = `TOTAL(c.tipo = 'ligacao') ligacoes, TOTAL(${ATENDEU}) atenderam, TOTAL(c.resultado = 'nao_atendeu') naoAtenderam,
-    TOTAL(c.tipo = 'mensagem') mensagens, TOTAL(c.resultado = 'agendou') agendou, TOTAL(c.resultado IN ('ja_comprou', 'sem_interesse')) encerrados,
+    TOTAL(c.tipo = 'mensagem') mensagens, COUNT(DISTINCT CASE WHEN c.resultado = 'agendou' THEN c.lead_id || '|' || c.dia END) agendou,
+    COUNT(DISTINCT CASE WHEN ${CONVERSOU} THEN c.lead_id || '|' || c.dia END) falaram, COUNT(DISTINCT CASE WHEN c.resultado IN ('ja_comprou', 'sem_interesse') THEN c.lead_id END) encerrados,
     COUNT(DISTINCT c.lead_id) leads`;
   const porDia = d.prepare(`SELECT c.dia, ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY c.dia ORDER BY c.dia`).all(...args);
   const porPessoa = d.prepare(`SELECT COALESCE(c.por, 'Sem responsável (registro antigo)') por, ${cols} FROM lk_contatos c WHERE c.dia BETWEEN ? AND ? ${filtro} GROUP BY c.por ORDER BY ligacoes DESC`).all(...args);

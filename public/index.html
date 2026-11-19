@@ -1574,10 +1574,10 @@ async function carregarSdrRes() {
   carregarPlanilhaSdr(per);
   const t = r.total;
   $('#srKpis').innerHTML = [
-    ['Ligações', num(t.ligacoes), `${num(t.leads)} leads trabalhados`, ''],
-    ['Atenderam', num(t.atenderam), `${pct(t.atenderam, t.ligacoes)} das ligações`, 'ok'],
+    ['Ligações', num(t.ligacoes), `${num(t.atenderam)} atendidas (${pct(t.atenderam, t.ligacoes)}) · ${num(t.leads)} leads trabalhados`, ''],
+    ['Falou com', num(t.falaram), `leads com conversa no dia · ${pct(t.falaram, t.leads)} dos trabalhados`, 'ok'],
     ['Recados', num(t.mensagens), `${num(t.naoAtenderam)} não atenderam`, ''],
-    ['Agendou', num(t.agendou), `${pct(t.agendou, t.atenderam)} de quem atendeu`, 'ouro'],
+    ['Agendou', num(t.agendou), `${pct(t.agendou, t.falaram)} de quem ele falou no dia`, 'ouro'],
     ['Vieram', num(t.vieram), `${num(t.compraram)} compraram · ${num(t.naoVieram)} não vieram`, 'ok'],
   ].map(([n, v, txt, c]) => `<div class="kpi ${c}"><div class="eyebrow">${n}</div><b>${v}</b><small>${txt}</small></div>`).join('');
   const dias = diasEntre(per.de, per.ate);
