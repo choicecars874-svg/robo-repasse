@@ -2335,11 +2335,12 @@ function abrirTour() {
   t.innerHTML = '<div class="tourFundo"></div><div class="tourFoco" hidden></div><div class="tourCard"></div>';
   document.body.appendChild(t);
   mostrarPasso();
+  // conta como visto assim que abre: mesmo fechando a aba no meio, não aparece de novo (só pelo "Como usar o painel")
+  if (!eu.onboardingEm) api('/api/eu/onboarding', { method: 'POST' }).then(() => { eu.onboardingEm = Date.now(); }).catch(() => {});
 }
-function fecharTour(marcar = true) {
+function fecharTour() {
   $('#tour')?.remove();
   document.body.classList.remove('menuAberto');
-  if (marcar) api('/api/eu/onboarding', { method: 'POST' }).then(() => { eu.onboardingEm = Date.now(); }).catch(() => {});
 }
 function mostrarPasso() {
   const t = $('#tour'); if (!t) return;
