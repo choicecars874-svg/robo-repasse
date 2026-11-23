@@ -138,17 +138,29 @@ function chavesSalvas() {
   return l;
 }
 const conectada = (chave) => { const se = sessoes.get(chave); return !!se?.sock && se.estado.status === 'conectado'; };
-// Por qual WhatsApp sai o lembrete: o de quem tem o lead na carteira (vendedor ou SDR); se ele não conectou, o do SDR
+// Por qual WhatsApp sai o lembrete:
+// 1) visita que o SDR agendou (último "Agendou" do lead é dele): WhatsApp do SDR;
+// 2) senão, o de quem tem o lead na carteira (vendedor ou SDR).
+// O SDR NÃO manda lembrete de visita que os vendedores agendaram (não pode parecer que foi ele que atendeu).
+function sdrAgendou(v) {
+  const nome = nomeDe('sdr');
+  const u = banco.abrir()?.prepare("SELECT por FROM lk_contatos WHERE lead_id = ? AND resultado = 'agendou' ORDER BY id DESC LIMIT 1").get(String(v.lead_id));
+  return !!u && semAcento(u.por) === semAcento(nome);
+}
 function quemEnvia(v) {
-  const vend = semAcento(v.vendedor);
-  if (vend) for (const [k, dn] of Object.entries(donos())) if (dn.carteira && semAcento(dn.carteira) === vend) {
-    if (conectada(k)) return k;
-    break;
-  }
-  return conectada('sdr') ? 'sdr' : null;
+  if (sdrAgendou(v)) return conectada('sdr') ? 'sdr' : null;
+  const k = donoDoLead(v);
+  return k && conectada(k) ? k : null;
+}
+function definirDono(chave, dono) {
+  const atual = donos()[chave];
+  if (atual && atual.nome === dono.nome && atual.carteira === (dono.carteira || null)) return;
+  const c = config.get();
+  config.salvar({ ...c, sdr: { ...c.sdr, whatsDonos: { ...donos(), [chave]: { nome: dono.nome, carteira: dono.carteira || null } } } });
 }
 // dono da carteira do lead (mesmo sem conexão), para mostrar "esperando o WhatsApp do Murilo"
 function donoDoLead(v) {
+  if (sdrAgendou(v)) return 'sdr';
   const vend = semAcento(v.vendedor);
   for (const [k, dn] of Object.entries(donos())) if (dn.carteira && semAcento(dn.carteira) === vend) return k;
   return null;
@@ -379,7 +391,7 @@ function status(chave = 'sdr', { todos = true } = {}) {
     const vai = quemEnvia(v);
     const dono = donoDoLead(v);
     return { nome: v.nome, data: v.data, vendedor: v.vendedor || null, enviarEm: v.enviarEm, enviado: v.enviado, falhou: v.falhou, pular: v.pular, comResultado: v.comResultado, carro: v.carro, fotoDoCarro: !!carroNoEstoque(v.carro)?.imagem,
-      vaiPor: vai ? nome1(vai) : null, meu: vai === chave || dono === chave, esperando: !vai ? (dono ? `esperando o WhatsApp de ${nome1(dono)} (ou o do SDR) conectar` : 'esperando o WhatsApp do SDR conectar') : null };
+      vaiPor: vai ? nome1(vai) : null, meu: vai === chave || dono === chave, esperando: !vai ? (dono ? `esperando o WhatsApp de ${nome1(dono)} conectar` : `lead de ${v.vendedor || 'outro vendedor'}: só sai se ele conectar o WhatsApp dele`) : null };
   }).filter((v) => todos || v.meu);
   const c = config.get().sdr || {};
   return { ...se.estado, chave, temSessao: temSessao(chave), conectado: conectada(chave), config: cfg(), nomeSdr: nomeDe(chave) === 'a equipe' ? '' : nomeDe(chave), textos: { carro: c.lembreteAutoCarro || '', semCarro: c.lembreteAutoSemCarro || '' },
@@ -390,4 +402,4 @@ function status(chave = 'sdr', { todos = true } = {}) {
 const _usarSock = (s, chave = 'sdr', numero = '5511999990000') => { const se = sessao(chave); se.sock = s; se.estado.status = 'conectado'; se.estado.numero = numero; };
 
 const _conversas = conversas;
-module.exports = { quemEnvia, chavesSalvas, _conversas, motivoParaNaoEnviar, cardDaVisita, fraseDoCard, _usarSock, rodada, iniciar, conectar, desconectar, status, enviarLembrete, carroNoEstoque, textoLembrete, pendentesHoje };
+module.exports = { definirDono, quemEnvia, chavesSalvas, _conversas, motivoParaNaoEnviar, cardDaVisita, fraseDoCard, _usarSock, rodada, iniciar, conectar, desconectar, status, enviarLembrete, carroNoEstoque, textoLembrete, pendentesHoje };

@@ -426,7 +426,7 @@
 
 <section id="sdrConexoes">
   <div class="card" id="swCard"><details id="swDet" open><summary><h2 style="display:inline">WhatsApp · lembrete automático da visita</h2> <span class="sub" id="swResumo"></span></summary>
-    <p class="sub" style="margin:10px 0">Cada pessoa conecta o próprio WhatsApp aqui. No dia da visita, o painel manda sozinho o lembrete com a foto do carro do cliente <b>pelo WhatsApp de quem tem o lead no nome no LeadsOK</b> (vendedor ou SDR), assinado com o nome dele. Se essa pessoa não conectou, sai pelo WhatsApp do SDR. Só para quem tem visita marcada, uma mensagem por visita, dentro do horário e com intervalo entre os envios.</p>
+    <p class="sub" style="margin:10px 0">Cada pessoa conecta o próprio WhatsApp aqui. No dia da visita, o painel manda sozinho o lembrete com a foto do carro do cliente <b>pelo WhatsApp de quem agendou</b>: visita que o SDR agendou sai pelo WhatsApp do SDR; as dos leads de cada vendedor saem pelo WhatsApp do vendedor, assinadas com o nome dele (se ele não conectou, não sai). O SDR não manda lembrete de visita que o vendedor agendou. Só para quem tem visita marcada, uma mensagem por visita, dentro do horário e com intervalo entre os envios.</p>
     <div class="cardTopo" style="flex-wrap:wrap;gap:10px"><div><b id="swStatus">…</b><div class="sub" id="swNumero"></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn verde" id="btnSwConectar">Conectar WhatsApp</button><button class="btn" id="btnSwTeste">Enviar teste para mim</button><button class="btn verm" id="btnSwDesc">Desconectar</button></div></div>
     <div id="swQr" hidden style="margin:12px 0"><p class="sub">No seu celular: WhatsApp > Configurações > Aparelhos conectados > Conectar aparelho, e aponte para o código.</p><img id="swQrImg" alt="QR Code" style="width:240px;height:240px;background:#fff;border-radius:12px;padding:8px"></div>
     <div id="swConexoes" style="margin-top:12px"></div>
@@ -759,7 +759,7 @@
     <p class="sub" style="margin:4px 0 10px">Cada pessoa entra com o próprio login e cada contato fica registrado com o nome dela. <b>SDR</b> e <b>Vendedor</b> veem só os leads que estão no nome deles no LeadsOK e cada um conecta o próprio WhatsApp do lembrete em Conexões. <b>Gestor</b> vê o painel inteiro, como o administrador.</p>
     <div class="contasIg" id="listaUsuarios"></div>
     <div class="linha"><div><label>Nome (aparece no recado e na assinatura)</label><input id="novoUsuario" placeholder="ex.: Murilo" autocomplete="off"></div><div><label>Login (opcional)</label><input id="novoLogin" placeholder="ex.: murilo@choicecars" autocomplete="off" autocapitalize="none"></div><div><label>Senha (mín. 6)</label><input type="password" id="novaSenhaUsuario" autocomplete="new-password"></div></div>
-    <div class="linha"><div><label>Papel</label><select id="novoPapel"><option value="vendedor">Vendedor (só os leads dele)</option><option value="sdr">SDR (só os leads dele)</option><option value="admin">Gestor (painel inteiro)</option></select></div><div><label>Nome dele no LeadsOK (a carteira)</label><input id="novoNomeLk" list="vendedoresLk" placeholder="escolha da lista" autocomplete="off"><datalist id="vendedoresLk"></datalist></div></div>
+    <div class="linha"><div><label>Papel</label><select id="novoPapel"><option value="vendedor">Vendedor (só os leads dele)</option><option value="sdr">SDR (os dele + sem resposta dos outros)</option><option value="admin">Gestor (painel inteiro)</option></select></div><div><label>Nome dele no LeadsOK (a carteira)</label><input id="novoNomeLk" list="vendedoresLk" placeholder="escolha da lista" autocomplete="off"><datalist id="vendedoresLk"></datalist></div></div>
     <p><button class="btn verde" id="btnNovoUsuario">Criar usuário</button></p>
   </div>
   <div class="card">
@@ -2083,7 +2083,7 @@ async function carregarWhatsSdr() {
   // vendedor: só conecta o WhatsApp dele; textos, horários e o liga/desliga ficam com o SDR e o gestor
   $('#swCfg').hidden = !st.podeConfigurar;
   const NOMES_CX = { conectado: '<span class="bom">conectado</span>', desligado: '<span class="ruim">não conectado</span>', 'aguardando-qr': 'esperando o QR', conectando: 'conectando…', reconectando: 'reconectando…' };
-  $('#swConexoes').innerHTML = st.podeConfigurar && st.conexoes?.length ? `<label>WhatsApps conectados</label>${st.conexoes.map((x) => `<div class="brfItem"><b>${esc(x.nome)}</b> <span class="sub">· ${x.chave === 'sdr' ? 'SDR (envia também os lembretes de quem não conectou)' : 'leads de ' + esc(x.carteira || 'carteira não definida')}${x.numero ? ' · +' + x.numero : ''}</span> · ${NOMES_CX[x.status] || x.status}${x.enviadosHoje ? ` · ${x.enviadosHoje} enviado(s) hoje` : ''}</div>`).join('')}` : '';
+  $('#swConexoes').innerHTML = st.podeConfigurar && st.conexoes?.length ? `<label>WhatsApps conectados</label>${st.conexoes.map((x) => `<div class="brfItem"><b>${esc(x.nome)}</b> <span class="sub">· ${x.chave === 'sdr' ? 'SDR (visitas que ele agendou e leads dele)' : 'leads de ' + esc(x.carteira || 'carteira não definida')}${x.numero ? ' · +' + x.numero : ''}</span> · ${NOMES_CX[x.status] || x.status}${x.enviadosHoje ? ` · ${x.enviadosHoje} enviado(s) hoje` : ''}</div>`).join('')}` : '';
   const c = st.config;
   if (!$('#swCard').dataset.ok) {
     $('#swCard').dataset.ok = '1';
@@ -2144,7 +2144,7 @@ async function carregarSdr() {
   const cd = r.cadencia;
   const descSdr = (k, d) => k === 'abandonados' ? d.replace('1 h', `${String(cd.horasSemRespostaResgate).replace('.', ',')} h`) : k === 'novos' ? d.replace('7 dias', `${cd.diasNovos} dias`) : k === 'retornar' ? `Quem não atendeu há mais de ${String(cd.horasTentarDeNovo).replace('.', ',')} h, quem não respondeu o recado em ${cd.horasAguardandoRecado} h, retornos marcados para hoje e follow-ups marcados como "ligação" no LeadsOK.` : d;
   // "sem resposta de ninguém (outros vendedores)": só o gestor vê; SDR e vendedor ficam só com os leads deles
-  $('#sdListas').innerHTML = LISTAS_SDR.filter(([k]) => k !== 'abandonados' || eu?.papel === 'admin').map(([k, titulo, desc0]) => { const desc = descSdr(k, desc0);
+  $('#sdListas').innerHTML = LISTAS_SDR.filter(([k]) => k !== 'abandonados' || eu?.papel !== 'vendedor').map(([k, titulo, desc0]) => { const desc = descSdr(k, desc0);
     const itens = r.listas[k];
     return `<div class="card"><div class="cardTopo"><div><h2>${titulo} <span class="sub">(${itens.length})</span></h2><p class="sub">${desc}</p></div></div>
       ${itens.map((l) => {

@@ -208,7 +208,7 @@ function registrarEsperando(horasParado = 2) {
 }
 
 // Agenda de um período (de/ate, padrão hoje) com o resumo de comparecimento
-function agenda({ de, ate, vendedor = null } = {}) {
+function agenda({ de, ate, vendedor = null, agendadoPor = null } = {}) {
   const d = banco.abrir();
   if (!d) return { erro: banco.erro() };
   de ||= diaSP();
@@ -255,7 +255,9 @@ function agenda({ de, ate, vendedor = null } = {}) {
   // vendedor: só as visitas dos leads dele
   if (vendedor) {
     const v = vendedor.toLowerCase();
-    for (let i = itens.length - 1; i >= 0; i--) if (String(itens[i].vendedor || '').toLowerCase() !== v) itens.splice(i, 1);
+    // SDR: também os leads de outros vendedores em que ele mesmo agendou a visita
+    const meus = new Set(agendadoPor ? d.prepare("SELECT DISTINCT lead_id FROM lk_contatos WHERE por = ? AND resultado = 'agendou'").all(agendadoPor).map((x) => x.lead_id) : []);
+    for (let i = itens.length - 1; i >= 0; i--) if (String(itens[i].vendedor || '').toLowerCase() !== v && !meus.has(itens[i].lead_id)) itens.splice(i, 1);
   }
   const agora = new Date().toISOString();
   // excluídos pelo SDR (agendamento errado/repetido): saem da agenda, da fila e do lembrete; dá para restaurar
