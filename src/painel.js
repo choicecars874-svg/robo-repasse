@@ -87,12 +87,12 @@ function iniciarPainel() {
     const partes = decodeURIComponent(c.slice(7)).split('.');
     const validade = partes[0];
     if (!validade || Number(validade) < Date.now()) return null;
-    if (partes.length === 2) return igual(partes[1], assinarAntigo(validade)) ? { nome: 'Administrador', papel: 'admin' } : null; // login antigo
+    if (partes.length === 2) return igual(partes[1], assinarAntigo(validade)) ? { nome: 'Administrador', papel: 'admin', principal: true } : null; // login antigo
     const usuario = Buffer.from(partes[1] || '', 'base64url').toString();
     if (!igual(partes[2] || '', assinar(validade, usuario))) return null;
-    if (!usuario) return { nome: 'Administrador', papel: 'admin' };
+    if (!usuario) return { nome: 'Administrador', papel: 'admin', principal: true };
     const u = lerUsuarios().find((x) => chaveNome(x.nome) === chaveNome(usuario));
-    return u ? { nome: u.nome, papel: u.papel || 'sdr', nomeLeadsOK: u.nomeLeadsOK || null } : null;
+    return u ? { nome: u.nome, papel: u.papel || 'sdr', nomeLeadsOK: u.nomeLeadsOK || null, onboardingEm: u.onboardingEm || null, trocouSenha: !!u.senhaTrocadaEm } : null;
   };
 
   app.get('/login', (_, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(PUBLICO, 'login.html')));
@@ -153,7 +153,39 @@ function iniciarPainel() {
     return iguais.length === 1 ? iguais[0] : null;
   };
   const daCarteira = (u, vendedor) => semAcento(vendedor) === semAcento(carteiraDe(u));
-  app.get('/api/eu', (req, res) => res.json({ ...req.usuario, carteira: carteiraDe(req.usuario) }));
+  app.get('/api/eu', (req, res) => res.json({ ...req.usuario, carteira: carteiraDe(req.usuario), ...(req.usuario.principal ? { onboardingEm: (config.get().onboardingAdminEm) || null } : {}) }));
+  // Onboarding: marca que a pessoa já viu o tour de boas-vindas (aparece só no primeiro acesso)
+  app.post('/api/eu/onboarding', (req, res) => {
+    if (req.usuario.principal) {
+      config.salvar({ ...config.get(), onboardingAdminEm: Date.now() });
+      return res.json({ ok: true });
+    }
+    const lista = lerUsuarios();
+    const u = lista.find((x) => chaveNome(x.nome) === chaveNome(req.usuario.nome));
+    if (!u) return res.status(404).json({ erro: 'Usuário não encontrado' });
+    u.onboardingEm = Date.now();
+    salvarUsuarios(lista);
+    res.json({ ok: true });
+  });
+  // Cada pessoa troca a própria senha (pede a atual). O login continua valendo neste aparelho.
+  app.post('/api/eu/senha', (req, res) => {
+    if (req.usuario.principal) return res.status(400).json({ erro: 'A senha do administrador é trocada em Sistema' });
+    const lista = lerUsuarios();
+    const u = lista.find((x) => chaveNome(x.nome) === chaveNome(req.usuario.nome));
+    if (!u) return res.status(404).json({ erro: 'Usuário não encontrado' });
+    const atual = String(req.body.atual || ''), nova = String(req.body.nova || '');
+    if (!atual || !igual(crypto.scryptSync(atual, u.sal, 64).toString('hex'), u.hash)) return res.status(400).json({ erro: 'A senha atual não confere' });
+    if (nova.length < 6) return res.status(400).json({ erro: 'A senha nova precisa ter pelo menos 6 caracteres' });
+    if (nova === atual) return res.status(400).json({ erro: 'A senha nova tem que ser diferente da atual' });
+    u.sal = crypto.randomBytes(16).toString('hex');
+    u.hash = crypto.scryptSync(nova, u.sal, 64).toString('hex');
+    u.senhaTrocadaEm = Date.now();
+    salvarUsuarios(lista);
+    // a assinatura do login usa a senha: emite um login novo para este aparelho (os outros aparelhos saem)
+    const validade = Date.now() + TRINTA_DIAS;
+    res.cookie('painel', `${validade}.${Buffer.from(u.nome).toString('base64url')}.${assinar(validade, u.nome)}`, { maxAge: TRINTA_DIAS, httpOnly: true, sameSite: 'lax', secure: req.secure });
+    res.json({ ok: true });
+  });
   // Usuários (só administrador): criar, trocar senha, remover
   app.get('/api/usuarios', (_, res) => res.json({ usuarios: lerUsuarios().map(({ nome, login, papel, nomeLeadsOK, criadoEm }) => ({ nome, login: login || null, papel: papel || 'sdr', nomeLeadsOK: nomeLeadsOK || null, carteira: carteiraDe({ nome, papel: papel || 'sdr', nomeLeadsOK }), criadoEm })), vendedores: comercial.vendedoresLeadsOK() }));
   // muda papel e "nome no LeadsOK" sem mexer na senha

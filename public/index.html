@@ -61,6 +61,25 @@
   .btn { font:inherit; font-size:14px; border:1px solid var(--borda2); border-radius:10px; padding:9px 16px; cursor:pointer; font-weight:600; background:var(--card2); color:var(--txt); }
   .btn:hover { background:rgba(255,255,255,.1); }
   .btn.verde { background:var(--ouro); border-color:var(--ouro); color:#1a1405; } .btn.verde:hover { filter:brightness(1.08); }
+  /* ---------- Onboarding (tour do primeiro acesso) ---------- */
+  #tour { position:fixed; inset:0; z-index:60; }
+  #tour .tourFundo { position:absolute; inset:0; background:rgba(0,0,0,.62); }
+  #tour .tourFoco { position:absolute; border-radius:12px; box-shadow:0 0 0 9999px rgba(0,0,0,.62), 0 0 0 2px var(--ouro); transition:all .25s ease; pointer-events:none; }
+  #tour .tourCard { position:absolute; right:28px; bottom:28px; width:min(420px, calc(100vw - 32px)); background:#121318; border:1px solid var(--borda2); border-radius:18px; padding:22px 22px 18px; box-shadow:0 24px 60px rgba(0,0,0,.55); }
+  #tour .tourCard .eyebrow { color:var(--ouro); margin-bottom:8px; }
+  #tour .tourCard h3 { margin:0 0 10px; font-size:20px; line-height:1.25; }
+  #tour .tourCard p { margin:0 0 10px; color:#c9ccd2; line-height:1.55; font-size:15px; }
+  #tour .tourCard ul { margin:0 0 10px; padding-left:18px; color:#c9ccd2; line-height:1.55; font-size:15px; }
+  #tour .tourCard li { margin:3px 0; }
+  #tour .tourCard b { color:var(--txt); }
+  #tour .tourPontos { display:flex; gap:6px; margin:14px 0 0; }
+  #tour .tourPontos i { width:7px; height:7px; border-radius:50%; background:var(--borda2); }
+  #tour .tourPontos i.on { background:var(--ouro); width:20px; border-radius:4px; }
+  #tour .tourBarra { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  #tour .tourBarra .pular { background:none; border:0; color:var(--sub); cursor:pointer; padding:6px 0; font:inherit; }
+  #tour .tourSenha input { margin-bottom:8px; }
+  #tour .tourErro { color:var(--verm); font-size:14px; min-height:18px; }
+  @media (max-width:820px) { #tour .tourCard { left:16px; right:16px; bottom:16px; width:auto; } #tour .tourFoco { display:none; } }
   .btn.ruimBtn { color:var(--verm); } .btn.vermelho { background:var(--verm); border-color:var(--verm); color:#fff; }
   .btn.verm { background:rgba(248,113,113,.12); border-color:rgba(248,113,113,.4); color:var(--verm); }
   .badge { background:var(--ouro); color:#1a1405; border-radius:7px; padding:0 7px; font-size:12px; font-weight:700; margin-left:auto; }
@@ -278,7 +297,7 @@
       <button data-aba="sistema">Sistema</button>
     </div>
   </div>
-  <div class="rodape"><a href="/sair"><svg class="i"><use href="#i-sair"/></svg>Sair</a></div>
+  <div class="rodape"><a id="verTour" style="cursor:pointer;display:block;margin-bottom:10px;color:var(--sub)">Como usar o painel</a><a href="/sair"><svg class="i"><use href="#i-sair"/></svg>Sair</a></div>
 </nav>
 <div>
 <div class="barraTopo">
@@ -2277,6 +2296,96 @@ $('#btnLkDesligar').onclick = async () => { if (confirm('Desligar a coleta do Le
 setInterval(() => { if ($('#integracoes').classList.contains('ativo')) carregarLkCfg().catch(() => {}); }, 10000);
 
 let eu = { papel: 'admin' };
+// ---------- Onboarding: tour de boas-vindas no primeiro acesso (um roteiro por papel) ----------
+function passosDoTour() {
+  const nome = String(eu.nome || '').split(' ')[0];
+  const carteira = eu.carteira ? `<b>${esc(eu.carteira)}</b>` : 'o seu nome';
+  const comum = {
+    fila: { aba: 'comSdr', titulo: 'Fila: quem chamar agora', html: `<p>Sua lista de trabalho, <b>em ordem de urgência</b>. Comece sempre de cima:</p><ul><li><b>Cliente respondeu</b>: está esperando, responda primeiro</li><li><b>Interesse em agendar</b>: falta fechar dia e hora</li><li><b>Ligar agora</b>: leads novos, do mais novo para o mais velho</li><li><b>Follow-up</b>: quem não atendeu ou não respondeu</li></ul><p>Aperte <b>Atualizar</b> quando quiser: some quem já foi respondido.</p>` },
+    contato: { aba: 'comSdr', alvo: '.sdLinha .acoes', titulo: 'Em cada cliente', html: `<ul><li><b>Briefing</b>: antes de chamar, veja o carro, de onde veio e o que ele já falou</li><li><b>Ligar</b> e <b>WhatsApp</b>: abrem o contato direto</li><li>Depois do contato: <b>Atendeu</b>, <b>Não atendeu</b> ou <b>Respondeu msg</b></li></ul><p>Em "Atendeu", escreva o que ele disse e escolha o próximo passo: <b>ligar de novo</b>, <b>agendou visita</b> ou <b>chamada de vídeo</b>. Agendou? Marque "Agendou visita" com dia e hora, senão a visita não entra na Agenda.</p>` },
+    agenda: { aba: 'comAgenda', titulo: 'Agenda: suas visitas', html: `<ul><li><b>Antes do horário</b>: mande a confirmação e marque "Cliente confirmou"</li><li><b>Depois</b>: Veio e comprou, Veio e não comprou ou Não veio</li><li><b>Agendamento errado ou repetido</b>: Excluir (dá para restaurar)</li></ul><p>Quem não veio volta para a Fila no "Follow-up pós-visita".</p>` },
+    conexoes: { aba: 'sdrConexoes', titulo: 'Conecte o seu WhatsApp', html: `<p>Igual ao WhatsApp Web: clique em <b>Conectar WhatsApp</b> e, no celular, <b>Aparelhos conectados → Conectar aparelho</b>, apontando para o QR Code.</p><p>Assim, <b>2 h antes de cada visita</b>, o cliente recebe pelo seu número um lembrete com a foto do carro, assinado com o seu nome. Ele não é enviado se vocês estiverem conversando, se o cliente desmarcou ou se já comprou.</p><p>Depois clique em <b>Enviar teste para mim</b>.</p>` },
+    resultado: { aba: 'comSdrRes', titulo: 'Seus números', html: `<p>Ligações, com quantos você falou, agendamentos e quem veio, por dia. Também mostra o que você fez direto no LeadsOK (mensagens e agendamentos).</p>` },
+    senha: { aba: null, titulo: 'Crie a sua senha', senha: true, html: `<p>Você entrou com uma senha provisória. Crie a sua agora: só você vai saber.</p>` },
+  };
+  if (eu.papel === 'vendedor') return [
+    { titulo: `Bem-vindo, ${esc(nome)}! 👋`, html: `<p>Este é o painel comercial da Choice. Ele organiza o seu dia: <b>quem chamar, quem confirmar e quem veio</b>.</p><p>Aqui você vê <b>só os leads que estão no seu nome</b> no LeadsOK (${carteira}). Leva 1 minuto: vamos ver as 4 telas.</p>` },
+    comum.fila, comum.contato, comum.agenda, comum.conexoes, comum.resultado, comum.senha];
+  if (eu.papel === 'sdr') return [
+    { titulo: `Bem-vindo, ${esc(nome)}! 👋`, html: `<p>Este é o seu painel de SDR. Ele diz <b>quem chamar agora</b>, guarda o que cada cliente falou e acompanha as visitas até a venda.</p><p>Você vê os leads no seu nome (${carteira}) e os dos vendedores que ficaram <b>sem resposta</b>. Leva 1 minuto.</p>` },
+    comum.fila,
+    { aba: 'comSdr', titulo: 'Resgate: sem resposta dos vendedores', html: `<p>Na lista <b>"Sem resposta de ninguém (outros vendedores)"</b> ficam os clientes que mandaram mensagem e o vendedor não respondeu há mais de 1 h.</p><p>Ligue antes que esfrie e registre o que combinou. As visitas que você agendar nesses leads aparecem na sua Agenda, e o lembrete sai pelo seu WhatsApp.</p>` },
+    comum.contato, comum.agenda, comum.conexoes, comum.resultado, comum.senha];
+  return [
+    { titulo: `Bem-vindo${nome && nome !== 'Administrador' ? ', ' + esc(nome) : ''}! 👋`, html: `<p>Este é o painel de gestão da Choice: grupos de WhatsApp, Instagram e o comercial (LeadsOK) num lugar só.</p><p>Vamos ver o que olhar todo dia. Leva 1 minuto.</p>` },
+    { aba: 'painel', alvo: 'nav [data-aba="painel"]', titulo: 'Painel: a loja num olhar', html: `<p><b>Alertas</b> do que precisa de ação, <b>funil</b> (leads → respondidos → agendaram → vieram → compraram), <b>metas</b> com a projeção do mês e o resultado por canal e por vendedor.</p>` },
+    { aba: 'comGestor', alvo: 'nav [data-aba="comGestor"]', titulo: 'Gestor do dia', html: `<p>O resumo da manhã: leads de ontem, quem ficou sem resposta, visitas de hoje sem confirmação e os <b>leads quentes</b> para cobrar do time. Dá para copiar e mandar no grupo.</p>` },
+    { aba: 'comSdr', alvo: 'nav [data-aba="comSdr"]', titulo: 'Fila do SDR', html: `<p>A mesma tela que o time usa. Escolha a <b>carteira</b> no topo para ver a fila de cada pessoa e o que já foi feito hoje.</p>` },
+    { aba: 'comAgenda', alvo: 'nav [data-aba="comAgenda"]', titulo: 'Agenda', html: `<p>Todas as visitas da loja: quem confirmou, quem veio, quem comprou. Daqui sai o funil de comparecimento, porque o LeadsOK não registra visita.</p>` },
+    { aba: 'comSdrRes', alvo: 'nav [data-aba="comSdrRes"]', titulo: 'Resultado do SDR', html: `<p>Ligações, com quem falou, agendamentos e visitas, por pessoa e por dia, mais a planilha que vai sozinha para o Google Sheets.</p>` },
+    { aba: 'sistema', alvo: 'nav [data-aba="sistema"]', titulo: 'Usuários', html: `<p>Em <b>Sistema → Usuários</b> você cria o acesso de cada pessoa. <b>Vendedor</b> e <b>SDR</b> veem só os leads no nome deles no LeadsOK; <b>Gestor</b> vê tudo.</p><p>Para rever este tour: <b>Como usar o painel</b>, no pé do menu.</p>` },
+  ];
+}
+let tourPassos = [], tourI = 0;
+function abrirTour() {
+  tourPassos = passosDoTour(); tourI = 0;
+  $('#tour')?.remove();
+  const t = document.createElement('div');
+  t.id = 'tour'; t.setAttribute('role', 'dialog'); t.setAttribute('aria-modal', 'true');
+  t.innerHTML = '<div class="tourFundo"></div><div class="tourFoco" hidden></div><div class="tourCard"></div>';
+  document.body.appendChild(t);
+  mostrarPasso();
+}
+function fecharTour(marcar = true) {
+  $('#tour')?.remove();
+  document.body.classList.remove('menuAberto');
+  if (marcar) api('/api/eu/onboarding', { method: 'POST' }).then(() => { eu.onboardingEm = Date.now(); }).catch(() => {});
+}
+function mostrarPasso() {
+  const t = $('#tour'); if (!t) return;
+  const p = tourPassos[tourI];
+  const ultimo = tourI === tourPassos.length - 1;
+  if (p.aba && typeof abrirAba === 'function') abrirAba(p.aba);
+  const card = t.querySelector('.tourCard');
+  card.innerHTML = `<div class="eyebrow">Passo ${tourI + 1} de ${tourPassos.length}</div><h3>${p.titulo}</h3>${p.html}
+    ${p.senha ? `<div class="tourSenha"><input type="password" id="tourAtual" placeholder="Senha que você recebeu" autocomplete="current-password"><input type="password" id="tourNova" placeholder="Nova senha (mínimo 6)" autocomplete="new-password"><input type="password" id="tourNova2" placeholder="Repita a nova senha" autocomplete="new-password"><div class="tourErro" id="tourErro"></div></div>` : ''}
+    <div class="tourPontos">${tourPassos.map((_, i) => `<i class="${i === tourI ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="tourBarra"><button class="pular" id="tourPular">${p.senha ? 'Agora não' : 'Pular o tour'}</button><div style="display:flex;gap:8px">${tourI ? '<button class="btn" id="tourVoltar">Voltar</button>' : ''}<button class="btn verde" id="tourProx">${p.senha ? 'Salvar senha' : ultimo ? 'Começar' : tourI ? 'Próximo' : 'Vamos lá'}</button></div></div>`;
+  card.querySelector('#tourPular').onclick = () => fecharTour();
+  const v = card.querySelector('#tourVoltar'); if (v) v.onclick = () => { tourI--; mostrarPasso(); };
+  card.querySelector('#tourProx').onclick = async () => {
+    if (p.senha) {
+      const atual = $('#tourAtual').value, nova = $('#tourNova').value, nova2 = $('#tourNova2').value, err = $('#tourErro');
+      if (nova.length < 6) return (err.textContent = 'A senha nova precisa ter pelo menos 6 caracteres.');
+      if (nova !== nova2) return (err.textContent = 'As duas senhas novas não são iguais.');
+      try { await api('/api/eu/senha', { method: 'POST', body: JSON.stringify({ atual, nova }) }); }
+      catch (e) { return (err.textContent = e.message); }
+      card.innerHTML = '<div class="eyebrow">Pronto</div><h3>Senha criada ✅</h3><p>Da próxima vez, entre com a sua senha nova. Bom trabalho!</p><div class="tourBarra"><span></span><button class="btn verde" id="tourFim">Começar</button></div>';
+      card.querySelector('#tourFim').onclick = () => fecharTour();
+      return;
+    }
+    if (ultimo) return fecharTour();
+    tourI++; mostrarPasso();
+  };
+  // destaque: o item do menu (ou o elemento do passo), quando está visível na tela
+  const foco = t.querySelector('.tourFoco');
+  const posicionar = () => {
+    const el = p.alvo ? document.querySelector(p.alvo) : p.aba ? document.querySelector(`nav [data-aba="${p.aba}"]`) : null;
+    const r = el && el.offsetParent && innerWidth > 820 ? el.getBoundingClientRect() : null;
+    if (!r || !r.width) { foco.hidden = true; t.querySelector('.tourFundo').hidden = false; Object.assign(card.style, { left: '', right: '' }); return; }
+    foco.hidden = false; t.querySelector('.tourFundo').hidden = true;
+    Object.assign(foco.style, { left: r.left - 6 + 'px', top: r.top - 6 + 'px', width: r.width + 12 + 'px', height: r.height + 12 + 'px' });
+    // o cartão não fica em cima do que está destacado: destaque à direita -> cartão à esquerda do conteúdo
+    const aDireita = r.left + r.width / 2 > innerWidth / 2;
+    const nav = document.querySelector('nav')?.getBoundingClientRect().width || 0;
+    Object.assign(card.style, aDireita ? { left: nav + 28 + 'px', right: 'auto' } : { left: '', right: '' });
+  };
+  if (p.alvo && !p.alvo.startsWith('nav')) setTimeout(() => document.querySelector(p.alvo)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400);
+  setTimeout(posicionar, p.alvo && !p.alvo.startsWith('nav') ? 1100 : 350);
+  setTimeout(() => card.querySelector('#tourProx')?.focus(), 50);
+}
+addEventListener('resize', () => { if ($('#tour')) mostrarPasso(); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#tour')) fecharTour(); });
 barraPeriodo($('#perGeral'), () => carregarGeral());
 barraPeriodo($('#perGrupos'), () => carregarPainel());
 $('#filtroGrupo').onchange = () => carregarPainel();
@@ -2294,8 +2403,12 @@ $('#filtroGrupo').onchange = () => carregarPainel();
     $('#sdHistCard').hidden = true; document.querySelectorAll('.soAdmin').forEach((e) => { e.hidden = true; });
     document.querySelector('.barraTopo .eyebrow').textContent = 'Gestão Choice · ' + eu.nome;
     abrirAba('comSdr');
+    $('#verTour').onclick = abrirTour;
+    if (!eu.onboardingEm) setTimeout(abrirTour, 900);
     return;
   }
+  $('#verTour').onclick = abrirTour;
+  if (!eu.onboardingEm) setTimeout(abrirTour, 1200);
   carregarConfig();
   let abaSalva = 'painel'; try { abaSalva = localStorage.getItem('aba') || 'painel'; } catch {}
   abrirAba(abaSalva);
