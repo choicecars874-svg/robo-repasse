@@ -180,35 +180,38 @@ function criarCliente({ email, senha, acoesManuais = () => ({}) }) {
   // ---------- Server actions (só leitura) ----------
   async function acao(nome, args = [], tentativa = 0) {
     if (!ESCRITAS.has(nome) && (!PERMITIDAS.has(nome) || PROIBIDAS.test(nome.replace(/^get|^list/, '')))) throw new Error(`Ação ${nome} não é permitida (só leitura)`);
-    // id informado à mão (Integrações → LeadsOK) vale quando a busca automática não acha a ação
+    // id informado à mão (Integrações → LeadsOK) é tentado primeiro (foi conferido no site); se o LeadsOK mudar
+    // de versão e ele parar de funcionar, vale o que a busca automática achar
     const manual = (acoesManuais() || {})[nome];
     if (!acoes) await descobrirAcoes().catch((e) => { if (!manual) throw e; acoes = {}; });
-    const id = acoes[nome] || manual;
-    if (!id) {
+    const ids = [...new Set([manual, acoes[nome]].filter(Boolean))];
+    if (!ids.length) {
       if (tentativa) throw new Error(`Ação ${nome} não existe mais no LeadsOK (a busca automática não achou; dá para informar o id em Integrações → LeadsOK → "Ids das ações")`);
       await descobrirAcoes().catch(() => {});
       return acao(nome, args, 1);
     }
-    const r = await req(paginaDaAcao[nome] || '/atendimentos', {
-      metodo: 'POST',
-      corpo: JSON.stringify(args),
-      headers: { 'Next-Action': id, Accept: 'text/x-component', 'Content-Type': 'text/plain;charset=UTF-8' },
-    });
-    const texto = foiParaLogin(r) ? '' : await r.text();
-    // só a forma da resposta (sem conteúdo, para não expor dados de cliente)
-    ultimaResposta = { nome, pagina: paginaDaAcao[nome] || '/atendimentos', status: r.status, tipo: r.headers.get('content-type') || '', tamanho: texto.length, html: /^\s*<(!doctype|html)/i.test(texto), linhas: texto.split('\n').slice(0, 8).map((l) => l.slice(0, 6).replace(/[^0-9a-zA-Z:$@\[{"]/g, '')).filter(Boolean) };
-    // a linha 0 diz onde está o resultado ({"a":"$@1"} ou ["$@1", ...]); o resultado pode ter referências "$n"
-    const mapa = linhasRsc(texto);
-    const raiz = JSON.stringify(mapa['0'] || '').match(/"\$@([0-9a-f]+)"/)?.[1] || '1';
-    const linha = mapa[raiz] !== undefined ? 'ok' : null;
-    if (!linha || r.status >= 400) {
-      if (tentativa) throw new Error(`Ação ${nome} falhou (${r.status})`);
-      // sessão caiu ou o ID mudou com um deploy novo: redescobre e loga de novo
-      await descobrirAcoes();
-      if (foiParaLogin(r) || !texto) await login();
-      return acao(nome, args, 1);
+    let r = null;
+    let texto = '';
+    for (const id of ids) {
+      r = await req(paginaDaAcao[nome] || '/atendimentos', {
+        metodo: 'POST',
+        corpo: JSON.stringify(args),
+        headers: { 'Next-Action': id, Accept: 'text/x-component', 'Content-Type': 'text/plain;charset=UTF-8' },
+      });
+      texto = foiParaLogin(r) ? '' : await r.text();
+      // só a forma da resposta (sem conteúdo, para não expor dados de cliente)
+      ultimaResposta = { nome, id: id === manual ? 'manual' : 'automático', pagina: paginaDaAcao[nome] || '/atendimentos', status: r.status, tipo: r.headers.get('content-type') || '', tamanho: texto.length, html: /^\s*<(!doctype|html)/i.test(texto), linhas: texto.split('\n').slice(0, 8).map((l) => l.slice(0, 6).replace(/[^0-9a-zA-Z:$@\[{"]/g, '')).filter(Boolean) };
+      // a linha 0 diz onde está o resultado ({"a":"$@1"} ou ["$@1", ...]); o resultado pode ter referências "$n"
+      const mapa = linhasRsc(texto);
+      const raiz = JSON.stringify(mapa['0'] || '').match(/"\$@([0-9a-f]+)"/)?.[1] || '1';
+      if (mapa[raiz] !== undefined && r.status < 400) return resolverRefs(texto, mapa[raiz]);
+      if (foiParaLogin(r)) break; // sessão caiu: não adianta tentar o outro id antes de logar
     }
-    return resolverRefs(texto, mapa[raiz]);
+    if (tentativa) throw new Error(`Ação ${nome} falhou (${r.status})`);
+    // sessão caiu ou o ID mudou com um deploy novo: redescobre e loga de novo
+    await descobrirAcoes().catch(() => {});
+    if (foiParaLogin(r) || !texto) await login();
+    return acao(nome, args, 1);
   }
 
   return { login, descobrirAcoes, pagina, acao, get acoes() { return acoes; }, get paginaDaAcao() { return paginaDaAcao; }, get ultimaResposta() { return ultimaResposta; }, get estatisticaDescoberta() { return estatisticaDescoberta; } };
